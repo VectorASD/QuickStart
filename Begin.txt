@@ -1,0 +1,39 @@
+apt intall git
+apt intall gedit
+apt intall clang
+
+git config --global alias.hist "log --oneline --decorate --graph --all"
+git config --global user.email prilepa.mixh@mail.ru
+git config --global user.name "Prilepa Mixhail"
+
+git remote -v
+git remote set-url origin git@github.com:trpo2022/chessviz-VectorASD.git
+git remote -v
+
+ssh-keygen
+gedit ~/.ssh/id_rsa.pub
+
+cd ~/.local/share/
+mkdir gedit; cd gedit
+mkdir plugins; cd plugins
+wget https://raw.githubusercontent.com/jtlatlik/gedit-plugin-clang-format/master/clangformat.plugin
+wget https://raw.githubusercontent.com/jtlatlik/gedit-plugin-clang-format/master/clangformat.py
+
+
+
+
+
+На случай, если проблемы с git push origin:
+gedit ~/.ssh/config
+Host github.com
+   Hostname ssh.github.com
+   Port 443
+
+
+
+
+
+git clone https://github.com/trpo2022/chessviz-VectorASD.git
+wget https://raw.githubusercontent.com/trpo2022/chessviz-VectorASD/main/.clang-format
+wget https://raw.githubusercontent.com/trpo2022/chessviz-VectorASD/main/.gitignore
+gcc -Wall -Werror -o main main.c
