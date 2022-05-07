@@ -1,6 +1,6 @@
 apt intall git
 apt intall gedit
-apt intall clang
+apt intall clang-format
 
 git config --global alias.hist "log --oneline --decorate --graph --all"
 git config --global user.email prilepa.mixh@mail.ru
