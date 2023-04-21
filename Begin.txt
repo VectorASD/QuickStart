@@ -3,8 +3,8 @@ apt intall gedit
 apt intall clang-format
 
 git config --global alias.hist "log --oneline --decorate --graph --all"
-git config --global user.email prilepa.mixh@mail.ru
-git config --global user.name "Prilepa Mixhail"
+git config --global user.email vectorasd@vk.com
+git config --global user.name "VectorASD"
 
 git remote -v
 git remote set-url origin git@github.com:trpo2022/chessviz-VectorASD.git
@@ -16,8 +16,8 @@ gedit ~/.ssh/id_rsa.pub
 cd ~/.local/share/
 mkdir gedit; cd gedit
 mkdir plugins; cd plugins
-wget https://raw.githubusercontent.com/jtlatlik/gedit-plugin-clang-format/master/clangformat.plugin
-wget https://raw.githubusercontent.com/jtlatlik/gedit-plugin-clang-format/master/clangformat.py
+wget https://raw.githubusercontent.com/VectorASD/QuickStart/master/clangformat.plugin
+wget https://raw.githubusercontent.com/VectorASD/QuickStart/master/clangformat.py
 
 
 
