@@ -34,6 +34,6 @@ Host github.com
 
 
 git clone https://github.com/trpo2022/chessviz-VectorASD.git
-wget https://raw.githubusercontent.com/trpo2022/chessviz-VectorASD/main/.clang-format
+wget https://raw.githubusercontent.com/VectorASD/CellularAutomat/master/.clang-format
 wget https://raw.githubusercontent.com/trpo2022/chessviz-VectorASD/main/.gitignore
 gcc -Wall -Werror -o main main.c
