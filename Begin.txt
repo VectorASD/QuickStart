@@ -5,6 +5,7 @@ apt intall clang-format
 git config --global alias.hist "log --oneline --decorate --graph --all"
 git config --global user.email vectorasd@vk.com
 git config --global user.name "VectorASD"
+git config --global core.quotepath false
 
 git remote -v
 git remote set-url origin git@github.com:trpo2022/chessviz-VectorASD.git
