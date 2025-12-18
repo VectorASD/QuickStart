@@ -62,7 +62,7 @@ def security_wrap(func):
         except:
             for line in traceback.format_exc().splitlines():
                 print(line, color="red")
-            raise MySystemExit
+            # raise MySystemExit
     return wrapper
 
 def pprint(*a, **kv):
