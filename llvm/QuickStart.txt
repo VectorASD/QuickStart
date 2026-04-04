@@ -1,0 +1,294 @@
+sudo visudo
+что_угодно ALL=(ALL) NOPASSWD:ALL
+что_угодно ALL=(ALL:ALL) NOPASSWD:ALL
+
+
+
+%UserProfile%\.wslconfig
+[wsl2]
+memory=14GB
+processors=10
+swap=0
+localhostForwarding=true
+
+wsl --shutdown
+
+
+
+# ~~~ первичная настройка инструментария WSL ~~~
+
+sudo find /usr -name "libstdc++.so.6"  # /usr/lib/x86_64-linux-gnu/libstdc++.so.6
+strings /usr/lib/x86_64-linux-gnu/libstdc++.so.6 | grep GLIBCXX  # последняя версия: GLIBCXX_3.4.28
+
+sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+apt list | grep -E "^gcc-[0-9]+/"        # gcc-16/focal
+apt list | grep -E "^g\+\+-[0-9]+/"      # g++-16/focal
+apt list | grep -E "^libstdc\+\+[0-9]+/" # libstdc++6/focal (и наврядли GCC ABI уже станет больше шестёрки за уже прошедшите 15 лет...)
+
+sudo apt install gcc-16 g++-16 -y
+strings /usr/lib/x86_64-linux-gnu/libstdc++.so.6 | grep GLIBCXX  # последняя версия: GLIBCXX_3.4.35
+#	оказывается, обновлять libstdc++6 НЕ нужно, apt сам всё обновит
+
+
+
+# ~~~ сборка python 3.11.8 ~~~
+
+packages="build-essential libssl-dev zlib1g-dev libncurses5-dev libncursesw5-dev libreadline-dev libsqlite3-dev libgdbm-dev libdb5.3-dev libbz2-dev libexpat1-dev liblzma-dev tk-dev uuid-dev libffi-dev"
+for pkg in $packages; do apt-cache policy "$pkg" | grep Candidate || echo "NO: $pkg"; done  # все должны быть "Candidate"
+sudo apt install $packages -y
+
+mkdir -p ~/tmp; cd ~/tmp
+
+wget https://www.python.org/ftp/python/3.11.15/Python-3.11.15.tgz
+tar xf Python-3.11.15.tgz
+cd Python-3.11.15
+./configure --prefix=/opt/python311 --enable-optimizations
+#	важно проверить, что выведет в самом конце конфигурации так:
+#		checking for stdlib extension module _sqlite3... yes
+#		checking for stdlib extension module _tkinter... yes
+#		checking for stdlib extension module _uuid... yes
+#		checking for stdlib extension module zlib... yes
+#		checking for stdlib extension module _bz2... yes
+#		checking for stdlib extension module _lzma... yes
+#		checking for stdlib extension module _ssl... yes
+#		checking for stdlib extension module _hashlib... yes
+#	без SSL просто не будет работать https внутри pip install/download! Уже я проходил это :)
+make -j $(nproc)
+
+sudo make altinstall
+sudo update-alternatives --install /usr/bin/python python /opt/python311/bin/python3.11 1
+sudo update-alternatives --install /usr/bin/pip    pip    /opt/python311/bin/pip3.11    1
+
+echo -e "$(python -V)\n$(pip -V)\n$(python -c 'import ssl; print(ssl.OPENSSL_VERSION)')"
+#	Python 3.11.15
+#	pip 24.0 from /opt/python311/lib/python3.11/site-packages/pip (python 3.11)
+#	OpenSSL 1.1.1f  31 Mar 2020
+
+
+
+# ~~~ сборка CMake ~~~
+
+mkdir -p ~/tmp; cd ~/tmp
+
+git clone https://github.com/Kitware/CMake.git
+cd CMake
+./bootstrap --prefix=/opt/cmake --parallel=$(nproc) -- -DCMAKE_USE_OPENSSL=OFF
+make -j $(nproc)
+
+sudo make install
+sudo update-alternatives --install /usr/bin/cmake cmake /opt/cmake/bin/cmake 1
+
+cmake --version
+#	cmake version 4.3.20260404-g3c7e587
+#
+#	CMake suite maintained and supported by Kitware (kitware.com/cmake).
+
+
+
+# ~~~ сборка ninja ~~~
+
+sudo apt install clang-18 libc++-18-dev libc++abi-18-dev -y
+
+mkdir -p ~/tmp; cd ~/tmp
+
+git clone https://github.com/ninja-build/ninja.git
+cd ninja
+
+cmake -Bbuild-cmake \
+	-DBUILD_TESTING=OFF \
+	-DCMAKE_INSTALL_PREFIX=/opt/ninja \
+	-DCMAKE_C_COMPILER=clang-18 \
+	-DCMAKE_CXX_COMPILER=clang++-18 \
+	-DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+	-DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++"
+cmake --build build-cmake -- -j $(nproc)
+sudo cmake --install build-cmake
+
+sudo update-alternatives --install /usr/bin/ninja ninja /opt/ninja/bin/ninja 1
+
+ninja --version
+#	1.14.0.git
+
+
+
+# ~~~ босс: clang ~~~
+
+mkdir -p ~/tmp; cd ~/tmp
+
+git clone https://github.com/llvm/llvm-project.git
+cd llvm-project
+rm -rf build; mkdir build; cd build
+
+cmake ../llvm \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/opt/llvm \
+  -DPython3_EXECUTABLE=$(which python) \
+  -DCMAKE_C_COMPILER=clang-18 \
+  -DCMAKE_CXX_COMPILER=clang++-18 \
+  -DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+  -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++" \
+  -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld;mlir" \
+  -DLLVM_TARGETS_TO_BUILD="X86" \
+  -DLLVM_ENABLE_RTTI=ON \
+  -DLLVM_ENABLE_ASSERTIONS=ON \
+  -DLLVM_INCLUDE_TESTS=OFF \
+  -DLLVM_INCLUDE_EXAMPLES=OFF \
+  -DLLVM_INCLUDE_DOCS=OFF \
+  -DLLVM_ENABLE_TERMINFO=OFF \
+  -DLLVM_ENABLE_LIBXML2=OFF \
+  -DLIBCXX_ENABLE_SHARED=ON
+
+cmake --build . -- -j $(nproc)
+sudo cmake --build . --target install
+
+sudo update-alternatives --install /usr/bin/clang-23   clang-23   /opt/llvm/bin/clang   1
+sudo update-alternatives --install /usr/bin/clang++-23 clang++-23 /opt/llvm/bin/clang++ 1
+
+clang-23 --version
+#	clang version 23.0.0git (https://github.com/llvm/llvm-project.git ff4c6fe24ecb7857d119fe4bcaa8189f755973d7)
+#	Target: x86_64-unknown-linux-gnu
+#	Thread model: posix
+#	InstalledDir: /opt/llvm/bin
+#	Build config: +assertion
+
+
+
+# ~~~ clang runtime ~~~
+
+sudo chown -R $USER:$USER /opt/llvm  # only for WSL!
+
+sudo apt purge clang-18 libc++-18-dev libc++abi-18-dev -y
+sudo apt autoremove -y
+
+cd ~/tmp/llvm-project
+rm -rf build-runtimes; mkdir build-runtimes; cd build-runtimes
+cmake ../runtimes \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/opt/llvm \
+  -DPython3_EXECUTABLE=$(which python) \
+  -DLLVM_PATH=../llvm \
+  -DLLVM_DIR=/opt/llvm/lib/cmake/llvm \
+  -DClang_DIR=/opt/llvm/lib/cmake/clang \
+  -DCMAKE_C_COMPILER=clang-23 \
+  -DCMAKE_CXX_COMPILER=clang++-23 \
+  -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
+  -DLIBCXX_ENABLE_SHARED=ON \
+  -DLIBCXXABI_ENABLE_SHARED=ON \
+  -DLIBUNWIND_ENABLE_SHARED=ON \
+  -DLIBCXX_INCLUDE_TESTS=OFF \
+  -DLIBCXXABI_INCLUDE_TESTS=OFF \
+  -DLIBUNWIND_INCLUDE_TESTS=OFF \
+  -DLLVM_RUNTIME_TARGETS="default"
+
+cmake --build . -- -j $(nproc)  # первые 1700 целей буквально за секунду снесло :)
+cmake --build . --target install
+
+echo "/opt/llvm/lib" | sudo tee /etc/ld.so.conf.d/llvm.conf > /dev/null
+sudo ldconfig
+#	ldconfig -p | grep llvm
+#	ldconfig -p | grep libc++
+#	ldconfig -p | grep unwind
+
+cd ~/tmp
+echo '#include <iostream>
+int main() { std::cout << "Hello libc++!\n"; }' > test.cpp
+clang++-23 -stdlib=libc++ test.cpp -o test
+./test
+ldd ./test
+#	linux-vdso.so.1 (0x...)
+#	libc++.so.1     => /opt/llvm/lib/libc++.so.1 (0x...)
+#	libc++abi.so.1  => /opt/llvm/lib/libc++abi.so.1 (0x...)
+#	libunwind.so.1  => /opt/llvm/lib/libunwind.so.1 (0x...)
+#	libm.so.6       => /lib/x86_64-linux-gnu/libm.so.6 (0x...)
+#	libgcc_s.so.1   => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x...)
+#	libc.so.6       => /lib/x86_64-linux-gnu/libc.so.6 (0x...)
+#	libatomic.so.1  => /lib/x86_64-linux-gnu/libatomic.so.1 (0x...)
+#	libdl.so.2      => /lib/x86_64-linux-gnu/libdl.so.2 (0x...)
+#	libpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x...)
+#	/lib64/ld-linux-x86-64.so.2 (0x...)
+
+
+
+# ~~~ clang stage2 ~~~
+
+cd ~/tmp/llvm-project
+rm -rf build; mkdir build; cd build
+
+cmake ../llvm \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/opt/llvm \
+  -DPython3_EXECUTABLE=$(which python) \
+  -DCMAKE_C_COMPILER=clang-23 \
+  -DCMAKE_CXX_COMPILER=clang++-23 \
+  -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld;mlir" \
+  -DLLVM_ENABLE_RUNTIMES="compiler-rt" \
+  -DLLVM_TARGETS_TO_BUILD="X86" \
+  -DLLVM_ENABLE_RTTI=ON \
+  -DLLVM_ENABLE_ASSERTIONS=ON \
+  -DLLVM_INCLUDE_TESTS=OFF \
+  -DLLVM_INCLUDE_EXAMPLES=OFF \
+  -DLLVM_INCLUDE_DOCS=OFF \
+  -DLLVM_ENABLE_TERMINFO=OFF \
+  -DLLVM_ENABLE_LIBXML2=OFF \
+  -DLIBCXX_ENABLE_SHARED=ON \
+  -DCLANG_DEFAULT_CXX_STDLIB=libc++ \
+  -DCLANG_DEFAULT_LINKER=lld \
+  -DCLANG_DEFAULT_UNWINDLIB=libunwind \
+  -DCLANG_DEFAULT_RTLIB=compiler-rt
+
+cmake --build . -- -j $(nproc)
+sudo cmake --build . --target install
+
+clang-23 --version
+??? TODO
+
+cd ~/tmp
+clang++-23 -stdlib=libc++ test.cpp -o test
+./test
+ldd ./test
+??? TODO (libgcc_s должен исчезнуть)
+
+
+
+# ~~~ справочный материал ~~~
+
+🟧 Что могло ускориться после установки GCC‑16
+✔ 1. Ты обновил libstdc++6 вместе с GCC
+Когда ты ставил gcc‑16, apt автоматически подтянул:
+	новую libstdc++6
+	новую libgcc-s1
+	новые runtime‑пакеты GCC
+Именно это обновление:
+	добавило новые GLIBCXX‑символы
+	обновило внутренние алгоритмы libstdc++
+	ускорило работу std::vector, std::string, std::unordered_map
+	улучшило аллокаторы
+	улучшило атомики и memory model
+А NPU‑драйверы Huawei/CANN используют C++ STL очень активно.
+То есть ускорение могло прийти от обновлённой libstdc++, а не от GCC.
+
+✔ 2. Ты обновил libatomic и libgcc_s
+CANN и Torch‑NPU используют:
+	атомики
+	барьеры памяти
+	синхронизацию потоков
+Новые версии этих библиотек быстрее и стабильнее.
+
+✔ 3. Ты обновил libgomp (OpenMP)
+Многие NPU‑операции используют OpenMP‑пулы потоков.
+Новая версия:
+	быстрее создаёт потоки
+	лучше распределяет задачи
+	меньше блокируется
+Это тоже могло убрать «жёсткие задержки».
+
+✔ 4. Ты обновил libstdc++ ABI, который ускоряет работу C++ рантайма
+Начиная с GCC 11–16, libstdc++ получила:
+	более быстрый std::string (SSO улучшен)
+	более быстрый std::vector
+	улучшенные хеш‑таблицы
+	оптимизированные алгоритмы
+Если NPU‑драйверы используют STL (а они используют), это даёт реальный прирост.
