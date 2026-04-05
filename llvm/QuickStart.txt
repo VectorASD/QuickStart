@@ -29,6 +29,26 @@ sudo apt install gcc-16 g++-16 -y
 strings /usr/lib/x86_64-linux-gnu/libstdc++.so.6 | grep GLIBCXX  # последняя версия: GLIBCXX_3.4.35
 #	оказывается, обновлять libstdc++6 НЕ нужно, apt сам всё обновит
 
+safe_clone() {
+    local url="$1"
+    local dir="$2"
+    if [ -z "$dir" ]; then
+        dir="$(basename "$url" .git)"
+    fi
+
+    # Если репозиторий существует — проверяем целостность
+    if [ -d "$dir/.git" ]; then
+        if git -C "$dir" fsck --no-progress --no-dangling >/dev/null 2>&1; then
+            # всё ок, молча выходим
+            return 0
+        fi
+    fi
+
+    # Если нет или повреждён — клонируем заново
+    rm -rf "$dir"
+    git clone "$url" "$dir"
+}
+
 
 
 # ~~~ сборка python 3.11.8 ~~~
@@ -70,7 +90,7 @@ echo -e "$(python -V)\n$(pip -V)\n$(python -c 'import ssl; print(ssl.OPENSSL_VER
 
 mkdir -p ~/tmp; cd ~/tmp
 
-git clone https://github.com/Kitware/CMake.git
+safe_clone https://github.com/Kitware/CMake.git
 cd CMake
 ./bootstrap --prefix=/opt/cmake --parallel=$(nproc) -- -DCMAKE_USE_OPENSSL=OFF
 make -j $(nproc)
@@ -91,7 +111,7 @@ sudo apt install clang-18 libc++-18-dev libc++abi-18-dev -y
 
 mkdir -p ~/tmp; cd ~/tmp
 
-git clone https://github.com/ninja-build/ninja.git
+safe_clone https://github.com/ninja-build/ninja.git
 cd ninja
 
 cmake -Bbuild-cmake \
@@ -115,7 +135,7 @@ ninja --version
 
 mkdir -p ~/tmp; cd ~/tmp
 
-git clone https://github.com/llvm/llvm-project.git
+safe_clone https://github.com/llvm/llvm-project.git
 cd llvm-project
 rm -rf build; mkdir build; cd build
 
@@ -137,6 +157,7 @@ cmake ../llvm \
   -DLLVM_INCLUDE_DOCS=OFF \
   -DLLVM_ENABLE_TERMINFO=OFF \
   -DLLVM_ENABLE_LIBXML2=OFF \
+  -DLLVM_PARALLEL_LINK_JOBS=1 \
   -DLIBCXX_ENABLE_SHARED=ON
 
 cmake --build . -- -j $(nproc)
@@ -144,6 +165,10 @@ sudo cmake --build . --target install
 
 sudo update-alternatives --install /usr/bin/clang-23   clang-23   /opt/llvm/bin/clang   1
 sudo update-alternatives --install /usr/bin/clang++-23 clang++-23 /opt/llvm/bin/clang++ 1
+for target in llvm-addr2line llvm-ar llvm-ranlib llvm-dlltool ld.lld llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip llvm-symbolizer llvm-readobj ; do
+    sudo update-alternatives --install /usr/bin/$target $target /opt/llvm/bin/$target 1
+done
+
 
 clang-23 --version
 #	clang version 23.0.0git (https://github.com/llvm/llvm-project.git ff4c6fe24ecb7857d119fe4bcaa8189f755973d7)
@@ -223,21 +248,25 @@ cmake ../llvm \
   -DPython3_EXECUTABLE=$(which python) \
   -DCMAKE_C_COMPILER=clang-23 \
   -DCMAKE_CXX_COMPILER=clang++-23 \
+  -DCLANG_DEFAULT_CXX_STDLIB=libc++ \
+  -DCLANG_DEFAULT_UNWINDLIB=libunwind \
   -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld;mlir" \
-  -DLLVM_ENABLE_RUNTIMES="compiler-rt" \
+  -DLLVM_ENABLE_RUNTIMES="compiler-rt;openmp" \
   -DLLVM_TARGETS_TO_BUILD="X86" \
   -DLLVM_ENABLE_RTTI=ON \
   -DLLVM_ENABLE_ASSERTIONS=ON \
+  -DLLVM_ENABLE_ZLIB=ON \
   -DLLVM_INCLUDE_TESTS=OFF \
   -DLLVM_INCLUDE_EXAMPLES=OFF \
   -DLLVM_INCLUDE_DOCS=OFF \
   -DLLVM_ENABLE_TERMINFO=OFF \
   -DLLVM_ENABLE_LIBXML2=OFF \
+  -DLLVM_PARALLEL_LINK_JOBS=1 \
   -DLIBCXX_ENABLE_SHARED=ON \
-  -DCLANG_DEFAULT_CXX_STDLIB=libc++ \
-  -DCLANG_DEFAULT_LINKER=lld \
-  -DCLANG_DEFAULT_UNWINDLIB=libunwind \
   -DCLANG_DEFAULT_RTLIB=compiler-rt
+
+if [ -f ~/tmp/llvm_checker.py ]; then python ~/tmp/llvm_checker.py; fi
+#	Ошибок нет! ;'-}
 
 cmake --build . -- -j $(nproc)
 sudo cmake --build . --target install
