@@ -4,12 +4,20 @@ sudo visudo
 
 
 
-%UserProfile%\.wslconfig
+    %UserProfile%\.wslconfig
 [wsl2]
 memory=14GB
 processors=10
 swap=0
 localhostForwarding=true
+
+    %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+"experimental.renderBracketedPaste": false,
+
+    vim ~/setenv.sh
+stty -ixon
+bind 'set enable-bracketed-paste off'
+cd ~
 
 wsl --shutdown
 
@@ -27,26 +35,51 @@ apt list | grep -E "^libstdc\+\+[0-9]+/" # libstdc++6/focal (и наврядли
 
 sudo apt install gcc-16 g++-16 -y
 strings /usr/lib/x86_64-linux-gnu/libstdc++.so.6 | grep GLIBCXX  # последняя версия: GLIBCXX_3.4.35
-#	оказывается, обновлять libstdc++6 НЕ нужно, apt сам всё обновит
+#   оказывается, обновлять libstdc++6 НЕ нужно, apt сам всё обновит
 
 safe_clone() {
-    local url="$1"
-    local dir="$2"
-    if [ -z "$dir" ]; then
+    local url=""
+    local dir=""
+    local args=()
+    # --- Парсим аргументы ---
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --*)  # флаги git clone
+                args+=("$1")
+                ;;
+            *)    # url и каталог назначения
+                if [[ -z "$url" ]]; then
+                    url="$1"
+                elif [[ -z "$dir" ]]; then
+                    dir="$1"
+                else
+                    args+=("$1")
+                fi
+                ;;
+        esac
+        shift
+    done
+    # echo "src: $url"
+    # echo "dst: $dir"
+    # echo "args: ${args[@]}"
+    # --- Проверка URL ---
+    if [[ -z "$url" ]]; then
+        echo "safe_clone: error: URL not specified" >&2
+        return 1
+    fi
+    # --- Если каталог не указан — берём из URL ---
+    if [[ -z "$dir" ]]; then
         dir="$(basename "$url" .git)"
     fi
-
-    # Если репозиторий существует — проверяем целостность
-    if [ -d "$dir/.git" ]; then
+    # --- Проверка существующего репозитория ---
+    if [[ -d "$dir/.git" ]]; then
         if git -C "$dir" fsck --no-progress --no-dangling >/dev/null 2>&1; then
-            # всё ок, молча выходим
             return 0
         fi
     fi
-
-    # Если нет или повреждён — клонируем заново
+    # --- Клонирование ---
     rm -rf "$dir"
-    git clone "$url" "$dir"
+    git clone "$url" "$dir" "${args[@]}"
 }
 
 
@@ -54,7 +87,9 @@ safe_clone() {
 # ~~~ сборка python 3.11.8 ~~~
 
 packages="build-essential libssl-dev zlib1g-dev libncurses5-dev libncursesw5-dev libreadline-dev libsqlite3-dev libgdbm-dev libdb5.3-dev libbz2-dev libexpat1-dev liblzma-dev tk-dev uuid-dev libffi-dev"
-for pkg in $packages; do apt-cache policy "$pkg" | grep Candidate || echo "NO: $pkg"; done  # все должны быть "Candidate"
+for pkg in $packages; do
+    apt-cache policy "$pkg" | grep Candidate || echo "NO: $pkg" # все должны быть "Candidate"
+done
 sudo apt install $packages -y
 
 mkdir -p ~/tmp; cd ~/tmp
@@ -63,16 +98,16 @@ wget https://www.python.org/ftp/python/3.11.15/Python-3.11.15.tgz
 tar xf Python-3.11.15.tgz
 cd Python-3.11.15
 ./configure --prefix=/opt/python311 --enable-optimizations
-#	важно проверить, что выведет в самом конце конфигурации так:
-#		checking for stdlib extension module _sqlite3... yes
-#		checking for stdlib extension module _tkinter... yes
-#		checking for stdlib extension module _uuid... yes
-#		checking for stdlib extension module zlib... yes
-#		checking for stdlib extension module _bz2... yes
-#		checking for stdlib extension module _lzma... yes
-#		checking for stdlib extension module _ssl... yes
-#		checking for stdlib extension module _hashlib... yes
-#	без SSL просто не будет работать https внутри pip install/download! Уже я проходил это :)
+#   важно проверить, что выведет в самом конце конфигурации так:
+#       checking for stdlib extension module _sqlite3... yes
+#       checking for stdlib extension module _tkinter... yes
+#       checking for stdlib extension module _uuid... yes
+#       checking for stdlib extension module zlib... yes
+#       checking for stdlib extension module _bz2... yes
+#       checking for stdlib extension module _lzma... yes
+#       checking for stdlib extension module _ssl... yes
+#       checking for stdlib extension module _hashlib... yes
+#   без SSL просто не будет работать https внутри pip install/download! Уже я проходил это :)
 make -j $(nproc)
 
 sudo make altinstall
@@ -80,9 +115,9 @@ sudo update-alternatives --install /usr/bin/python python /opt/python311/bin/pyt
 sudo update-alternatives --install /usr/bin/pip    pip    /opt/python311/bin/pip3.11    1
 
 echo -e "$(python -V)\n$(pip -V)\n$(python -c 'import ssl; print(ssl.OPENSSL_VERSION)')"
-#	Python 3.11.15
-#	pip 24.0 from /opt/python311/lib/python3.11/site-packages/pip (python 3.11)
-#	OpenSSL 1.1.1f  31 Mar 2020
+#   Python 3.11.15
+#   pip 24.0 from /opt/python311/lib/python3.11/site-packages/pip (python 3.11)
+#   OpenSSL 1.1.1f  31 Mar 2020
 
 
 
@@ -99,9 +134,9 @@ sudo make install
 sudo update-alternatives --install /usr/bin/cmake cmake /opt/cmake/bin/cmake 1
 
 cmake --version
-#	cmake version 4.3.20260404-g3c7e587
+#   cmake version 4.3.20260404-g3c7e587
 #
-#	CMake suite maintained and supported by Kitware (kitware.com/cmake).
+#   CMake suite maintained and supported by Kitware (kitware.com/cmake).
 
 
 
@@ -115,19 +150,19 @@ safe_clone https://github.com/ninja-build/ninja.git
 cd ninja
 
 cmake -Bbuild-cmake \
-	-DBUILD_TESTING=OFF \
-	-DCMAKE_INSTALL_PREFIX=/opt/ninja \
-	-DCMAKE_C_COMPILER=clang-18 \
-	-DCMAKE_CXX_COMPILER=clang++-18 \
-	-DCMAKE_CXX_FLAGS="-stdlib=libc++" \
-	-DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++"
+    -DBUILD_TESTING=OFF \
+    -DCMAKE_INSTALL_PREFIX=/opt/ninja \
+    -DCMAKE_C_COMPILER=clang-18 \
+    -DCMAKE_CXX_COMPILER=clang++-18 \
+    -DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+    -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++"
 cmake --build build-cmake -- -j $(nproc)
 sudo cmake --install build-cmake
 
 sudo update-alternatives --install /usr/bin/ninja ninja /opt/ninja/bin/ninja 1
 
 ninja --version
-#	1.14.0.git
+#   1.14.0.git
 
 
 
@@ -135,7 +170,7 @@ ninja --version
 
 mkdir -p ~/tmp; cd ~/tmp
 
-safe_clone https://github.com/llvm/llvm-project.git
+safe_clone https://github.com/llvm/llvm-project.git --tags
 cd llvm-project
 rm -rf build; mkdir build; cd build
 
@@ -163,19 +198,17 @@ cmake ../llvm \
 cmake --build . -- -j $(nproc)
 sudo cmake --build . --target install
 
-sudo update-alternatives --install /usr/bin/clang-23   clang-23   /opt/llvm/bin/clang   1
-sudo update-alternatives --install /usr/bin/clang++-23 clang++-23 /opt/llvm/bin/clang++ 1
-for target in llvm-addr2line llvm-ar llvm-ranlib llvm-dlltool ld.lld llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip llvm-symbolizer llvm-readobj ; do
+for target in clang clang++ clang-23 llvm-addr2line llvm-ar llvm-ranlib llvm-dlltool lld ld.lld llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip llvm-symbolizer llvm-readobj ; do
     sudo update-alternatives --install /usr/bin/$target $target /opt/llvm/bin/$target 1
 done
 
 
-clang-23 --version
-#	clang version 23.0.0git (https://github.com/llvm/llvm-project.git ff4c6fe24ecb7857d119fe4bcaa8189f755973d7)
-#	Target: x86_64-unknown-linux-gnu
-#	Thread model: posix
-#	InstalledDir: /opt/llvm/bin
-#	Build config: +assertion
+clang --version
+#   clang version 23.0.0git (https://github.com/llvm/llvm-project.git ff4c6fe24ecb7857d119fe4bcaa8189f755973d7)
+#   Target: x86_64-unknown-linux-gnu
+#   Thread model: posix
+#   InstalledDir: /opt/llvm/bin
+#   Build config: +assertion
 
 
 
@@ -197,7 +230,7 @@ cmake ../runtimes \
   -DLLVM_DIR=/opt/llvm/lib/cmake/llvm \
   -DClang_DIR=/opt/llvm/lib/cmake/clang \
   -DCMAKE_C_COMPILER=clang-23 \
-  -DCMAKE_CXX_COMPILER=clang++-23 \
+  -DCMAKE_CXX_COMPILER=clang-23 \
   -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
   -DLIBCXX_ENABLE_SHARED=ON \
   -DLIBCXXABI_ENABLE_SHARED=ON \
@@ -212,27 +245,27 @@ cmake --build . --target install
 
 echo "/opt/llvm/lib" | sudo tee /etc/ld.so.conf.d/llvm.conf > /dev/null
 sudo ldconfig
-#	ldconfig -p | grep llvm
-#	ldconfig -p | grep libc++
-#	ldconfig -p | grep unwind
+#   ldconfig -p | grep llvm
+#   ldconfig -p | grep libc++
+#   ldconfig -p | grep unwind
 
 cd ~/tmp
 echo '#include <iostream>
 int main() { std::cout << "Hello libc++!\n"; }' > test.cpp
-clang++-23 -stdlib=libc++ test.cpp -o test
+clang-23 -stdlib=libc++ test.cpp -o test
 ./test
 ldd ./test
-#	linux-vdso.so.1 (0x...)
-#	libc++.so.1     => /opt/llvm/lib/libc++.so.1 (0x...)
-#	libc++abi.so.1  => /opt/llvm/lib/libc++abi.so.1 (0x...)
-#	libunwind.so.1  => /opt/llvm/lib/libunwind.so.1 (0x...)
-#	libm.so.6       => /lib/x86_64-linux-gnu/libm.so.6 (0x...)
-#	libgcc_s.so.1   => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x...)
-#	libc.so.6       => /lib/x86_64-linux-gnu/libc.so.6 (0x...)
-#	libatomic.so.1  => /lib/x86_64-linux-gnu/libatomic.so.1 (0x...)
-#	libdl.so.2      => /lib/x86_64-linux-gnu/libdl.so.2 (0x...)
-#	libpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x...)
-#	/lib64/ld-linux-x86-64.so.2 (0x...)
+#   linux-vdso.so.1 (0x...)
+#   libc++.so.1     => /opt/llvm/lib/libc++.so.1 (0x...)
+#   libc++abi.so.1  => /opt/llvm/lib/libc++abi.so.1 (0x...)
+#   libunwind.so.1  => /opt/llvm/lib/libunwind.so.1 (0x...)
+#   libm.so.6       => /lib/x86_64-linux-gnu/libm.so.6 (0x...)
+#   libgcc_s.so.1   => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x...)
+#   libc.so.6       => /lib/x86_64-linux-gnu/libc.so.6 (0x...)
+#   libatomic.so.1  => /lib/x86_64-linux-gnu/libatomic.so.1 (0x...)
+#   libdl.so.2      => /lib/x86_64-linux-gnu/libdl.so.2 (0x...)
+#   libpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x...)
+#   /lib64/ld-linux-x86-64.so.2 (0x...)
 
 
 
@@ -247,7 +280,7 @@ cmake ../llvm \
   -DCMAKE_INSTALL_PREFIX=/opt/llvm \
   -DPython3_EXECUTABLE=$(which python) \
   -DCMAKE_C_COMPILER=clang-23 \
-  -DCMAKE_CXX_COMPILER=clang++-23 \
+  -DCMAKE_CXX_COMPILER=clang-23 \
   -DCLANG_DEFAULT_CXX_STDLIB=libc++ \
   -DCLANG_DEFAULT_UNWINDLIB=libunwind \
   -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld;mlir" \
@@ -265,8 +298,10 @@ cmake ../llvm \
   -DLIBCXX_ENABLE_SHARED=ON \
   -DCLANG_DEFAULT_RTLIB=compiler-rt
 
-if [ -f ~/tmp/llvm_checker.py ]; then python ~/tmp/llvm_checker.py; fi
-#	Ошибок нет! ;'-}
+if [ -f ~/tmp/llvm_checker.py ]; then
+    python ~/tmp/llvm_checker.py
+fi
+#   Ошибок нет! ;'-}
 
 cmake --build . -- -j $(nproc)
 sudo cmake --build . --target install
@@ -275,10 +310,109 @@ clang-23 --version
 ??? TODO
 
 cd ~/tmp
-clang++-23 -stdlib=libc++ test.cpp -o test
+clang-23 -stdlib=libc++ test.cpp -o test
 ./test
 ldd ./test
 ??? TODO (libgcc_s должен исчезнуть)
+
+
+
+# ~~~ local partial ~~~
+
+git clone --mirror ~/tmp/llvm-project ~/tmp/llvm-mirror.git
+git -C ~/tmp/llvm-mirror.git config uploadpack.allowFilter true
+git -C ~/tmp/llvm-mirror.git config uploadpack.allowAnySHA1InWant true
+
+
+
+# ~~~ triton-ascend ~~~
+
+mkdir -p ~/tmp; cd ~/tmp
+
+safe_clone https://gitcode.com/Ascend/triton-ascend.git
+
+cd ~/tmp/triton-ascend
+sudo pip install -r requirements_dev.txt
+
+safe_clone https://gitcode.com/Ascend/AscendNPU-IR.git third_party/ascend/AscendNPU-IR --filter=blob:none
+safe_clone https://github.com/llvm/torch-mlir.git third_party/ascend/AscendNPU-IR/third-party/torch-mlir --filter=blob:none
+#   safe_clone file://$HOME/tmp/llvm-mirror.git third_party/ascend/AscendNPU-IR/third-party/llvm-project --filter=blob:none --depth 1
+#   ln -s ~/tmp/llvm-project third_party/ascend/AscendNPU-IR/third-party/
+
+dir=third_party/ascend/AscendNPU-IR/third-party/llvm-project
+if [ ! -d $dir/.git ]; then
+    mkdir -p $dir
+    cp ../llvm-project/.git $dir/.git -r
+fi
+git -C $dir reset --hard HEAD
+
+export DEBUG=1
+export TRITON_BUILD_WITH_CCACHE=false
+export TRITON_BUILD_WITH_CLANG_LLD=true
+export TRITON_BUILD_PROTON=off
+export TRITON_WHEEL_NAME="triton-ascend"
+export TRITON_APPEND_CMAKE_ARGS='-DCMAKE_CXX_FLAGS="-O0 -g" -DTRITON_BUILD_UT=OFF'
+
+cd ~/tmp/triton-ascend/python
+# export TRITON_OFFLINE_BUILD=1
+# export LLVM_SYSPATH=/opt/llvm
+#   derivedClassRecord->getDirectSuperClasses(superClasses);
+#   понятно, LLVM 23, что билдит тритон почти мгновенно, отпадает :/
+#   просто из-за какого-то мелочи в api table gen :///
+rm build -r
+python setup.py bdist_wheel
+
+cat build/cmake.linux-x86_64-cpython-3.11/CMakeCache.txt | grep :FILEPATH=
+
+Прогресс бар для мажоров (в setup.py заменить open_url):
+
+import requests
+from tqdm import tqdm # sudo pip install tqdm
+from io import BytesIO
+
+def open_url(url):
+    user_agent = 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/119.0'
+    headers = {'User-Agent': user_agent}
+
+    # stream=True — чтобы читать по кускам
+    with requests.get(url, headers=headers, stream=True, timeout=300) as r:
+        r.raise_for_status()
+
+        total = int(r.headers.get('Content-Length', 0))
+        buf = BytesIO()
+
+        chunk_size = 8192
+        with tqdm(
+            total=total,
+            unit='B',
+            unit_scale=True,
+            unit_divisor=1024,
+            desc=f"Downloading {url.split('/')[-1]}"
+        ) as bar:
+            for chunk in r.iter_content(chunk_size=chunk_size):
+                if chunk:
+                    buf.write(chunk)
+                    bar.update(len(chunk))
+
+# забавно, что я у нейронки требовал прогресс бар от pip install, а получил почти как в миниконде
+# ... и я этому рад!)
+
+
+
+# ~~~ AscendNPU-IR-Dev ~~~
+
+mkdir -p ~/tmp; cd ~/tmp
+
+safe_clone https://username:token@gitcode.com/Ascend/AscendNPU-IR-Dev.git --filter=blob:none
+cd AscendNPU-IR-Dev
+
+if [ ! -d third-party/llvm-project/.git ]; then
+    mkdir -p third-party/llvm-project/
+    cp ../llvm-project/.git third-party/llvm-project/.git -r
+fi
+git -C third-party/llvm-project/ checkout llvmorg-19.1.7
+
+
 
 
 
@@ -287,37 +421,37 @@ ldd ./test
 🟧 Что могло ускориться после установки GCC‑16
 ✔ 1. Ты обновил libstdc++6 вместе с GCC
 Когда ты ставил gcc‑16, apt автоматически подтянул:
-	новую libstdc++6
-	новую libgcc-s1
-	новые runtime‑пакеты GCC
+    новую libstdc++6
+    новую libgcc-s1
+    новые runtime‑пакеты GCC
 Именно это обновление:
-	добавило новые GLIBCXX‑символы
-	обновило внутренние алгоритмы libstdc++
-	ускорило работу std::vector, std::string, std::unordered_map
-	улучшило аллокаторы
-	улучшило атомики и memory model
+    добавило новые GLIBCXX‑символы
+    обновило внутренние алгоритмы libstdc++
+    ускорило работу std::vector, std::string, std::unordered_map
+    улучшило аллокаторы
+    улучшило атомики и memory model
 А NPU‑драйверы Huawei/CANN используют C++ STL очень активно.
 То есть ускорение могло прийти от обновлённой libstdc++, а не от GCC.
 
 ✔ 2. Ты обновил libatomic и libgcc_s
 CANN и Torch‑NPU используют:
-	атомики
-	барьеры памяти
-	синхронизацию потоков
+    атомики
+    барьеры памяти
+    синхронизацию потоков
 Новые версии этих библиотек быстрее и стабильнее.
 
 ✔ 3. Ты обновил libgomp (OpenMP)
 Многие NPU‑операции используют OpenMP‑пулы потоков.
 Новая версия:
-	быстрее создаёт потоки
-	лучше распределяет задачи
-	меньше блокируется
+    быстрее создаёт потоки
+    лучше распределяет задачи
+    меньше блокируется
 Это тоже могло убрать «жёсткие задержки».
 
 ✔ 4. Ты обновил libstdc++ ABI, который ускоряет работу C++ рантайма
 Начиная с GCC 11–16, libstdc++ получила:
-	более быстрый std::string (SSO улучшен)
-	более быстрый std::vector
-	улучшенные хеш‑таблицы
-	оптимизированные алгоритмы
+    более быстрый std::string (SSO улучшен)
+    более быстрый std::vector
+    улучшенные хеш‑таблицы
+    оптимизированные алгоритмы
 Если NPU‑драйверы используют STL (а они используют), это даёт реальный прирост.
