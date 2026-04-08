@@ -394,6 +394,9 @@ def open_url(url):
                     buf.write(chunk)
                     bar.update(len(chunk))
 
+        buf.seek(0)
+        return buf
+
 # забавно, что я у нейронки требовал прогресс бар от pip install, а получил почти как в миниконде
 # ... и я этому рад!)
 
