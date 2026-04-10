@@ -346,76 +346,100 @@ if [ ! -d $dir/.git ]; then
 fi
 git -C $dir reset --hard HEAD
 
+export CC=clang
 export DEBUG=1
 export TRITON_BUILD_WITH_CCACHE=false
 export TRITON_BUILD_WITH_CLANG_LLD=true
-export TRITON_BUILD_PROTON=off
+export BUILD_PROTON=OFF
 export TRITON_WHEEL_NAME="triton-ascend"
-export TRITON_APPEND_CMAKE_ARGS='-DCMAKE_CXX_FLAGS="-O0 -g" -DTRITON_BUILD_UT=OFF'
+export TRITON_APPEND_CMAKE_ARGS='-DCMAKE-CXX-FLAGS="-O0 -g" -DTRITON_BUILD_UT=OFF'
+
+# Хотфикс:
+#   sudo apt install libzstd-dev libxml2-dev -y
+
+# Хотфикс #2:
+#   /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.33' not found (required by /home/vectorasd/.triton/llvm/llvm-b5cc222d-ubuntu-x64/bin/mlir-tblgen)
+#   Проще уже скачать нормальный LLVM через open_url
+
+sudo apt install docker.io
+sudo usermod -aG docker $USER
+wsl --shutdown
+
+docker run --rm -it \
+  -v /home/$USER:/home/$USER \
+  -v /home/$USER/.docker-usr:/usr \
+  -e HOME=/home/$USER \
+  -e USER=$USER \
+  -u $(id -u):$(id -g) \
+  ubuntu:24.04
+
+НЕЛЬЗЯ ПРОБРОСИТЬ /usr, сохранив при этом его содержимое в момент создания volume :/
+ИСПОЛЬЗУЙТЕ НОВУЮ ИНСТРУКЦИЮ ДЛЯ ДРУГОГО WSL
 
 cd ~/tmp/triton-ascend/python
-export TRITON_OFFLINE_BUILD=1
-export LLVM_SYSPATH=/opt/llvm
-#   derivedClassRecord->getDirectSuperClasses(superClasses);
-#   понятно, LLVM 23, что билдит тритон почти мгновенно, отпадает :/
-#   просто из-за какого-то мелочи в api table gen :///
 rm build -r
 python setup.py bdist_wheel
-
 cat build/cmake.linux-x86_64-cpython-3.11/CMakeCache.txt | grep -E ":FILEPATH=|:UNINITIALIZED="
 
-Хотфикс:
-	sudo apt install libzstd-dev libxml2-dev -y
 
-Хотфикс #2:
-	/lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.33' not found (required by /home/vectorasd/.triton/llvm/llvm-b5cc222d-ubuntu-x64/bin/mlir-tblgen)
-	Это необходимая мера!!! Если просят Ubuntu 22.04, когда все остальные проекты билдят на 20.04 -_- Зачем?!
-		export TRITON_OFFLINE_BUILD=1
-		export LLVM_SYSPATH=/opt/llvm
-	В кешах (build/cmake.linux-x86_64-cpython-3.11/CMakeCache.txt):
-		333:LLVM_MAJOR_VERSION_20_COMPATIBLE:BOOL=ON
-		336:LLVM_MAJOR_VERSION_21_COMPATIBLE:BOOL=OFF
-		339:LLVM_MAJOR_VERSION_22_COMPATIBLE:BOOL=OFF # переключаем ON сюда
-	Или просто заюзать в setup.py (там сейчас насильно стоит -DLLVM_MAJOR_VERSION_20_COMPATIBLE=ON):
-		"-DLLVM_MAJOR_VERSION_22_COMPATIBLE=ON",
-		Поехала куча ошибок :) Нет CopyOp-интерфейса больше...
-		Значит ставит Ubuntu 22.04 (docker) или LLVM-22
 
-Прогресс бар для мажоров (в setup.py заменить open_url):
+Прогресс бар для мажоров (в setup.py заменить open_url), ну или у кого просто падает каждые 5 минут домашняя сеть при таком домене:
 
 import requests
 from tqdm import tqdm # sudo pip install tqdm
 from io import BytesIO
+import hashlib
+
+def get_cache_path_for_url(url):
+    h = hashlib.sha1(url.encode("utf-8")).hexdigest()
+    return os.path.join(get_triton_cache_path(), h)
 
 def open_url(url):
+    cache_path_for_url = get_cache_path_for_url(url)
+
     user_agent = 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/119.0'
     headers = {'User-Agent': user_agent}
+
+    chunk_size = 8192
+    size = 0
+
+    if os.path.exists(cache_path_for_url):
+        with open(cache_path_for_url, "a+b") as file:
+            size = file.tell()
+            new_size = max(0, size - chunk_size)
+            if new_size < size:
+                file.truncate(new_size)
+                size = new_size
+
+        headers["Range"] = f"bytes={size}-"
 
     # stream=True — чтобы читать по кускам
     with requests.get(url, headers=headers, stream=True, timeout=300) as r:
         r.raise_for_status()
 
-        total = int(r.headers.get('Content-Length', 0))
-        buf = BytesIO()
+        content_len = r.headers.get('Content-Length')
+        if content_len is None:
+            total = None
+        else:
+            total = int(content_len)
+            # print("total:", total, total+size)
+            total += size
 
-        chunk_size = 8192
         with tqdm(
             total=total,
+            initial=size,
             unit='B',
             unit_scale=True,
             unit_divisor=1024,
             desc=f"Downloading {url.split('/')[-1]}"
-        ) as bar:
+        ) as bar, open(cache_path_for_url, "ab") as file:
             for chunk in r.iter_content(chunk_size=chunk_size):
                 if chunk:
-                    buf.write(chunk)
+                    file.write(chunk)
                     bar.update(len(chunk))
 
-        buf.seek(0)
-        return buf
-
-# забавно, что я у нейронки требовал прогресс бар от pip install, а получил почти как в миниконде
-# ... и я этому рад!)
+    with open(cache_path_for_url, "rb") as file:
+        return BytesIO(file.read())
 
 
 
