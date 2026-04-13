@@ -1,14 +1,14 @@
 from pathlib import Path
 from pprint import pprint
 import os
+import sys
 
 RED    = "\033[31m"
 GREEN  = "\033[32m"
 YELLOW = "\033[33m"
 RESET  = "\033[0m"
 
-prefix = '/opt/llvm/bin'
-prefix = '/usr/lib/llvm-23/bin' # new
+prefix = sys.argv[2] if len(sys.argv) > 2 else '/usr/lib/llvm-20/bin'
 
 ref = {
   'Backtrace_LIBRARY':              '',
@@ -50,7 +50,7 @@ ref = {
 }
 
 # path = Path.home() / "tmp" / "llvm-project" / "build" / "CMakeCache.txt"
-path = Path("CMakeCache.txt")
+path = Path(sys.argv[1] if len(sys.argv) > 1 else "CMakeCache.txt")
 base = {}
 errors = 0
 with path.open() as file:
