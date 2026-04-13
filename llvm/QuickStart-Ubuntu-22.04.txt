@@ -1,0 +1,600 @@
+    %UserProfile%\.wslconfig
+[wsl2]
+networkingMode=mirrored
+memory=14GB
+swap=0
+
+wsl --shutdown
+
+
+
+wsl -lo                 # wsl --list --online
+wsl --install Ubuntu-22.04
+wsl -s Ubuntu-22.04     # wsl --set-default Ubuntu-22.04
+wsl -u root             # wsl --user root
+
+visudo
+что_угодно ALL=(ALL) NOPASSWD:ALL
+что_угодно ALL=(ALL:ALL) NOPASSWD:ALL
+
+
+
+от лица юзера:
+
+    vim ~/setenv.sh
+stty -ixon
+cd ~
+
+	vim ~/.bashrc
+в конце:
+source ~/setenv.sh
+
+
+
+# ~~~ инициализация пула репозиториев ~~~
+
+git config --global alias.hist "log --oneline --decorate --graph --all"
+git config --global user.email <email>
+git config --global user.name "VectorASD"
+git config --global core.quotepath false
+
+safe_clone() {
+    local url=""
+    local dir=""
+    local args=()
+
+    # --- Парсим, учитывая двухтокеновые аргументы (see: git clone --help) ---
+    local flags_with_arg=(
+        --reference
+        --reference-if-able
+        -o
+        --origin
+        -b
+        --branch
+        -u
+        --upload-pack
+        -c
+        --config
+        --depth
+        -j
+        --jobs
+    )
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -*)  # флаги git clone
+                args+=("$1")
+                if [[ " ${flags_with_arg[*]} " == *" $1 "* ]]; then
+                    args+=("$2")
+                    shift
+                fi
+                ;;
+            *)    # url и каталог назначения
+                if [[ -z "$url" ]]; then
+                    url="$1"
+                elif [[ -z "$dir" ]]; then
+                    dir="$1"
+                else
+                    args+=("$1")
+                fi
+                ;;
+        esac
+        shift
+    done
+    # echo "src: $url"
+    # echo "dst: $dir"
+    # echo "args: ${args[@]}"
+
+    # --- Проверка URL ---
+    if [[ -z "$url" ]]; then
+        echo "safe_clone: error: URL not specified" >&2
+        return 1
+    fi
+
+    # --- Если каталог не указан — берём из URL ---
+    if [[ -z "$dir" ]]; then
+        dir="$(basename "$url" .git)"
+    fi
+
+    # --- Проверка существующего репозитория ---
+    if [[ -d "$dir/.git" ]]; then
+        if git -C "$dir" fsck --no-progress --no-dangling >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+
+    # --- Клонирование ---
+    rm -rf "$dir"
+    git clone "$url" "$dir" "${args[@]}"
+
+    # --- Локализация objects ---
+    mv $dir/.git/objects $dir-objects
+    ln -s $(realpath $dir-objects) $dir/.git/objects
+}
+
+mkdir -p ~/gitpool; cd ~/gitpool
+safe_clone --depth 1 --no-checkout https://github.com/Kitware/CMake.git
+safe_clone --depth 1 --no-checkout https://github.com/ninja-build/ninja.git
+safe_clone --tags    --no-checkout https://github.com/llvm/llvm-project.git   # Нужна вся история! Больно, но ждём :) ... 1000 секунд (всего 3.24 GiB при 3.24 MiB/сек)
+safe_clone --depth 1 --no-checkout https://github.com/llvm/torch-mlir.git
+safe_clone --depth 1 --no-checkout https://github.com/openxla/stablehlo.git
+safe_clone --filter=blob:none --no-checkout https://gitcode.com/Ascend/triton-ascend.git
+safe_clone --filter=blob:none --no-checkout https://gitcode.com/Ascend/AscendNPU-IR.git
+
+
+
+# ~~~ первичная настройка инструментария WSL ~~~
+
+sudo find /usr -name "libstdc++.so.6"  # /usr/lib/$(uname -m)-linux-gnu/libstdc++.so.6
+strings /usr/lib/$(uname -m)-linux-gnu/libstdc++.so.6 | grep GLIBCXX  # последняя версия: GLIBCXX_3.4.30
+#   на aarch64 вероятнее всего будет lib64 вместо lib
+
+sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+apt list | grep -E "^gcc-[0-9]+/"        # gcc-16/jammy
+apt list | grep -E "^g\+\+-[0-9]+/"      # g++-16/jammy
+apt list | grep -E "^libstdc\+\+[0-9]+/" # libstdc++6/jammy
+#   и наврядли GCC ABI уже станет больше шестёрки за уже прошедшие 15 лет...)
+
+sudo apt install gcc-16 g++-16 -y
+strings /usr/lib/$(uname -m)-linux-gnu/libstdc++.so.6 | grep GLIBCXX  # последняя версия: GLIBCXX_3.4.35
+#   оказывается, обновлять libstdc++6 НЕ нужно, apt сам всё обновит
+
+# GCC  9 → GLIBCXX_3.4.28   Ubuntu 20.04 (focal)
+# GCC 10 → GLIBCXX_3.4.29
+# GCC 11 → GLIBCXX_3.4.30   Ubuntu 22.04 (jammy)
+# GCC 12 → GLIBCXX_3.4.31
+# GCC 13 → GLIBCXX_3.4.32   Ubuntu 24.04 (noble)
+# GCC 14 → GLIBCXX_3.4.33
+# GCC 15 → GLIBCXX_3.4.34   Ubuntu 26.04 (предположение)
+# GCC 16 → GLIBCXX_3.4.35   (PPA: ubuntu-toolchain-r/test)
+
+
+
+# ~~~ сборка python 3.11.8 ~~~
+
+packages="build-essential libssl-dev zlib1g-dev libncurses5-dev libncursesw5-dev libreadline-dev libsqlite3-dev libgdbm-dev libdb5.3-dev libbz2-dev libexpat1-dev liblzma-dev tk-dev uuid-dev libffi-dev"
+for pkg in $packages; do
+    apt-cache policy "$pkg" | grep Candidate || echo "NO: $pkg" # все должны быть "Candidate"
+done
+sudo apt install $packages -y
+
+mkdir -p ~/tmp; cd ~/tmp
+
+wget https://www.python.org/ftp/python/3.11.15/Python-3.11.15.tgz
+tar xf Python-3.11.15.tgz
+cd Python-3.11.15
+./configure --prefix=/opt/python311 --enable-optimizations
+#   важно проверить, что выведет в самом конце конфигурации так:
+#       checking for stdlib extension module _sqlite3... yes
+#       checking for stdlib extension module _tkinter... yes
+#       checking for stdlib extension module _uuid... yes
+#       checking for stdlib extension module zlib... yes
+#       checking for stdlib extension module _bz2... yes
+#       checking for stdlib extension module _lzma... yes
+#       checking for stdlib extension module _ssl... yes
+#       checking for stdlib extension module _hashlib... yes
+#   без SSL просто не будет работать https внутри pip install/download! Уже я проходил это :)
+make -j $(nproc)
+
+sudo make altinstall
+sudo update-alternatives --install /usr/bin/python python /opt/python311/bin/python3.11 1
+sudo update-alternatives --install /usr/bin/pip    pip    /opt/python311/bin/pip3.11    1
+
+echo -e "$(python -V)\n$(pip -V)\n$(python -c 'import ssl; print(ssl.OPENSSL_VERSION)')"
+#   Python 3.11.15
+#   pip 24.0 from /opt/python311/lib/python3.11/site-packages/pip (python 3.11)
+#   OpenSSL 1.1.1f  31 Mar 2020 (было в  Ubuntu 20.04)
+#   OpenSSL 3.0.2 15 Mar 2022   (стало в Ubuntu 22.04)   О, нормальный SSL!!! :)
+
+sudo python -m pip install --upgrade pip
+# 'rm ~/.local -rf' если случайно обновили pip без судоерса
+
+
+
+# ~~~ сборка CMake ~~~
+
+mkdir -p ~/tmp; cd ~/tmp
+cp -rp ~/gitpool/CMake . ; cd CMake
+git reset --hard HEAD
+
+./bootstrap --prefix=/opt/cmake --parallel=$(nproc)   # а раз SSL теперь новый, это больше не нужно: -- -DCMAKE_USE_OPENSSL=OFF
+make -j $(nproc)
+
+sudo make install
+sudo update-alternatives --install /usr/bin/cmake cmake /opt/cmake/bin/cmake 1
+
+cmake --version
+#   cmake version 4.3.20260413-g0ea36dd
+#
+#   CMake suite maintained and supported by Kitware (kitware.com/cmake).
+
+
+
+# ~~~ сборка clang (stage 1) ~~~
+
+mkdir -p ~/tmp; cd ~/tmp
+wget https://apt.llvm.org/llvm.sh
+chmod +x llvm.sh
+sudo ./llvm.sh 20
+
+# The following additional packages will be installed:
+#   clang-tools-20 icu-devtools lib32gcc-s1 lib32stdc++6 libabsl20210324 libc-ares2 libc6-i386 libclang-common-20-dev libclang-cpp20 libclang-rt-20-dev libclang1-20 libgc1 libgrpc++1 libgrpc10
+#   libicu-dev libipt2 liblldb-20 libllvm20 libobjc-11-dev libobjc4 libpfm4 libprotobuf23 libxml2-dev llvm-20 llvm-20-dev llvm-20-linker-tools llvm-20-runtime llvm-20-tools python3-lldb-20
+#   python3-pygments
+# Suggested packages:
+#   clang-20-doc wasi-libc icu-doc llvm-20-doc python-pygments-doc ttf-bitstream-vera
+# The following NEW packages will be installed:
+#   clang-20 clang-tools-20 clangd-20 icu-devtools lib32gcc-s1 lib32stdc++6 libabsl20210324 libc-ares2 libc6-i386 libclang-common-20-dev libclang-cpp20 libclang-rt-20-dev libclang1-20 libgc1
+#   libgrpc++1 libgrpc10 libicu-dev libipt2 liblldb-20 libllvm20 libobjc-11-dev libobjc4 libpfm4 libprotobuf23 libxml2-dev lld-20 lldb-20 llvm-20 llvm-20-dev llvm-20-linker-tools
+#   llvm-20-runtime llvm-20-tools python3-lldb-20 python3-pygments
+# 0 upgraded, 34 newly installed, 0 to remove and 50 not upgraded.
+# Need to get 0 B/175 MB of archives.
+# After this operation, 980 MB of additional disk space will be used.
+
+sudo apt install libc++-20-dev libc++abi-20-dev -y
+
+# The following additional packages will be installed:
+#   libc++1 libc++abi1 libunwind libunwind-20-dev
+# Suggested packages:
+#   clang
+# The following NEW packages will be installed:
+#   libc++-20-dev libc++1 libc++abi-20-dev libc++abi1 libunwind libunwind-20-dev
+# 0 upgraded, 6 newly installed, 0 to remove and 50 not upgraded.
+# Need to get 2523 kB of archives.
+# After this operation, 23.7 MB of additional disk space will be used.
+
+
+#   для отката:
+# sudo rm -f /etc/apt/sources.list.d/*_llvm_org_*.list
+# sudo apt update
+# sudo apt remove 'clang-*' 'llvm-*' 'lld-*' 'lldb-*' 'libclang-*' 'libllvm*' 'libc++*' 'libc++abi*'
+# sudo apt autoremove
+
+# TODO: сетапнуться на чистом Ubuntu 22.04 (где не было clang-23), починить здесь комментарии на apt-лог
+
+
+
+# ~~~ сборка ninja ~~~
+
+mkdir -p ~/tmp; cd ~/tmp
+cp -rp ~/gitpool/ninja . ; cd ninja
+git reset --hard HEAD
+
+rm -rf build-cmake
+cmake -Bbuild-cmake \
+    -DBUILD_TESTING=OFF \
+    -DCMAKE_INSTALL_PREFIX=/opt/ninja \
+    -DCMAKE_C_COMPILER=clang-20 \
+    -DCMAKE_CXX_COMPILER=clang++-20 \
+    -DCMAKE_CXX_FLAGS="-stdlib=libc++ -I/usr/lib/llvm-20/include/c++/v1" \
+    -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ -L/usr/lib/llvm-20/lib" \
+    -DCMAKE_CXX_STANDARD_LIBRARIES="-lc++ -lc++abi"
+
+cat build-cmake/CMakeCache.txt | grep ":FILEPATH="
+#   CMAKE_ADDR2LINE                   :FILEPATH=/usr/bin/llvm-addr2line-20
+#   CMAKE_AR                          :FILEPATH=/usr/bin/llvm-ar-20
+#   CMAKE_CXX_COMPILER_AR             :FILEPATH=/usr/bin/llvm-ar-20
+#   CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS:FILEPATH=/usr/bin/clang-scan-deps-20
+#   CMAKE_CXX_COMPILER_RANLIB         :FILEPATH=/usr/bin/llvm-ranlib-20
+#   CMAKE_DLLTOOL                     :FILEPATH=/usr/bin/llvm-dlltool-20
+#   CMAKE_LINKER                      :FILEPATH=/usr/bin/ld.lld-20
+#   CMAKE_MAKE_PROGRAM                :FILEPATH=/usr/bin/gmake
+#   CMAKE_NM                          :FILEPATH=/usr/bin/llvm-nm-20
+#   CMAKE_OBJCOPY                     :FILEPATH=/usr/bin/llvm-objcopy-20
+#   CMAKE_OBJDUMP                     :FILEPATH=/usr/bin/llvm-objdump-20
+#   CMAKE_RANLIB                      :FILEPATH=/usr/bin/llvm-ranlib-20
+#   CMAKE_READELF                     :FILEPATH=/usr/bin/llvm-readelf-20
+#   CMAKE_STRIP                       :FILEPATH=/usr/bin/llvm-strip-20
+#   CMAKE_TAPI                        :FILEPATH=CMAKE_TAPI-NOTFOUND
+#   RE2C                              :FILEPATH=RE2C-NOTFOUND
+
+cmake --build build-cmake -- -j $(nproc)
+sudo cmake --install build-cmake
+
+sudo update-alternatives --install /usr/bin/ninja ninja /opt/ninja/bin/ninja 1
+
+ninja --version
+#   1.14.0.git
+
+
+
+# ~~~ инициализация triton ~~~
+
+mkdir -p ~/tmp; cd ~/tmp
+
+cp -rp ~/gitpool/triton-ascend . ; cd triton-ascend
+git reset --hard HEAD
+
+LLVM_HASH=$(cat cmake/llvm-hash.txt)
+
+cp -rp ~/gitpool/AscendNPU-IR third_party/ascend; cd third_party/ascend/AscendNPU-IR
+git reset --hard HEAD
+
+cp -rp ~/gitpool/llvm-project third-party
+git -C third-party/llvm-project checkout $LLVM_HASH   # Updating files: 100% (148947/148947), done.
+
+cp -rp ~/gitpool/torch-mlir third-party; cd third-party/torch-mlir
+git reset --hard HEAD
+
+cp -rp ~/gitpool/stablehlo externals
+git -C externals/stablehlo reset --hard HEAD
+
+rm -rf externals/llvm-project
+ln -s ../../../third-party/llvm-project externals/llvm-project
+
+
+
+# ~~~ сборка clang (stage 2) ~~~
+
+cd ~/tmp/triton-ascend/third_party/ascend/AscendNPU-IR/third-party/llvm-project/
+mkdir -p build; cd build
+
+cmake ../llvm \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/opt/llvm \
+  -DPython3_EXECUTABLE=$(which python) \
+  -DCMAKE_C_COMPILER=clang-20 \
+  -DCMAKE_CXX_COMPILER=clang++-20 \
+  -DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+  -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++" \
+  -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld;mlir" \
+  -DLLVM_TARGETS_TO_BUILD="host;AArch64;NVPTX;AMDGPU" \
+  -DLLVM_ENABLE_RTTI=ON \
+  -DLLVM_ENABLE_ASSERTIONS=ON \
+  -DLLVM_ENABLE_ZLIB=ON \
+  -DLLVM_INCLUDE_TESTS=OFF \
+  -DLLVM_INCLUDE_EXAMPLES=OFF \
+  -DLLVM_INCLUDE_DOCS=OFF \
+  -DLLVM_ENABLE_TERMINFO=OFF \
+  -DLLVM_ENABLE_LIBXML2=OFF \
+  -DLLVM_PARALLEL_LINK_JOBS=1 \
+  -DLIBCXX_ENABLE_SHARED=ON \
+  -DCPACK_GENERATOR=STGZ
+
+if [ ! -f llvm_checker.py ]; then
+    wget https://raw.githubusercontent.com/VectorASD/QuickStart/refs/heads/master/llvm/llvm_checker.py
+fi
+python llvm_checker.py
+#   Ошибок нет! ;'-}
+
+cmake --build . -- -j $(nproc)
+sudo cmake --build . --target install
+
+
+
+# NVPTX   — лёгкий.
+# AArch64 — лёгкий.
+# AMDGPU  — монстр: 2-4 Гб на один процесс
+# Поэтому, на моменте с AMDGPUGenAsmWriter.inc, AMDGPUGenAsmMatcher.inc,
+# AMDGPUGenRegisterInfo.inc, ... не пугаемся, что RAM резко "сошла с планеты" :)
+# FAILED: [code=137] здесь нормально!
+# -DLLVM_PARALLEL_LINK_JOBS=1 уже не спасёт, т.к. проблема уже в table-gen, даже не в компиляции
+
+
+
+# ~~~ забираем clang с собой... ~~~
+
+sudo chown $USER:$USER install_manifest.txt
+cmake --build . --target package
+ll LLVM-20.0.0*.sh
+rm -rf _CPack_Packages
+
+# sudo du -sxh -> 46 GB, из них:
+# sudo du -xh --max-depth=1 /opt | sort -h | tail -n 10
+#   /opt/llvm                        =  6.8 GB
+#   ./bin                            =  5.9 GB
+#   ./lib                            =  2.2 GB
+#   ./_CPack_Packages (все 3 сжатия) = 27   GB
+#   остаётся только: 46 - 27 - 2.2 - 5.9 - 6.8 = 4.1 GB!!! Остальное - тупо LLVM хомяк
+
+
+
+# ~~~ сборка triton ~~~
+
+cd ~/tmp/triton-ascend
+sudo pip install -r requirements_dev.txt
+
+if [ -d /usr/lib/llvm-20/bin ]; then
+    sudo mv /usr/lib/llvm-20/bin /usr/lib/llvm-20/bin.disabled
+fi
+
+export CC=clang
+export CMAKE_PREFIX_PATH=/opt/llvm
+export DEBUG=1
+export TRITON_BUILD_WITH_CCACHE=false
+export TRITON_BUILD_WITH_CLANG_LLD=true
+export BUILD_PROTON=OFF
+export TRITON_WHEEL_NAME="triton-ascend"
+export TRITON_APPEND_CMAKE_ARGS='
+  -DCMAKE_CXX_FLAGS="-O0 -g -stdlib=libc++"
+  -DCMAKE_C_FLAGS="-stdlib=libc++"
+  -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ -lc++ -lc++abi"
+  -DCMAKE_SHARED_LINKER_FLAGS="-stdlib=libc++ -lc++ -lc++abi"
+  -DLLVM_ENABLE_RTTI=ON
+  -DLLVM_ENABLE_EH=ON
+  -DTRITON_BUILD_UT=OFF
+'
+
+if [ ! -v LLVM_SYSPATH ]; then
+    export LLVM_SYSPATH="/opt/llvm"
+    export PATH="$LLVM_SYSPATH/bin:$PATH"
+fi
+
+cd ~/tmp/triton-ascend/python
+rm -rf build
+python setup.py bdist_wheel
+
+# Ctrl+C
+if [ ! -f llvm_checker.py ]; then
+    wget https://raw.githubusercontent.com/VectorASD/QuickStart/refs/heads/master/llvm/llvm_checker.py
+fi
+python llvm_checker.py build/cmake.linux-x86_64-cpython-3.11/CMakeCache.txt /opt/llvm/bin
+#   Ошибок нет! ;'-}
+
+cd build/cmake.linux-x86_64-cpython-3.11
+/usr/bin/ninja -v -j 10   (вместо 40 :)
+
+cd ~/tmp/triton-ascend/python
+python setup.py bdist_wheel   # когда уже всё сбилдилось
+
+pip install dist/triton_ascend-*.whl
+
+
+
+# А вот это объясняет, зачем нам вообще нужны NVPTX и AMDGPU
+# [165/174] : && /opt/llvm/bin/clang++ ...
+# /usr/bin/ld: cannot find -lLLVMNVPTXCodeGen: No such file or directory
+# /usr/bin/ld: cannot find -lLLVMAMDGPUCodeGen: No such file or directory
+# /usr/bin/ld: cannot find -lLLVMAMDGPUAsmParser: No such file or directory
+# clang++: error: linker command failed with exit code 1 (use -v to see invocation)
+
+
+
+# ~~~ справочный материал ~~~
+
+🟧 Что могло ускориться после установки GCC‑16
+✔ 1. Ты обновил libstdc++6 вместе с GCC
+Когда ты ставил gcc‑16, apt автоматически подтянул:
+    новую libstdc++6
+    новую libgcc-s1
+    новые runtime‑пакеты GCC
+Именно это обновление:
+    добавило новые GLIBCXX‑символы
+    обновило внутренние алгоритмы libstdc++
+    ускорило работу std::vector, std::string, std::unordered_map
+    улучшило аллокаторы
+    улучшило атомики и memory model
+А NPU‑драйверы Huawei/CANN используют C++ STL очень активно.
+То есть ускорение могло прийти от обновлённой libstdc++, а не от GCC.
+
+✔ 2. Ты обновил libatomic и libgcc_s
+CANN и Torch‑NPU используют:
+    атомики
+    барьеры памяти
+    синхронизацию потоков
+Новые версии этих библиотек быстрее и стабильнее.
+
+✔ 3. Ты обновил libgomp (OpenMP)
+Многие NPU‑операции используют OpenMP‑пулы потоков.
+Новая версия:
+    быстрее создаёт потоки
+    лучше распределяет задачи
+    меньше блокируется
+Это тоже могло убрать «жёсткие задержки».
+
+✔ 4. Ты обновил libstdc++ ABI, который ускоряет работу C++ рантайма
+Начиная с GCC 11–16, libstdc++ получила:
+    более быстрый std::string (SSO улучшен)
+    более быстрый std::vector
+    улучшенные хеш‑таблицы
+    оптимизированные алгоритмы
+Если NPU‑драйверы используют STL (а они используют), это даёт реальный прирост.
+
+
+
+🟧 У тебя теперь действительно **идеальный стек**:
+Python 3.11, свежий pip, и — самое главное — нормальный OpenSSL 3.0.2 из Ubuntu 22.04.
+Это решает массу проблем, которые были на 20.04 из‑за древнего OpenSSL 1.1.1f.
+
+✔ 1. Что именно улучшилось после перехода на OpenSSL 3.0.2
+- Современные TLS‑алгоритмы работают без костылей.
+- Python 3.11 использует системный OpenSSL, поэтому:
+  - исчезают ошибки вида *"SSL: CERTIFICATE_VERIFY_FAILED"*,
+  - исчезают проблемы с TLS 1.3,
+  - исчезают проблемы с pip при скачивании пакетов,
+  - исчезают проблемы с GitHub API, PyPI, Docker Registry.
+- OpenSSL 3.x поддерживает новые криптопримитивы, которые уже требуют современные сервисы.
+
+✔ 2. Почему это важно именно для Python
+Python **не приносит свой OpenSSL**, он использует системный.  
+
+Поэтому:
+- Ubuntu 20.04 → Python 3.11 → OpenSSL 1.1.1f → куча несовместимостей  
+- Ubuntu 22.04 → Python 3.11 → OpenSSL 3.0.2 → всё работает как должно
+
+Ты это и увидел:
+```
+OpenSSL 1.1.1f  31 Mar 2020 (Ubuntu 20.04)
+OpenSSL 3.0.2 15 Mar 2022   (Ubuntu 22.04)
+```
+
+✔ 3. Почему это особенно важно в 2026
+
+Многие сервисы уже **отключили поддержку старых TLS‑версий**, и OpenSSL 1.1.1f не умеет:
+- современные шифры,
+- современные цепочки сертификатов,
+- современные политики безопасности.
+
+Поэтому переход на jammy автоматически решает проблемы, которые иначе пришлось бы чинить вручную.
+
+
+
+🟧 Да — именно так это и работает.
+
+Когда ты максимально жёстко вычищаешь GNU‑инструменты и заставляешь всю цепочку собираться **только на LLVM‑инструментах**, ты одновременно:
+- усложняешь себе жизнь на этапе сборки,
+- но резко повышаешь стабильность и предсказуемость результата на этапе выполнения.
+
+Это не интуитивно, но технически абсолютно логично.
+
+✔ 1. Почему сборка становится сложнее
+
+LLVM‑toolchain требует полной согласованности:
+- один и тот же **C++ ABI** (libc++ или libstdc++)
+- один и тот же **линковщик** (lld)
+- один и тот же **RTTI/EH режим**  
+- один и тот же набор **backend‑ов**  
+- один и тот же **MLIR**  
+- один и тот же **TableGen**  
+
+GNU‑инструменты более «прощают» несовместимости, а LLVM‑инструменты — нет.
+Поэтому:
+- GNU‑линкер может собрать бинарник, который потом упадёт в runtime.
+- lld откажется собирать бинарник, если ABI несовместим.
+
+То есть LLVM‑toolchain заставляет тебя **довести систему до идеального состояния**, иначе он просто не даст собрать.
+
+✔ 2. Почему runtime становится стабильнее
+
+Когда всё собрано на одном ABI, одним линковщиком, одним набором библиотек:
+- исчезают конфликты `std::__1` vs `std::__cxx11`
+- исчезают проблемы с RTTI между разными компиляторами
+- исчезают проблемы с исключениями между разными рантаймами
+- исчезают проблемы с несовместимыми версиями MLIR/LLVM
+- исчезают проблемы с пропавшими weak‑символами
+- исчезают проблемы с разными реализациями `new/delete`
+- исчезают проблемы с разными версиями `libunwind`
+
+Это превращает runtime из «лотереи» в **детерминированную систему**.
+
+✔ 3. Почему это особенно важно для Triton‑Ascend
+
+Triton — это:
+- MLIR
+- LLVM
+- Clang
+- Python‑модули
+- JIT‑компиляция
+- динамическая линковка
+- генерация IR на лету
+
+Если ABI несовместим — всё ломается в самых неожиданных местах.
+
+Когда ты всё собираешь на одном LLVM‑toolchain:
+- JIT работает стабильно
+- MLIR‑диалекты не конфликтуют
+- AscendNPU‑IR не ломает RTTI
+- Python‑модуль не теряет символы
+- линковка не пропускает ошибки
+- runtime не падает
+
+✔ 4. Итог
+
+Да — ты сознательно выбрал **более сложный путь сборки**, но:
+- он даёт **максимальную стабильность**,
+- минимизирует runtime‑ошибки,
+- устраняет скрытые ABI‑конфликты,
+- делает систему предсказуемой,
+- и полностью исключает «фейерверки символов» при запуске.
+
+Это ровно тот подход, который используют разработчики LLVM, MLIR, Triton и больших компиляторов.
