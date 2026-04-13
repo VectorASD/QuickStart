@@ -7,29 +7,32 @@ GREEN  = "\033[32m"
 YELLOW = "\033[33m"
 RESET  = "\033[0m"
 
+prefix = '/opt/llvm/bin'
+prefix = '/usr/lib/llvm-23/bin' # new
+
 ref = {
   'Backtrace_LIBRARY':              '',
-  'CMAKE_ADDR2LINE':                    '/opt/llvm/bin/llvm-symbolizer', # llvm-addr2line
-  'CMAKE_AR':                           '/opt/llvm/bin/llvm-ar',
-  'CMAKE_ASM_COMPILER':                 '/opt/llvm/bin/clang-23',
-  'CMAKE_ASM_COMPILER_AR':              '/opt/llvm/bin/llvm-ar',
-  'CMAKE_ASM_COMPILER_CLANG_SCAN_DEPS': '/opt/llvm/bin/clang-scan-deps',
-  'CMAKE_ASM_COMPILER_RANLIB':          '/opt/llvm/bin/llvm-ar', # llvm-ranlib
-  'CMAKE_CXX_COMPILER_AR':              '/opt/llvm/bin/llvm-ar',
-  'CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS': '/opt/llvm/bin/clang-scan-deps',
-  'CMAKE_CXX_COMPILER_RANLIB':          '/opt/llvm/bin/llvm-ar', # llvm-ranlib
-  'CMAKE_C_COMPILER_AR':                '/opt/llvm/bin/llvm-ar',
-  'CMAKE_C_COMPILER_CLANG_SCAN_DEPS':   '/opt/llvm/bin/clang-scan-deps',
-  'CMAKE_C_COMPILER_RANLIB':            '/opt/llvm/bin/llvm-ar', # llvm-ranlib
-  'CMAKE_DLLTOOL':                      '/opt/llvm/bin/llvm-ar', # llvm-dlltool
-  'CMAKE_LINKER':                       '/opt/llvm/bin/lld', # ld.lld
+  'CMAKE_ADDR2LINE':                    f'{prefix}/llvm-symbolizer', # llvm-addr2line
+  'CMAKE_AR':                           f'{prefix}/llvm-ar',
+  'CMAKE_ASM_COMPILER':                 f'{prefix}/clang-23',
+  'CMAKE_ASM_COMPILER_AR':              f'{prefix}/llvm-ar',
+  'CMAKE_ASM_COMPILER_CLANG_SCAN_DEPS': f'{prefix}/clang-scan-deps',
+  'CMAKE_ASM_COMPILER_RANLIB':          f'{prefix}/llvm-ar', # llvm-ranlib
+  'CMAKE_CXX_COMPILER_AR':              f'{prefix}/llvm-ar',
+  'CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS': f'{prefix}/clang-scan-deps',
+  'CMAKE_CXX_COMPILER_RANLIB':          f'{prefix}/llvm-ar', # llvm-ranlib
+  'CMAKE_C_COMPILER_AR':                f'{prefix}/llvm-ar',
+  'CMAKE_C_COMPILER_CLANG_SCAN_DEPS':   f'{prefix}/clang-scan-deps',
+  'CMAKE_C_COMPILER_RANLIB':            f'{prefix}/llvm-ar', # llvm-ranlib
+  'CMAKE_DLLTOOL':                      f'{prefix}/llvm-ar', # llvm-dlltool
+  'CMAKE_LINKER':                       f'{prefix}/lld', # ld.lld
   'CMAKE_MAKE_PROGRAM':                 '/opt/ninja/bin/ninja',
-  'CMAKE_NM':                           '/opt/llvm/bin/llvm-nm',
-  'CMAKE_OBJCOPY':                      '/opt/llvm/bin/llvm-objcopy',
-  'CMAKE_OBJDUMP':                      '/opt/llvm/bin/llvm-objdump',
-  'CMAKE_RANLIB':                       '/opt/llvm/bin/llvm-ar', # llvm-ranlib
-  'CMAKE_READELF':                      '/opt/llvm/bin/llvm-readobj', # llvm-readelf
-  'CMAKE_STRIP':                        '/opt/llvm/bin/llvm-objcopy', # llvm-strip
+  'CMAKE_NM':                           f'{prefix}/llvm-nm',
+  'CMAKE_OBJCOPY':                      f'{prefix}/llvm-objcopy',
+  'CMAKE_OBJDUMP':                      f'{prefix}/llvm-objdump',
+  'CMAKE_RANLIB':                       f'{prefix}/llvm-ar', # llvm-ranlib
+  'CMAKE_READELF':                      f'{prefix}/llvm-readobj', # llvm-readelf
+  'CMAKE_STRIP':                        f'{prefix}/llvm-objcopy', # llvm-strip
   'CMAKE_TAPI':                     'CMAKE_TAPI-NOTFOUND',
   'GIT_EXECUTABLE':                     '/usr/bin/git',
   'GOLD_EXECUTABLE':                    '/usr/bin/x86_64-linux-gnu-ld.gold',
@@ -46,7 +49,8 @@ ref = {
   'zstd_STATIC_LIBRARY':            'zstd_STATIC_LIBRARY-NOTFOUND'
 }
 
-path = Path.home() / "tmp" / "llvm-project" / "build" / "CMakeCache.txt"
+# path = Path.home() / "tmp" / "llvm-project" / "build" / "CMakeCache.txt"
+path = Path("CMakeCache.txt")
 base = {}
 errors = 0
 with path.open() as file:
@@ -60,7 +64,7 @@ with path.open() as file:
 
             ref_value = ref.get(key, '')
             ok    = ref_value.startswith('/')
-            error = ok and ref_value != value
+            error = ok and os.path.realpath(ref_value) != value
             color  = RED if error else GREEN
             color2 = "" if ok or error else YELLOW
             print(f"{color}{key:36} {color2}{value}{RESET}")
