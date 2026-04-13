@@ -14,7 +14,7 @@ ref = {
   'Backtrace_LIBRARY':              '',
   'CMAKE_ADDR2LINE':                    f'{prefix}/llvm-symbolizer', # llvm-addr2line
   'CMAKE_AR':                           f'{prefix}/llvm-ar',
-  'CMAKE_ASM_COMPILER':                 f'{prefix}/clang-23',
+  'CMAKE_ASM_COMPILER':                 f'{prefix}/clang',
   'CMAKE_ASM_COMPILER_AR':              f'{prefix}/llvm-ar',
   'CMAKE_ASM_COMPILER_CLANG_SCAN_DEPS': f'{prefix}/clang-scan-deps',
   'CMAKE_ASM_COMPILER_RANLIB':          f'{prefix}/llvm-ar', # llvm-ranlib
