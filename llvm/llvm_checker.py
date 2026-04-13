@@ -80,5 +80,6 @@ if errors:
     part  = 'ок' if a == 1 or b == 0 or b > 4 else 'ка' if b == 1 else 'ки'
     part2 = 'о'  if a == 1 or b == 0 or b > 4 else  'а' if b == 1 else  'ы'
     print(f"{RED}Обнаружен{part2} {errors} ошиб{part}!{RESET}")
+    exit(1)
 else:
     print(f"{GREEN}Ошибок нет! ;'-}}{RESET}")
