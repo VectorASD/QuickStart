@@ -117,6 +117,7 @@ safe_clone --depth 1 --no-checkout https://github.com/ninja-build/ninja.git
 safe_clone --tags    --no-checkout https://github.com/llvm/llvm-project.git   # Нужна вся история! Больно, но ждём :) ... 1000 секунд (всего 3.24 GiB при 3.24 MiB/сек)
 safe_clone --depth 1 --no-checkout https://github.com/llvm/torch-mlir.git
 safe_clone --depth 1 --no-checkout https://github.com/openxla/stablehlo.git
+safe_clone --tags    --no-checkout https://github.com/triton-lang/triton.git
 safe_clone --filter=blob:none --no-checkout https://gitcode.com/Ascend/triton-ascend.git
 safe_clone --filter=blob:none --no-checkout https://gitcode.com/Ascend/AscendNPU-IR.git
 
@@ -686,9 +687,11 @@ sudo apt install libc++-19-dev libc++abi-19-dev -y
 
 mkdir -p ~/bisheng; cd ~/bisheng
 cp -rp ~/gitpool/AscendNPU-IR-Dev .; cd AscendNPU-IR-Dev
-git reset --hard HEAD
+git checkout A5/dev
 cp -rp ~/gitpool/llvm-project third-party
+cp -rp ~/gitpool/triton third-party
 git -C third-party/llvm-project/ checkout llvmorg-19.1.7
+git -C third-party/triton/ checkout v3.5.0   # git ls-tree HEAD third-party/triton | awk '{print $3}'
 git -C third-party/llvm-project/ branch -v
 # * (HEAD detached at llvmorg-19.1.7) cd708029e0b2 Fix print module manifest file for macos (#122370)
 #   main                              121f5a96ff38 [libclc] Enable LLVM_RUNTIME_TARGETS in build system (#189892)
