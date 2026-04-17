@@ -23,9 +23,12 @@ visudo
 
     vim ~/setenv.sh
 stty -ixon
-cd ~
+if [ ! -d /opt/python311/lib/python3.11/site-packages/triton ]
+    then cd ~  # нужно для удобства работы в wsl, пока не получится собрать тритон-колесо и установить его
+fi
+# safe_clone скрипт скопировать сюда, что расположен ниже, для удобства
 
-	vim ~/.bashrc
+    vim ~/.bashrc
 в конце:
 source ~/setenv.sh
 
@@ -155,33 +158,51 @@ strings /usr/lib/$(uname -m)-linux-gnu/libstdc++.so.6 | grep GLIBCXX  # посл
 
 
 
-# ~~~ сборка python 3.11.8 ~~~
+# ~~~ сборка python 3.11.15 ~~~
 
 packages="build-essential libssl-dev zlib1g-dev libncurses5-dev libncursesw5-dev libreadline-dev libsqlite3-dev libgdbm-dev libdb5.3-dev libbz2-dev libexpat1-dev liblzma-dev tk-dev uuid-dev libffi-dev"
+unset ERROR_F
 for pkg in $packages; do
-    apt-cache policy "$pkg" | grep Candidate || echo "NO: $pkg" # все должны быть "Candidate"
+    if ! apt-cache policy "$pkg" | grep Candidate; then
+        echo "NO: $pkg"  # все должны быть "Candidate"
+        ERROR_F=''
+    fi
 done
+if [ -v ERROR_F ]; then
+    exit 1
+fi
 sudo apt install $packages -y
 
 mkdir -p ~/tmp; cd ~/tmp
 
 wget https://www.python.org/ftp/python/3.11.15/Python-3.11.15.tgz
 tar xf Python-3.11.15.tgz
-cd Python-3.11.15
-./configure --prefix=/opt/python311 --enable-optimizations
-#   важно проверить, что выведет в самом конце конфигурации так:
-#       checking for stdlib extension module _sqlite3... yes
-#       checking for stdlib extension module _tkinter... yes
-#       checking for stdlib extension module _uuid... yes
-#       checking for stdlib extension module zlib... yes
-#       checking for stdlib extension module _bz2... yes
-#       checking for stdlib extension module _lzma... yes
-#       checking for stdlib extension module _ssl... yes
-#       checking for stdlib extension module _hashlib... yes
+cd ~/tmp/Python-3.11.15
+./configure --prefix=/opt/python311 --enable-optimizations | tee log.txt
+
+# cat log.txt | grep "checking for stdlib extension module" | awk '{print $6}' | sed 's/\.\.\.//g' | tr '\n' ' '
+unset ERROR_F
+for name in _multiprocessing _posixshmem fcntl mmap _socket grp ossaudiodev pwd resource _scproxy spwd syslog termios pyexpat _elementtree _md5 _sha1 _sha256 _sha512 _sha3 _blake2 _crypt _decimal _gdbm nis _sqlite3 _tkinter _uuid zlib _bz2 _lzma _ssl _hashlib _testcapi _testclinic _testinternalcapi _testbuffer _testimportmultiple _testmultiphase _xxtestfuzz _ctypes_test xxlimited xxlimited_35; do
+    if grep -q "checking for stdlib extension module $name... yes" log.txt; then
+        echo "$name: OK"
+    elif [ $name = _scproxy ]; then
+        echo "$name: macOS-only"
+    else
+        echo "$name: FATALITY"
+        ERROR_F=''
+    fi
+done
+if [ -v ERROR_F ]; then
+    exit 1
+fi
 #   без SSL просто не будет работать https внутри pip install/download! Уже я проходил это :)
+
 make -j $(nproc)
+./python -V | grep "Python 3.11.15" || exit 1
 
 sudo make altinstall
+[ -x /opt/python311/bin/python3.11 ] || { echo "Install failed"; exit 1; }
+
 sudo update-alternatives --install /usr/bin/python python /opt/python311/bin/python3.11 1
 sudo update-alternatives --install /usr/bin/pip    pip    /opt/python311/bin/pip3.11    1
 
@@ -206,10 +227,12 @@ git reset --hard HEAD
 make -j $(nproc)
 
 sudo make install
+[ -x /opt/cmake/bin/cmake ] || { echo "Install failed"; exit 1; }
+
 sudo update-alternatives --install /usr/bin/cmake cmake /opt/cmake/bin/cmake 1
 
 cmake --version
-#   cmake version 4.3.20260413-g0ea36dd
+#   cmake version 4.3.20260417-g1aa371b
 #
 #   CMake suite maintained and supported by Kitware (kitware.com/cmake).
 
@@ -223,17 +246,17 @@ chmod +x llvm.sh
 sudo ./llvm.sh 20
 
 # The following additional packages will be installed:
-#   clang-tools-20 icu-devtools lib32gcc-s1 lib32stdc++6 libabsl20210324 libc-ares2 libc6-i386 libclang-common-20-dev libclang-cpp20 libclang-rt-20-dev libclang1-20 libgc1 libgrpc++1 libgrpc10
-#   libicu-dev libipt2 liblldb-20 libllvm20 libobjc-11-dev libobjc4 libpfm4 libprotobuf23 libxml2-dev llvm-20 llvm-20-dev llvm-20-linker-tools llvm-20-runtime llvm-20-tools python3-lldb-20
-#   python3-pygments
+#   clang-tools-20 icu-devtools lib32gcc-s1 lib32stdc++6 libabsl20210324 libc-ares2 libc6-i386 libclang-common-20-dev libclang-cpp20 libclang-rt-20-dev
+#   libclang1-20 libgc1 libgrpc++1 libgrpc10 libicu-dev libipt2 liblldb-20 libllvm20 libobjc-11-dev libobjc4 libpfm4 libprotobuf23 libxml2-dev llvm-20
+#   llvm-20-dev llvm-20-linker-tools llvm-20-runtime llvm-20-tools python3-lldb-20 python3-pygments
 # Suggested packages:
 #   clang-20-doc wasi-libc icu-doc llvm-20-doc python-pygments-doc ttf-bitstream-vera
 # The following NEW packages will be installed:
-#   clang-20 clang-tools-20 clangd-20 icu-devtools lib32gcc-s1 lib32stdc++6 libabsl20210324 libc-ares2 libc6-i386 libclang-common-20-dev libclang-cpp20 libclang-rt-20-dev libclang1-20 libgc1
-#   libgrpc++1 libgrpc10 libicu-dev libipt2 liblldb-20 libllvm20 libobjc-11-dev libobjc4 libpfm4 libprotobuf23 libxml2-dev lld-20 lldb-20 llvm-20 llvm-20-dev llvm-20-linker-tools
-#   llvm-20-runtime llvm-20-tools python3-lldb-20 python3-pygments
-# 0 upgraded, 34 newly installed, 0 to remove and 50 not upgraded.
-# Need to get 0 B/175 MB of archives.
+#   clang-20 clang-tools-20 clangd-20 icu-devtools lib32gcc-s1 lib32stdc++6 libabsl20210324 libc-ares2 libc6-i386 libclang-common-20-dev libclang-cpp20
+#   libclang-rt-20-dev libclang1-20 libgc1 libgrpc++1 libgrpc10 libicu-dev libipt2 liblldb-20 libllvm20 libobjc-11-dev libobjc4 libpfm4 libprotobuf23 libxml2-dev
+#   lld-20 lldb-20 llvm-20 llvm-20-dev llvm-20-linker-tools llvm-20-runtime llvm-20-tools python3-lldb-20 python3-pygments
+# 0 upgraded, 34 newly installed, 0 to remove and 57 not upgraded.
+# Need to get 175 MB of archives.
 # After this operation, 980 MB of additional disk space will be used.
 
 sudo apt install libc++-20-dev libc++abi-20-dev -y
@@ -244,7 +267,7 @@ sudo apt install libc++-20-dev libc++abi-20-dev -y
 #   clang
 # The following NEW packages will be installed:
 #   libc++-20-dev libc++1 libc++abi-20-dev libc++abi1 libunwind libunwind-20-dev
-# 0 upgraded, 6 newly installed, 0 to remove and 50 not upgraded.
+# 0 upgraded, 6 newly installed, 0 to remove and 57 not upgraded.
 # Need to get 2523 kB of archives.
 # After this operation, 23.7 MB of additional disk space will be used.
 
@@ -254,8 +277,6 @@ sudo apt install libc++-20-dev libc++abi-20-dev -y
 # sudo apt update
 # sudo apt remove 'clang-*' 'llvm-*' 'lld-*' 'lldb-*' 'libclang-*' 'libllvm*' 'libc++*' 'libc++abi*'
 # sudo apt autoremove
-
-# TODO: сетапнуться на чистом Ubuntu 22.04 (где не было clang-23), починить здесь комментарии на apt-лог
 
 
 
@@ -295,6 +316,7 @@ cat build-cmake/CMakeCache.txt | grep ":FILEPATH="
 
 cmake --build build-cmake -- -j $(nproc)
 sudo cmake --install build-cmake
+[ -x /opt/ninja/bin/ninja ] || { echo "Install failed"; exit 1; }
 
 sudo update-alternatives --install /usr/bin/ninja ninja /opt/ninja/bin/ninja 1
 
@@ -360,21 +382,20 @@ cmake ../llvm \
 if [ ! -f llvm_checker.py ]; then
     wget https://raw.githubusercontent.com/VectorASD/QuickStart/refs/heads/master/llvm/llvm_checker.py
 fi
-python llvm_checker.py
+python llvm_checker.py || { echo "Dependencies failed"; exit 1; }
 #   Ошибок нет! ;'-}
 
 cmake --build . -- -j $(nproc)
-sudo cmake --build . --target install
-
-
-
 # NVPTX   — лёгкий.
 # AArch64 — лёгкий.
 # AMDGPU  — монстр: 2-4 Гб на один процесс
 # Поэтому, на моменте с AMDGPUGenAsmWriter.inc, AMDGPUGenAsmMatcher.inc,
 # AMDGPUGenRegisterInfo.inc, ... не пугаемся, что RAM резко "сошла с планеты" :)
 # FAILED: [code=137] здесь нормально!
-# -DLLVM_PARALLEL_LINK_JOBS=1 уже не спасёт, т.к. проблема уже в table-gen, даже не в компиляции
+# -DLLVM_PARALLEL_LINK_JOBS=1 уже не спасёт, т.к. проблема уже в table-gen, а это даже и не компиляция ;'-}
+
+sudo cmake --build . --target install
+[ -x /opt/llvm/bin/ninja ] || { echo "Install failed"; exit 1; }
 
 
 
@@ -393,12 +414,16 @@ rm -rf _CPack_Packages
 #   ./_CPack_Packages (все 3 сжатия) = 27   GB
 #   остаётся только: 46 - 27 - 2.2 - 5.9 - 6.8 = 4.1 GB!!! Остальное - тупо LLVM хомяк
 
+# но я в итоге так и не воспользовался этой опцией, а начал просто дома всё собирать с нуля :)
+
 
 
 # ~~~ сборка triton ~~~
 
 cd ~/tmp/triton-ascend
 sudo pip install -r requirements_dev.txt
+# WARNING: The script pybind11-config is installed in '/opt/python311/bin' which is not on PATH.
+# Ну а по тому, что оно тупо не нужно, как утилиты :)
 
 if [ -d /usr/lib/llvm-20/bin ]; then
     sudo mv /usr/lib/llvm-20/bin /usr/lib/llvm-20/bin.disabled
@@ -424,9 +449,19 @@ export TRITON_APPEND_CMAKE_ARGS='
 if [ ! -v LLVM_SYSPATH ]; then
     export LLVM_SYSPATH="/opt/llvm"
     export PATH="$LLVM_SYSPATH/bin:$PATH"
+    sudo touch ${LLVM_SYSPATH}/bin/FileCheck
+    sudo chmod +x ${LLVM_SYSPATH}/bin/FileCheck
 fi
 
-cd ~/tmp/triton-ascend/python
+# Выпиливаем подставу CMakeLists.txt:
+#   configure_file(
+#     "${LLVM_SYSPATH}/bin/FileCheck"
+#     "${TRITON_WHEEL_DIR}/FileCheck"
+#     COPYONLY)
+# Ради одного FileCheck придётся включить огромную часть в llvm-project
+# При этом, нам НЕ нужны тесты!)
+
+cd ~/tmp/triton-ascend
 rm -rf build
 python setup.py bdist_wheel
 
@@ -434,16 +469,17 @@ python setup.py bdist_wheel
 if [ ! -f llvm_checker.py ]; then
     wget https://raw.githubusercontent.com/VectorASD/QuickStart/refs/heads/master/llvm/llvm_checker.py
 fi
-python llvm_checker.py build/cmake.linux-x86_64-cpython-3.11/CMakeCache.txt /opt/llvm/bin
+python llvm_checker.py build/cmake.linux-x86_64-cpython-3.11/CMakeCache.txt /opt/llvm/bin || { echo "Dependencies failed"; exit 1; }
 #   Ошибок нет! ;'-}
 
-cd build/cmake.linux-x86_64-cpython-3.11
-/usr/bin/ninja -v -j 10   (вместо 40 :)
+    cd build/cmake.linux-x86_64-cpython-3.11
+    /usr/bin/ninja -v -j 10   (вместо 40 :)
 
-cd ~/tmp/triton-ascend/python
+cd ~/tmp/triton-ascend
 python setup.py bdist_wheel   # когда уже всё сбилдилось
 
-pip install dist/triton_ascend-*.whl
+sudo pip install dist/triton_ascend-*.whl
+# Снова игнорируем WARNING на то, что питоновский bin не в PATH
 
 
 
@@ -455,8 +491,16 @@ pip install dist/triton_ascend-*.whl
 # clang++: error: linker command failed with exit code 1 (use -v to see invocation)
 
 
+# не думал, что инструкцию, сделанную в будни этой же недели, банально сломают!)
+# setup.py переехал в корневую директорию и пофиксили его поломки при неиспользовании скрипт в python директории
+# сейчас же наоборот, cd python относительно корня репозиторий ломает инструкцию
+# FlagGems как не нужен был, так и не нужен снова! touch фиксит новую цель в CMakeLists.txt ;'-}
+
+
 
 # ~~~ статически линкуем тритон по .a-файлам, без динамики .so ~~~
+
+# СЛОМАЛИ ОДИН БЛОК, ПОФИКСИЛИ ДРУГОЙ!) ЭТОТ БЛОК БОЛЬШЕ НЕ АКТУАЛЕН
 
 при каждом ненайденном символе 'import triton' делаем:
 nm -A /opt/llvm/lib/*.a | grep LLVMInitializeAArch64TargetMC
@@ -484,11 +528,27 @@ nm -A /opt/llvm/lib/*.a | grep LLVMInitializeAArch64TargetMC
 
 выполяем:
     ( cd python && python setup.py bdist_wheel )
-	sudo pip install --force-reinstall --no-deps python/dist/triton_ascend-*.whl
-	python -c "import triton"
+    sudo pip install --force-reinstall --no-deps python/dist/triton_ascend-*.whl
+    python -c "import triton"
 
 финальная проверка зависимостей:
-	LD_DEBUG=libs python -c "import triton" 2>&1 | grep -E ':[[:space:]]+[^[:space:]]'
+    LD_DEBUG=libs python -c "import triton" 2>&1 | grep -E ':[[:space:]]+[^[:space:]]'
+
+# СЛОМАЛИ ОДИН БЛОК, ПОФИКСИЛИ ДРУГОЙ!) ЭТОТ БЛОК БОЛЬШЕ НЕ АКТУАЛЕН
+
+
+
+    ll /opt/python311/lib/python3.11/site-packages/triton/_C/
+total 400168
+drwxr-xr-x  2 root root      4096 Apr 18 05:51 ./
+drwxr-xr-x 13 root root      4096 Apr 18 05:51 ../
+-rwxr-xr-x  1 root root    580248 Apr 18 05:51 libentryC.so*
+-rwxr-xr-x  1 root root  18193856 Apr 18 05:51 libproton.so*
+-rwxr-xr-x  1 root root 194016944 Apr 18 05:51 libtriton.so*
+-rwxr-xr-x  1 root root 196958360 Apr 18 05:51 triton-mlir-opt*
+
+Это показательный пример того, что теперь оно НОРМАЛЬНО собирает колёса,
+а не надеется на .so, которых у меня всё равно нет XD
 
 
 
@@ -503,6 +563,9 @@ sudo groupadd python
 sudo usermod -aG python $USER
 sudo chown root:python -R /opt/python311
 sudo chmod -R g+w /opt/python311
+
+# должен быть установлен VSCode + 'wsl' плагин:
+code /opt/python311/lib/python3.11/site-packages/triton
 
 
 VSCode: включить login-shell (для работы .profile)
@@ -566,84 +629,9 @@ chmod +x ~/ccec
 
 # ASCEND_HOME_PATH is not set, source <ascend-toolkit>/set_env.sh first
 
-Просто добавьте в ваш скрипт
+Просто добавьте в ваш скрипт fastrun.py и not_torch.py из того же репозитория, где взята эта инструкция
+TODO: переделать это в wget по raw-ссылке :)
 
-from triton.runtime.cache import FileCacheManager
-import inspect
-
-def npu_mod():
-    # {"load_kernel_binary", loadKernelBinary, METH_VARARGS, "Load NPU kernel binary into NPU driver"},
-    def get_arch(*args):
-        "Get soc version of NPU"
-        return "Ascend950PR_957c"
-    def get_aicore_num(*args):
-        "Get the number of AI core"
-        return 28
-	# {"create_stream", createStream, METH_VARARGS, "Create a stream"},
-    def read_data_from_file(filename: str, buffer: bytearray):
-        "Read binary file into the array already allocated"
-        print("[READ FILE]:", filename)
-        with open(filename, "rb") as f:
-            data = f.read()
-        if len(buffer) < len(data):
-            raise ValueError("Buffer too small for file contents")
-        buffer[:len(data)] = data
-    def write_data_to_file(filename: str, buffer: bytes, num_bytes: int):
-        "Write an array to a binary file"
-        print("[WRITE FILE]:", filename)
-        with open(filename, "wb") as f:
-            f.write(buffer[:num_bytes])
-	# {"allocate_device_memory", allocateDeviceMemory, METH_VARARGS, "Allocate device memory"},
-	# {"allocate_host_memory", allocateHostMemory, METH_VARARGS, "Allocate host memory"},
-	# {"copy_memory", copyMemory, METH_VARARGS, "Copy data between host and device"},
-
-src = inspect.getsource(npu_mod)
-npu_utils_src = src.replace('def npu_mod():', 'if 1:')
-
-real_get_file = FileCacheManager.get_file
-def get_file(self, filename):
-    if filename != 'npu_utils.so':
-        return real_get_file(self, filename)
-    cache = FileCacheManager("abcd")
-    cache.put(npu_utils_src, "npu_utils.py", binary=False)
-    path = cache.get_file("npu_utils.py")
-    if path is None:
-        path = cache.put(npu_utils_src, "npu_utils.py", binary=False)
-    return path
-FileCacheManager.get_file = get_file
-
-import types, sys
-dummy   = types.ModuleType("torch_npu")
-dummy_C = types.ModuleType("torch_npu._C")
-dummy._C = dummy_C
-dummy.__file__ = "dummy"
-dummy_C.__file__ = "dummy_C"
-dummy_C._npu_getCurrentRawStream = lambda device_id: 123 + device_id
-sys.modules["torch_npu"]    = dummy
-sys.modules["torch_npu._C"] = dummy_C
-
-import torch
-class npu:
-    def __init__(self): self.device_id = 0
-    def current_device(self): return self.device_id
-    def set_device(self, device_id): self.device_id = device_id
-torch.npu = npu()
-
-from triton.backends import backends
-AscendBackend = backends['ascend'].compiler
-real_add_stages = AscendBackend.add_stages
-def add_stages(self, stages, options):
-    real_add_stages(self, stages, options)
-    assert len(stages) == 3, "Видимо, у вас получился cpu-пайплайн: ttir, ttadapter, llir, cpuasm! Ожидается npu-бэкенд"
-    real_ttir, ttadapter, npubin = stages.values()
-    def ttir(src, metadata):
-        print(src)
-        return real_ttir(src, metadata)
-    stages.clear()
-    stages["ttir"]      = ttir
-    stages["ttadapter"] = ttadapter
-    stages["npubin"]    = npubin
-AscendBackend.add_stages = add_stages
 
 
 # ERROR: Invalid bishengir path format: /home/vectorasd/npuc
@@ -657,7 +645,7 @@ AscendBackend.add_stages = add_stages
 
 if [ ! -d ~/.local/bin ]; then
     mkdir -p ~/.local ~/.local/bin
-	PATH="$HOME/.local/bin:$PATH"
+    PATH="$HOME/.local/bin:$PATH"
     # в противном случае, .profile от Ubuntu сам подключит в PATH эту штуку
 fi
 
@@ -675,6 +663,8 @@ chmod +x ~/.local/bin/npu-smi
 
 
 # ~~~ AscendNPU-IR-Dev ~~~
+
+# TODO: проверить, что действительно 19 не избежать, т.к. на другой машине всё хорошо билдилось всегда на 20.0.0 версии!)
 
 sudo ~/tmp/llvm.sh 19 # поставит пребилденый llvm и ровно на том коммите, который используется в third-party :)
 clang-19 --version
