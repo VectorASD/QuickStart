@@ -120,6 +120,11 @@ safe_clone --depth 1 --no-checkout https://github.com/openxla/stablehlo.git
 safe_clone --filter=blob:none --no-checkout https://gitcode.com/Ascend/triton-ascend.git
 safe_clone --filter=blob:none --no-checkout https://gitcode.com/Ascend/AscendNPU-IR.git
 
+TOKEN="???"   вытаскиваем его отсюда: https://gitcode.com/setting/token-classic
+# $USER меняем на своё, если юзер WSL != юзер гиткода
+safe_clone --filter=blob:none --no-checkout https://$USER:$TOKEN@gitcode.com/TritonAscendTest/FlagGems.git
+safe_clone --filter=blob:none --no-checkout https://$USER:$TOKEN@gitcode.com/Ascend/AscendNPU-IR-Dev.git
+
 
 
 # ~~~ первичная настройка инструментария WSL ~~~
@@ -447,6 +452,287 @@ pip install dist/triton_ascend-*.whl
 # /usr/bin/ld: cannot find -lLLVMAMDGPUCodeGen: No such file or directory
 # /usr/bin/ld: cannot find -lLLVMAMDGPUAsmParser: No such file or directory
 # clang++: error: linker command failed with exit code 1 (use -v to see invocation)
+
+
+
+# ~~~ статически линкуем тритон по .a-файлам, без динамики .so ~~~
+
+при каждом ненайденном символе 'import triton' делаем:
+nm -A /opt/llvm/lib/*.a | grep LLVMInitializeAArch64TargetMC
+а лучше сразу так:
+    nm -A /opt/llvm/lib/*.a | egrep " [TB] " > llvm_defined_symbols.txt
+    grep LLVMInitializeAArch64TargetMC llvm_defined_symbols.txt
+
+дописываем в triton-ascend/CMakeLists.txt
+
+сразу после:
+# Link triton with its dependencies
+  target_link_libraries(triton PUBLIC ${TRITON_LIBRARIES})
+
+такую штуку:
+  target_link_options(triton PRIVATE
+    -Wl,--whole-archive
+      ${LLVM_LIBRARY_DIR}/libMLIRMeshDialect.a
+      ${LLVM_LIBRARY_DIR}/libLLVMAArch64Desc.a
+      ${LLVM_LIBRARY_DIR}/libLLVMAArch64Utils.a
+      ${LLVM_LIBRARY_DIR}/libLLVMAArch64Info.a
+      ${LLVM_LIBRARY_DIR}/libLLVMAArch64CodeGen.a
+      ${LLVM_LIBRARY_DIR}/libLLVMAArch64AsmParser.a
+    -Wl,--no-whole-archive
+  )
+
+выполяем:
+    ( cd python && python setup.py bdist_wheel )
+	sudo pip install --force-reinstall --no-deps python/dist/triton_ascend-*.whl
+	python -c "import triton"
+
+финальная проверка зависимостей:
+	LD_DEBUG=libs python -c "import triton" 2>&1 | grep -E ':[[:space:]]+[^[:space:]]'
+
+
+
+# ~~~ runtime + выкидываем NPU :) ~~~
+
+cp -rp ~/gitpool/FlagGems ~/; cd ~/FlagGems
+git reset --hard HEAD
+
+sudo pip install torch==2.11.0+cpu --index-url https://download.pytorch.org/whl/cpu
+
+sudo groupadd python
+sudo usermod -aG python $USER
+sudo chown root:python -R /opt/python311
+sudo chmod -R g+w /opt/python311
+
+
+VSCode: включить login-shell (для работы .profile)
+
+Ctrl+Shift+P → Preferences: Open User Settings (JSON)
+или открыть в проводнике хоста: %APPDATA%/Roaming/Code/User/settings.json
+
+    "terminal.integrated.profiles.linux": {
+        "bash": {
+            "path": "/usr/bin/bash",
+            "args": ["-l"]
+        }
+    },
+    "terminal.integrated.defaultProfile.linux": "bash"
+
+полезные добавки:
+    "terminal.integrated.stickyScroll.enabled": false,
+    "terminal.integrated.scrollback": 100000,
+    "terminal.integrated.persistentSessionScrollback": 1000,
+
+mkdir -p .vscode
+cat > .vscode/launch.json << EOF
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Not Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "~/FlagGems/fastrun.py", // "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}
+EOF
+
+
+# RuntimeError: 0 active drivers ([]). There should only be one.
+
+export TRITON_NPU_COMPILER_PATH="$HOME"
+#   заставляет triton считать драйвер NPU активными...
+#   но лучше прямо в скрипте, если это возможно, зашить:
+import os
+os.environ["TRITON_NPU_COMPILER_PATH"] = os.path.expanduser("~")
+
+cat > ~/ccec << EOF
+#!/bin/bash
+if [ "\$1" = "-print-targets" ]; then
+    echo "hiipu64"
+else
+    echo "not bisheng OK"
+fi
+EOF
+
+chmod +x ~/ccec
+
+
+# ASCEND_HOME_PATH is not set, source <ascend-toolkit>/set_env.sh first
+
+Просто добавьте в ваш скрипт
+
+from triton.runtime.cache import FileCacheManager
+import inspect
+
+def npu_mod():
+    # {"load_kernel_binary", loadKernelBinary, METH_VARARGS, "Load NPU kernel binary into NPU driver"},
+    def get_arch(*args):
+        "Get soc version of NPU"
+        return "Ascend950PR_957c"
+    def get_aicore_num(*args):
+        "Get the number of AI core"
+        return 28
+	# {"create_stream", createStream, METH_VARARGS, "Create a stream"},
+    def read_data_from_file(filename: str, buffer: bytearray):
+        "Read binary file into the array already allocated"
+        print("[READ FILE]:", filename)
+        with open(filename, "rb") as f:
+            data = f.read()
+        if len(buffer) < len(data):
+            raise ValueError("Buffer too small for file contents")
+        buffer[:len(data)] = data
+    def write_data_to_file(filename: str, buffer: bytes, num_bytes: int):
+        "Write an array to a binary file"
+        print("[WRITE FILE]:", filename)
+        with open(filename, "wb") as f:
+            f.write(buffer[:num_bytes])
+	# {"allocate_device_memory", allocateDeviceMemory, METH_VARARGS, "Allocate device memory"},
+	# {"allocate_host_memory", allocateHostMemory, METH_VARARGS, "Allocate host memory"},
+	# {"copy_memory", copyMemory, METH_VARARGS, "Copy data between host and device"},
+
+src = inspect.getsource(npu_mod)
+npu_utils_src = src.replace('def npu_mod():', 'if 1:')
+
+real_get_file = FileCacheManager.get_file
+def get_file(self, filename):
+    if filename != 'npu_utils.so':
+        return real_get_file(self, filename)
+    cache = FileCacheManager("abcd")
+    cache.put(npu_utils_src, "npu_utils.py", binary=False)
+    path = cache.get_file("npu_utils.py")
+    if path is None:
+        path = cache.put(npu_utils_src, "npu_utils.py", binary=False)
+    return path
+FileCacheManager.get_file = get_file
+
+import types, sys
+dummy   = types.ModuleType("torch_npu")
+dummy_C = types.ModuleType("torch_npu._C")
+dummy._C = dummy_C
+dummy.__file__ = "dummy"
+dummy_C.__file__ = "dummy_C"
+dummy_C._npu_getCurrentRawStream = lambda device_id: 123 + device_id
+sys.modules["torch_npu"]    = dummy
+sys.modules["torch_npu._C"] = dummy_C
+
+import torch
+class npu:
+    def __init__(self): self.device_id = 0
+    def current_device(self): return self.device_id
+    def set_device(self, device_id): self.device_id = device_id
+torch.npu = npu()
+
+from triton.backends import backends
+AscendBackend = backends['ascend'].compiler
+real_add_stages = AscendBackend.add_stages
+def add_stages(self, stages, options):
+    real_add_stages(self, stages, options)
+    assert len(stages) == 3, "Видимо, у вас получился cpu-пайплайн: ttir, ttadapter, llir, cpuasm! Ожидается npu-бэкенд"
+    real_ttir, ttadapter, npubin = stages.values()
+    def ttir(src, metadata):
+        print(src)
+        return real_ttir(src, metadata)
+    stages.clear()
+    stages["ttir"]      = ttir
+    stages["ttadapter"] = ttadapter
+    stages["npubin"]    = npubin
+AscendBackend.add_stages = add_stages
+
+
+# ERROR: Invalid bishengir path format: /home/vectorasd/npuc
+
+Просто убедитесь, что bishengir-compile доступен в PATH :)
+
+
+# Сразу два зайца одним выстрелом:
+# - убирает предупреждение can not use command: npu-smi info
+# - активируем is_compile_on_910_95
+
+if [ ! -d ~/.local/bin ]; then
+    mkdir -p ~/.local ~/.local/bin
+	PATH="$HOME/.local/bin:$PATH"
+    # в противном случае, .profile от Ubuntu сам подключит в PATH эту штуку
+fi
+
+cat > ~/.local/bin/npu-smi << EOF
+#!/bin/bash
+if [ "\$1" = "info" ]; then
+    echo "Ascend950PR_957c"
+else
+    echo "not npu-smi OK"
+fi
+EOF
+
+chmod +x ~/.local/bin/npu-smi
+
+
+
+# ~~~ AscendNPU-IR-Dev ~~~
+
+sudo ~/tmp/llvm.sh 19 # поставит пребилденый llvm и ровно на том коммите, который используется в third-party :)
+clang-19 --version
+#   Ubuntu clang version 19.1.7 (++20250114103320+cd708029e0b2-1~exp1~20250114103432.75)
+#   Target: x86_64-pc-linux-gnu
+#   Thread model: posix
+#   InstalledDir: /usr/lib/llvm-19/bin
+
+sudo apt install libc++-19-dev libc++abi-19-dev -y
+
+mkdir -p ~/bisheng; cd ~/bisheng
+cp -rp ~/gitpool/AscendNPU-IR-Dev .; cd AscendNPU-IR-Dev
+git reset --hard HEAD
+cp -rp ~/gitpool/llvm-project third-party
+git -C third-party/llvm-project/ checkout llvmorg-19.1.7
+git -C third-party/llvm-project/ branch -v
+# * (HEAD detached at llvmorg-19.1.7) cd708029e0b2 Fix print module manifest file for macos (#122370)
+#   main                              121f5a96ff38 [libclc] Enable LLVM_RUNTIME_TARGETS in build system (#189892)
+# АХАХ, сошлось, везде cd708029e0b2
+
+cd ~/bisheng/AscendNPU-IR-Dev
+build-tools/apply_patches.sh
+
+mkdir -p build; cd build
+IS_REBUILD="--rebuild" # ""
+../build-tools/build.sh \
+  --build-type Release \
+  --build . \
+  --install-prefix ./install \
+  --c-compiler clang-19 --cxx-compiler clang++-19 \
+  --enable-assertion --enable-lld \
+  --disable-werror --disable-mlir-werror --disable-bishengir-werror \
+  --build-triton \
+  --fast-build "$IS_REBUILD"
+
+
+# если что-то сломалось, чекаем кеши:
+
+if [ ! -f llvm_checker.py ]; then
+    wget https://raw.githubusercontent.com/VectorASD/QuickStart/refs/heads/master/llvm/llvm_checker.py
+fi
+python llvm_checker.py CMakeCache.txt /usr/lib/llvm-19/bin
+
+
+# /home/vectorasd/bisheng/AscendNPU-IR-Dev/third-party/llvm-project/mlir/include/mlir/Dialect/Affine/IR/ValueBoundsOpInterfaceImpl.h:31:11: error: unknown type name 'int64_t'; did you mean '__int64_t'
+# это последствия использования Ubuntu-22.04 вместо Ubuntu-20.04, где убрано неявное использование заголовка на системный int64_t
+#include "mlir/Support/LLVM.h" // уже было
+#include <cstdint>             // добавлено
+
+# /home/vectorasd/bisheng/AscendNPU-IR-Dev/third-party/llvm-project/mlir/include/mlir/Target/SPIRV/Deserialization.h:29:51: error: use of undeclared identifier 'uint32_t'
+#include "mlir/IR/OwningOpRef.h" // уже было
+#include "mlir/Support/LLVM.h"   // уже было
+#include <cstdint>               // добавлено
+
+# И ЭТО ВСЯ ПРОБЛЕМА Ubuntu-22.04?! Затолкал пребилженный LLVM-19, поменял заголовок, всёёё!)
+
+
+
+
 
 
 
