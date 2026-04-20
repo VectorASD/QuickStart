@@ -123,6 +123,7 @@ safe_clone --depth 1 --no-checkout https://github.com/openxla/stablehlo.git
 safe_clone --tags    --no-checkout https://github.com/triton-lang/triton.git
 safe_clone --filter=blob:none --no-checkout https://gitcode.com/Ascend/triton-ascend.git
 safe_clone --filter=blob:none --no-checkout https://gitcode.com/Ascend/AscendNPU-IR.git
+safe_clone --depth 1 --no-checkout https://github.com/ggerganov/llama.cpp     # Сколько звёзд?! Трёхкратное уделывание llvm-project по звёздам и шестикратное по числу коммитов (чем меньше коммитов, но больше звёзде, тем лучше)!
 
 TOKEN="???"   вытаскиваем его отсюда: https://gitcode.com/setting/token-classic
 # $USER меняем на своё, если юзер WSL != юзер гиткода
@@ -241,8 +242,10 @@ cmake --version
 # ~~~ сборка clang (stage 1) ~~~
 
 mkdir -p ~/tmp; cd ~/tmp
-wget https://apt.llvm.org/llvm.sh
-chmod +x llvm.sh
+if [ ! -f llvm.sh ]; then
+    wget https://apt.llvm.org/llvm.sh
+    chmod +x llvm.sh
+fi
 sudo ./llvm.sh 20
 
 # The following additional packages will be installed:
@@ -385,7 +388,7 @@ fi
 python llvm_checker.py || { echo "Dependencies failed"; exit 1; }
 #   Ошибок нет! ;'-}
 
-cmake --build . -- -j $(nproc)
+ninja -j $(nproc)
 # NVPTX   — лёгкий.
 # AArch64 — лёгкий.
 # AMDGPU  — монстр: 2-4 Гб на один процесс
@@ -666,7 +669,12 @@ chmod +x ~/.local/bin/npu-smi
 
 # TODO: проверить, что действительно 19 не избежать, т.к. на другой машине всё хорошо билдилось всегда на 20.0.0 версии!)
 
-sudo ~/tmp/llvm.sh 19 # поставит пребилденый llvm и ровно на том коммите, который используется в third-party :)
+mkdir -p ~/tmp; cd ~/tmp
+if [ ! -f llvm.sh ]; then
+    wget https://apt.llvm.org/llvm.sh
+    chmod +x llvm.sh
+fi
+sudo ./llvm.sh 19 # поставит пребилденый llvm и ровно на том коммите, который используется в third-party :)
 clang-19 --version
 #   Ubuntu clang version 19.1.7 (++20250114103320+cd708029e0b2-1~exp1~20250114103432.75)
 #   Target: x86_64-pc-linux-gnu
@@ -723,6 +731,58 @@ python llvm_checker.py CMakeCache.txt /usr/lib/llvm-19/bin
 
 # И ЭТО ВСЯ ПРОБЛЕМА Ubuntu-22.04?! Затолкал пребилженный LLVM-19, поменял заголовок, всёёё!)
 
+
+
+# ~~~ Нейронка 🧠🧠🧠 :) ~~~
+
+mkdir -p ~/tmp; cd ~/tmp
+if [ ! -f llvm.sh ]; then
+    wget https://apt.llvm.org/llvm.sh
+    chmod +x llvm.sh
+fi
+sudo ./llvm.sh 23
+
+sudo apt install libc++-23-dev libc++abi-23-dev -y
+
+cp -rp ~/gitpool/llama.cpp . ; cd llama.cpp
+git reset --hard HEAD
+
+mkdir -p build; cd build
+
+CC=clang-23 CXX=clang++-23 cmake .. \
+  -G Ninja \
+  -DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+  -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++" \
+  -DCMAKE_INSTALL_PREFIX=/opt/llama \
+  -DLLAMA_NATIVE=ON \
+  -DLLAMA_LTO=ON \
+  -DLLAMA_AVX2=ON \
+  -DLLAMA_AVX512=ON \
+  -DLLAMA_FMA=ON \
+  -DLLAMA_ACCELERATE=OFF \
+  -DLLAMA_BUILD_EXAMPLES=OFF
+
+if [ ! -f llvm_checker.py ]; then
+    wget https://raw.githubusercontent.com/VectorASD/QuickStart/refs/heads/master/llvm/llvm_checker.py
+fi
+python llvm_checker.py CMakeCache.txt /usr/lib/llvm-23/bin || { echo "Dependencies failed"; exit 1; }
+
+ninja -j $(nproc)
+
+sudo cmake --build . --target install
+[ -x /opt/llama/bin/llama-cli ] || { echo "Install failed"; exit 1; }
+
+for name in llama-cli llama-quantize llama-server; do
+    sudo update-alternatives --install /usr/bin/$name $name /opt/llama/bin/$name 1
+done
+sudo update-alternatives --install /usr/bin/convert-hf-to-gguf convert-hf-to-gguf /opt/llama/bin/convert_hf_to_gguf.py 1
+
+# выбор разного квантования здесь: https://huggingface.co/mradermacher/DeepSeek-V2-Lite-GGUF
+cd ~/tmp
+wget https://huggingface.co/mradermacher/DeepSeek-V2-Lite-GGUF/resolve/main/DeepSeek-V2-Lite.Q4_K_M.gguf
+
+# DeepSeek-V2-Lite.Q4_K_M.gguf  100%[=================================================>]   9.65G  5.92MB/s    in 27m 59s
+# 2026-04-20 17:59:32 (5.89 MB/s) - ‘DeepSeek-V2-Lite.Q4_K_M.gguf’ saved [10364416736/10364416736]
 
 
 
