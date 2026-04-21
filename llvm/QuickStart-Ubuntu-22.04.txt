@@ -960,11 +960,13 @@ class Utf8Chainer:
         return result.decode("utf-8", errors="replace")
 
 system_prompt = llm.tokenize(("""You are an assistant in a dialogue.
-You always respond after the prefix "Assistant:" in Russian.
+Always respond in Russian.
+Always respond after the prefix "Assistant:".
 Answer naturally and helpfully.
-Do not copy the user's and self messages word-for-word.
+Never write the prefix "Assistant:" inside your answers.
+Do not copy the user's message word-for-word.
 """).encode("utf-8"), add_bos=True)
-assert len(system_prompt) == 47
+# assert len(system_prompt) == ?
 
 history = []
 
