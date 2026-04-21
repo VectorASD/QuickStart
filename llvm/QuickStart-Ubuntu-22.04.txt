@@ -784,6 +784,159 @@ wget https://huggingface.co/mradermacher/DeepSeek-V2-Lite-GGUF/resolve/main/Deep
 # DeepSeek-V2-Lite.Q4_K_M.gguf  100%[=================================================>]   9.65G  5.92MB/s    in 27m 59s
 # 2026-04-20 17:59:32 (5.89 MB/s) - ‘DeepSeek-V2-Lite.Q4_K_M.gguf’ saved [10364416736/10364416736]
 
+#    ll
+# -rw-r--r--  1 vectorasd vectorasd 10364416736 Apr 20 17:59 DeepSeek-V2-Lite.Q4_K_M.gguf
+
+#    free
+#                total        used        free      shared  buff/cache   available
+# Mem:        14310564      459848     6760956        3744     7089760    13614068
+# Swap:              0           0           0
+# Главное здесь - available больше, чем веса нейронки + необходимое место под KV-кеш
+
+#   KV‑кэш растёт линейно:
+# KV-cache ≈ context×hidden_size×2×2 bytes
+#   Для DeepSeek‑V2‑Lite 16B:
+# 4k → ~1.2 GB
+# 8k → ~2.4 GB
+# 16k → ~4.8 GB
+# 32k → ~9.6 GB
+#   У тебя available = 13.6 GB, модель = 9.65 GB → значит:
+# 4k → идеально
+# 8k → нормально
+# 16k → на грани
+# 32k → не влезет в 14 GB RAM
+#   То есть контекст 32k поддерживается архитектурно, но не твоим железом.
+
+echo "/opt/llama/lib" | sudo tee /etc/ld.so.conf.d/llama.conf
+sudo ldconfig
+
+cat > ~/tmp/system.txt << EOF
+You must answer with plain text only.
+Forbidden:
+- "User:"
+- "Assistant:"
+- dialogues
+- articles
+- websites
+- roleplay
+Allowed:
+- direct answer only.
+EOF
+
+llama-cli \
+  -m ~/tmp/DeepSeek-V2-Lite.Q4_K_M.gguf \
+  -c 8192 \
+  --threads $(nproc) \
+  --temp 0.7 \
+  --top-p 0.95 \
+  --repeat-penalty 1.1 \
+  --color on \
+  --system-prompt-file ~/tmp/system.txt
+
+# /exit
+# llama_memory_breakdown_print: | memory breakdown [MiB] | total   free     self   model   context   compute    unaccounted |
+# llama_memory_breakdown_print: |   - Host               |                 12245 =  9873 +    2160 +     212                |
+# llama_memory_breakdown_print: |   - CPU_REPACK         |                  5575 =  5575 +       0 +       0                |
+
+
+
+# ~~~ автоматическая нейронка ~~~
+
+sudo CMAKE_ARGS="-DLLAMA_NATIVE=ON -DLLAMA_LTO=ON" pip install llama-cpp-python
+
+# Successfully built llama-cpp-python
+# Installing collected packages: diskcache, llama-cpp-python
+# Successfully installed diskcache-5.6.3 llama-cpp-python-0.3.20
+# WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+
+# дальше уже идёт python код: code neuro_bot.py
+
+import llama_cpp
+import os
+from pathlib import Path
+
+n_threads = os.cpu_count()   # 20 на работе, дома 12, при тех же 16 GB RAM и настройках WSL... из этой же инструкции :)
+
+llm = llama_cpp.Llama(
+    (Path.home() / 'tmp' / 'DeepSeek-V2-Lite.Q4_K_M.gguf').as_posix(),
+    n_ctx          = 8192,
+    n_threads      = n_threads,
+)
+# temperature    = 0.7
+# top_p          = 0.95,
+# repeat_penalty = 1.1,
+# system_prompt  = "You are a helpful English-speaking assistant. Answer user messages directly and concisely. Do not invent dialogue roles. Do not continue articles or websites. Respond only as the assistant.",
+# stream         = True,
+#   там стоит **kwargs, который делает видимость, что эти параметры куда-то ушли,
+#   а на практике это тупо заглушка для обратной совместимости!
+
+system_prompt = llm.tokenize(
+    b"You are a helpful English-speaking assistant. "
+    b"Answer user messages directly and concisely. "
+    b"Do not invent dialogue roles. "
+    b"Do not continue articles or websites. "
+    b"Respond only as the assistant.\n\n",
+    add_bos=True
+)
+# [100000, 2054, 418, 245, 9394, 3517, 12, 37478, 20308, 13, 35829, 2677, 9176, 4723, 285, 3191, 11319, 13, 3132, 441, 11566, 21984, 16330, 13, 3132, 441, 4883, 9159, 410, 12614, 13, 35627, 889, 372, 254, 20308, 13, 185, 185]
+# Всего 39 токенов, т.к. английский язык очень компактно сжимает подобные разговорные установочные вещи. Детокенайзер может показать, что эти числа значат
+# Токенов чуть больше, чем 29 слов, но тут есть ещё и пунктуация!
+
+def cdiv(div, rem):
+    return (div + rem - 1) // rem
+
+def calculate_list_of_bit_sizes():
+    GGML_TYPE_BITS = {
+        "F32": 32, "F16": 16,
+        "Q4_0": 4, "Q4_1": 4, "Q5_0": 5, "Q5_1": 5, "Q8_0": 8, "Q8_1": 8,
+        "Q2_K": 2, "Q3_K": 3, "Q4_K": 4, "Q5_K": 5, "Q6_K": 6, "Q8_K": 8,
+        "IQ2_XXS": 2, "IQ2_XS": 2, "IQ3_XXS": 3, "IQ1_S": 1, "IQ4_NL": 4, "IQ3_S": 3, "IQ2_S": 2, "IQ4_XS": 4,
+        "I8": 8, "I16": 16, "I32": 32, "I64": 64, "F64": 64,
+        "IQ1_M": 1, "MXFP4": 4, "NVFP4": 4
+    }
+    LIST_OF_BITS = [None] * llama_cpp.GGML_TYPE_COUNT
+    for k, v in llama_cpp.__dict__.items():
+        if k.startswith("GGML_TYPE_") and k != "GGML_TYPE_COUNT":
+            LIST_OF_BITS[v] = GGML_TYPE_BITS[k[len("GGML_TYPE_"):]]
+    return LIST_OF_BITS
+
+def get_KV_cache_size():
+    n_ctx    = llm.input_ids.shape[0]   # llm.context_params.n_ctx
+    metadata = llm._model.metadata()
+
+    n_layer   = int(metadata["deepseek2.block_count"])
+    n_kv_head = int(metadata["deepseek2.attention.head_count_kv"])
+    key_len   = int(metadata["deepseek2.attention.key_length"])
+    value_len = int(metadata["deepseek2.attention.value_length"])
+
+    LIST_OF_BITS = calculate_list_of_bit_sizes()
+    K_size = cdiv(n_layer * n_ctx * n_kv_head * key_len   * LIST_OF_BITS[llm.context_params.type_k], 8)
+    V_size = cdiv(n_layer * n_ctx * n_kv_head * value_len * LIST_OF_BITS[llm.context_params.type_v], 8)
+
+    print(f"K-cache size: {K_size / 1024 ** 3:.3f} Gb.")   # 1.266 Gb.
+    print(f"V-cache size: {V_size / 1024 ** 3:.3f} Gb.")   # 0.844 Gb.
+    print(f"TOTAL-cache size: {(K_size + V_size) / 1024 ** 3:.3f} Gb.")   # 2.109 Gb.
+
+tokens = system_prompt + llm.tokenize("User: How well do you write python code that you have to parse IR according to my declarative rules?\nAssistent:".encode("utf-8"), add_bos=True)
+stopper = llm.tokenize(b"\nUser:", add_bos=False)
+start = True
+history = []
+for token in llm.generate(tokens, temp=0.2, top_k=0, top_p=0.9, repeat_penalty=1.1, min_p=0.0, reset=False):
+    history.append(token)
+    text = llm.detokenize((token,))
+    if start:
+        text = text.lstrip()
+        start = False
+    print(token, text)
+    if history[-len(stopper):] == stopper: break
+
+def REPL():
+    while True:
+        msg = input("> ")
+        if msg.startswith("/e"):
+            break
+        for answer in core(msg):
+            print(answer)
 
 
 
