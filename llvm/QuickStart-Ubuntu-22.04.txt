@@ -744,7 +744,7 @@ sudo ./llvm.sh 23
 
 sudo apt install libc++-23-dev libc++abi-23-dev -y
 
-cp -rp ~/gitpool/llama.cpp . ; cd llama.cpp
+cp -rp ~/gitpool/llama.cpp . ; cd ~/tmp/llama.cpp
 git reset --hard HEAD
 
 mkdir -p build; cd build
@@ -781,6 +781,9 @@ sudo update-alternatives --install /usr/bin/convert-hf-to-gguf convert-hf-to-ggu
 cd ~/tmp
 wget https://huggingface.co/mradermacher/DeepSeek-V2-Lite-GGUF/resolve/main/DeepSeek-V2-Lite.Q4_K_M.gguf
 
+echo "/opt/llama/lib" | sudo tee /etc/ld.so.conf.d/llama.conf
+sudo ldconfig
+
 # DeepSeek-V2-Lite.Q4_K_M.gguf  100%[=================================================>]   9.65G  5.92MB/s    in 27m 59s
 # 2026-04-20 17:59:32 (5.89 MB/s) - ‘DeepSeek-V2-Lite.Q4_K_M.gguf’ saved [10364416736/10364416736]
 
@@ -806,9 +809,6 @@ wget https://huggingface.co/mradermacher/DeepSeek-V2-Lite-GGUF/resolve/main/Deep
 # 16k → на грани
 # 32k → не влезет в 14 GB RAM
 #   То есть контекст 32k поддерживается архитектурно, но не твоим железом.
-
-echo "/opt/llama/lib" | sudo tee /etc/ld.so.conf.d/llama.conf
-sudo ldconfig
 
 cat > ~/tmp/system.txt << EOF
 You must answer with plain text only.
@@ -870,18 +870,6 @@ llm = llama_cpp.Llama(
 #   там стоит **kwargs, который делает видимость, что эти параметры куда-то ушли,
 #   а на практике это тупо заглушка для обратной совместимости!
 
-system_prompt = llm.tokenize(
-    b"You are a helpful English-speaking assistant. "
-    b"Answer user messages directly and concisely. "
-    b"Do not invent dialogue roles. "
-    b"Do not continue articles or websites. "
-    b"Respond only as the assistant.\n\n",
-    add_bos=True
-)
-# [100000, 2054, 418, 245, 9394, 3517, 12, 37478, 20308, 13, 35829, 2677, 9176, 4723, 285, 3191, 11319, 13, 3132, 441, 11566, 21984, 16330, 13, 3132, 441, 4883, 9159, 410, 12614, 13, 35627, 889, 372, 254, 20308, 13, 185, 185]
-# Всего 39 токенов, т.к. английский язык очень компактно сжимает подобные разговорные установочные вещи. Детокенайзер может показать, что эти числа значат
-# Токенов чуть больше, чем 29 слов, но тут есть ещё и пунктуация!
-
 def cdiv(div, rem):
     return (div + rem - 1) // rem
 
@@ -917,26 +905,127 @@ def get_KV_cache_size():
     print(f"V-cache size: {V_size / 1024 ** 3:.3f} Gb.")   # 0.844 Gb.
     print(f"TOTAL-cache size: {(K_size + V_size) / 1024 ** 3:.3f} Gb.")   # 2.109 Gb.
 
-tokens = system_prompt + llm.tokenize("User: How well do you write python code that you have to parse IR according to my declarative rules?\nAssistent:".encode("utf-8"), add_bos=True)
-stopper = llm.tokenize(b"\nUser:", add_bos=False)
-start = True
+
+
+class EndDetector:
+    def __init__(self, word):
+        self.tokens = llm.tokenize(word.encode("utf-8"), add_bos=False)
+
+    def match(self, history):
+        tokens = self.tokens
+        size = len(tokens)
+        for i in range(size, 0, -1):
+            if history[-i:] == tokens[:i]:
+                return i, i == size
+        return 0, False
+
+    def complete(self, history):
+        count, _ = self.match(history)
+        history.extend(self.tokens[count:])
+
+class Utf8Chainer:
+    def __init__(self):
+        self.buffer = bytearray()
+        self.need = 0
+
+    def __call__(self, bytes):
+        result = bytearray()
+        buffer = self.buffer
+
+        for byte in bytes:
+            if self.need:
+                buffer.append(byte)
+                if byte >> 6 == 0b10: # 10xxxxxx
+                    self.need -= 1
+                    if not self.need:
+                        result += buffer
+                        buffer.clear()
+                else: # error
+                    self.need = 0
+                    result += buffer
+                    buffer.clear()
+            elif byte >> 7 == 0b0: # 0xxxxxxx
+                result.append(byte)
+            elif byte >> 5 == 0b110: # 110xxxxx
+                buffer.append(byte)
+                self.need = 1
+            elif byte >> 4 == 0b1110: # 1110xxxx
+                buffer.append(byte)
+                self.need = 2
+            elif byte >> 3 == 0b11110: # 11110xxx
+                buffer.append(byte)
+                self.need = 3
+            else: # error
+                result.append(byte)
+        return result.decode("utf-8", errors="replace")
+
+system_prompt = llm.tokenize(("""You are an assistant in a dialogue.
+You always respond after the prefix "Assistant:" in Russian.
+Answer naturally and helpfully.
+Do not copy the user's and self messages word-for-word.
+""").encode("utf-8"), add_bos=True)
+assert len(system_prompt) == 47
+
 history = []
-for token in llm.generate(tokens, temp=0.2, top_k=0, top_p=0.9, repeat_penalty=1.1, min_p=0.0, reset=False):
-    history.append(token)
-    text = llm.detokenize((token,))
-    if start:
-        text = text.lstrip()
-        start = False
-    print(token, text)
-    if history[-len(stopper):] == stopper: break
+
+def core(message="", reset=False):
+    if reset:
+        llm.reset()
+        history.clear()
+    if not message:
+        return
+    ender     = EndDetector("\nUser:")
+    chainer   = Utf8Chainer()
+    ender.complete(history)
+    history.extend(llm.tokenize(f" {message} \nAssistant:".encode("utf-8"), add_bos=False))
+    start     = True
+    prev_skip = 0
+    bos_token_id: int = llm.token_bos()
+    for token in llm.generate(system_prompt + history, reset=False):
+        if token == bos_token_id:
+            break
+        history.append(token)
+        skip, is_end = ender.match(history)
+        count = prev_skip + 1 - skip   # сколько выпало токенов из последовательности "\nUser:" 
+        if is_end:
+            break
+        for i in range(-count, 0):
+            token = history[i-skip]  # действительные смещения выпавших токенов
+            text = llm.detokenize((token,))
+            if start:
+                text = text.lstrip(b' ')
+                start = False
+            yield chainer(text)
+        prev_skip = skip
+    yield '\n'
 
 def REPL():
     while True:
         msg = input("> ")
-        if msg.startswith("/e"):
-            break
-        for answer in core(msg):
-            print(answer)
+        if msg.startswith("/") or msg in ("exit", "reset", "debug"):
+            if "exit" in msg:
+                return
+            if "reset" in msg:
+                tuple(core(reset=True))
+            elif "debug" in msg:
+                text    = llm.detokenize(system_prompt + history)
+                chainer = Utf8Chainer()
+                print(chainer(text))
+            else:
+                print(f"Unknown command: {msg}")
+        else:
+            try:
+                for answer in core(msg):
+                    print(answer, end="", flush=True)
+            except KeyboardInterrupt: pass
+
+# самый верный способ самоуничтожения C++ бэкенда :))) [llm.detokenize((i,)).decode('utf-8', errors='replace') for i in range(1000000)]
+# зато теперь точно известно, что токенов действительно 102400...
+# >>> [llm.detokenize((i,)).decode('utf-8', errors='replace') for i in range(99995, 100005)]
+# [' трона', ' immerse', 'GAR', 'кле', 'osted', ' plagues', ' uplifted', ' crabs', '强者', ' informally', ' Modem', '谢霆锋', ' Garona', ' Нео', ' breathes', ' fatalities', '粘膜', '', '', '[PAD100002]', '[PAD100003]', '[PAD100004]']
+# Но на самом деле токенов ровно 100000, дальше идёт BOS, EOS и одни паддинги
+
+
 
 
 
