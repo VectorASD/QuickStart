@@ -840,7 +840,7 @@ llama-cli \
 
 
 
-# ~~~ автоматическая нейронка ~~~
+# ~~~ Автоматическая нейронка ~~~
 
 sudo CMAKE_ARGS="-DLLAMA_NATIVE=ON -DLLAMA_LTO=ON" pip install llama-cpp-python
 
@@ -849,183 +849,12 @@ sudo CMAKE_ARGS="-DLLAMA_NATIVE=ON -DLLAMA_LTO=ON" pip install llama-cpp-python
 # Successfully installed diskcache-5.6.3 llama-cpp-python-0.3.20
 # WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
 
-# дальше уже идёт python код: code neuro_bot.py
+# Дальше уже идёт python код:
+code neuro_bot.py
 
-import llama_cpp
-import os
-from pathlib import Path
-
-n_threads = os.cpu_count()   # 20 на работе, дома 12, при тех же 16 GB RAM и настройках WSL... из этой же инструкции :)
-
-llm = llama_cpp.Llama(
-    (Path.home() / 'tmp' / 'DeepSeek-V2-Lite.Q4_K_M.gguf').as_posix(),
-    n_ctx          = 8192,
-    n_threads      = n_threads,
-)
-# temperature    = 0.7
-# top_p          = 0.95,
-# repeat_penalty = 1.1,
-# system_prompt  = "You are a helpful English-speaking assistant. Answer user messages directly and concisely. Do not invent dialogue roles. Do not continue articles or websites. Respond only as the assistant.",
-# stream         = True,
-#   там стоит **kwargs, который делает видимость, что эти параметры куда-то ушли,
-#   а на практике это тупо заглушка для обратной совместимости!
-
-def cdiv(div, rem):
-    return (div + rem - 1) // rem
-
-def calculate_list_of_bit_sizes():
-    GGML_TYPE_BITS = {
-        "F32": 32, "F16": 16,
-        "Q4_0": 4, "Q4_1": 4, "Q5_0": 5, "Q5_1": 5, "Q8_0": 8, "Q8_1": 8,
-        "Q2_K": 2, "Q3_K": 3, "Q4_K": 4, "Q5_K": 5, "Q6_K": 6, "Q8_K": 8,
-        "IQ2_XXS": 2, "IQ2_XS": 2, "IQ3_XXS": 3, "IQ1_S": 1, "IQ4_NL": 4, "IQ3_S": 3, "IQ2_S": 2, "IQ4_XS": 4,
-        "I8": 8, "I16": 16, "I32": 32, "I64": 64, "F64": 64,
-        "IQ1_M": 1, "MXFP4": 4, "NVFP4": 4
-    }
-    LIST_OF_BITS = [None] * llama_cpp.GGML_TYPE_COUNT
-    for k, v in llama_cpp.__dict__.items():
-        if k.startswith("GGML_TYPE_") and k != "GGML_TYPE_COUNT":
-            LIST_OF_BITS[v] = GGML_TYPE_BITS[k[len("GGML_TYPE_"):]]
-    return LIST_OF_BITS
-
-def get_KV_cache_size():
-    n_ctx    = llm.input_ids.shape[0]   # llm.context_params.n_ctx
-    metadata = llm._model.metadata()
-
-    n_layer   = int(metadata["deepseek2.block_count"])
-    n_kv_head = int(metadata["deepseek2.attention.head_count_kv"])
-    key_len   = int(metadata["deepseek2.attention.key_length"])
-    value_len = int(metadata["deepseek2.attention.value_length"])
-
-    LIST_OF_BITS = calculate_list_of_bit_sizes()
-    K_size = cdiv(n_layer * n_ctx * n_kv_head * key_len   * LIST_OF_BITS[llm.context_params.type_k], 8)
-    V_size = cdiv(n_layer * n_ctx * n_kv_head * value_len * LIST_OF_BITS[llm.context_params.type_v], 8)
-
-    print(f"K-cache size: {K_size / 1024 ** 3:.3f} Gb.")   # 1.266 Gb.
-    print(f"V-cache size: {V_size / 1024 ** 3:.3f} Gb.")   # 0.844 Gb.
-    print(f"TOTAL-cache size: {(K_size + V_size) / 1024 ** 3:.3f} Gb.")   # 2.109 Gb.
-
-
-
-class EndDetector:
-    def __init__(self, word):
-        self.tokens = llm.tokenize(word.encode("utf-8"), add_bos=False)
-
-    def match(self, history):
-        tokens = self.tokens
-        size = len(tokens)
-        for i in range(size, 0, -1):
-            if history[-i:] == tokens[:i]:
-                return i, i == size
-        return 0, False
-
-    def complete(self, history):
-        count, _ = self.match(history)
-        history.extend(self.tokens[count:])
-
-class Utf8Chainer:
-    def __init__(self):
-        self.buffer = bytearray()
-        self.need = 0
-
-    def __call__(self, bytes):
-        result = bytearray()
-        buffer = self.buffer
-
-        for byte in bytes:
-            if self.need:
-                buffer.append(byte)
-                if byte >> 6 == 0b10: # 10xxxxxx
-                    self.need -= 1
-                    if not self.need:
-                        result += buffer
-                        buffer.clear()
-                else: # error
-                    self.need = 0
-                    result += buffer
-                    buffer.clear()
-            elif byte >> 7 == 0b0: # 0xxxxxxx
-                result.append(byte)
-            elif byte >> 5 == 0b110: # 110xxxxx
-                buffer.append(byte)
-                self.need = 1
-            elif byte >> 4 == 0b1110: # 1110xxxx
-                buffer.append(byte)
-                self.need = 2
-            elif byte >> 3 == 0b11110: # 11110xxx
-                buffer.append(byte)
-                self.need = 3
-            else: # error
-                result.append(byte)
-        return result.decode("utf-8", errors="replace")
-
-system_prompt = llm.tokenize(("""You are an assistant in a dialogue.
-Always respond in Russian.
-Always respond after the prefix "Assistant:".
-Answer naturally and helpfully.
-Never write the prefix "Assistant:" inside your answers.
-Do not copy the user's message word-for-word.
-""").encode("utf-8"), add_bos=True)
-# assert len(system_prompt) == ?
-
-history = []
-
-def core(message="", reset=False):
-    if reset:
-        llm.reset()
-        history.clear()
-    if not message:
-        return
-    ender     = EndDetector("\nUser:")
-    chainer   = Utf8Chainer()
-    ender.complete(history)
-    history.extend(llm.tokenize(f" {message} \nAssistant:".encode("utf-8"), add_bos=False))
-    start     = True
-    prev_skip = 0
-    bos_token_id: int = llm.token_bos()
-    for token in llm.generate(system_prompt + history, reset=False):
-        if token == bos_token_id:
-            break
-        history.append(token)
-        skip, is_end = ender.match(history)
-        count = prev_skip + 1 - skip   # сколько выпало токенов из последовательности "\nUser:" 
-        if is_end:
-            break
-        for i in range(-count, 0):
-            token = history[i-skip]  # действительные смещения выпавших токенов
-            text = llm.detokenize((token,))
-            if start:
-                text = text.lstrip(b' ')
-                start = False
-            yield chainer(text)
-        prev_skip = skip
-    yield '\n'
-
-def REPL():
-    while True:
-        msg = input("> ")
-        if msg.startswith("/") or msg in ("exit", "reset", "debug"):
-            if "exit" in msg:
-                return
-            if "reset" in msg:
-                tuple(core(reset=True))
-            elif "debug" in msg:
-                text    = llm.detokenize(system_prompt + history)
-                chainer = Utf8Chainer()
-                print(chainer(text))
-            else:
-                print(f"Unknown command: {msg}")
-        else:
-            try:
-                for answer in core(msg):
-                    print(answer, end="", flush=True)
-            except KeyboardInterrupt: pass
-
-# самый верный способ самоуничтожения C++ бэкенда :))) [llm.detokenize((i,)).decode('utf-8', errors='replace') for i in range(1000000)]
-# зато теперь точно известно, что токенов действительно 102400...
-# >>> [llm.detokenize((i,)).decode('utf-8', errors='replace') for i in range(99995, 100005)]
-# [' трона', ' immerse', 'GAR', 'кле', 'osted', ' plagues', ' uplifted', ' crabs', '强者', ' informally', ' Modem', '谢霆锋', ' Garona', ' Нео', ' breathes', ' fatalities', '粘膜', '', '', '[PAD100002]', '[PAD100003]', '[PAD100004]']
-# Но на самом деле токенов ровно 100000, дальше идёт BOS, EOS и одни паддинги
+# Смотрите в этом же репозитории в этой же директории neuro_bot.py
+# Разумеется я больше НЕ буду обновлять этот код, оно переместится в приватный репозиторий на gitcode про мой самопишущийся симулятор MLIR-диалектов!
+# И так уже привёл полностью рабочий пример коммуникации с Deepseek V2 B16 Q4_K_M через llama-cpp-python в реальном времени без пересчитывания всех токенов, а только новых :)
 
 
 
