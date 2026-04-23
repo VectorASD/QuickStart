@@ -8,23 +8,144 @@ import inspect
 import types, sys
 from pprint import pformat
 import warnings
+import sysconfig
+from functools import wraps, lru_cache
+from pathlib import Path
 
 from typing import TYPE_CHECKING
 
 
 
 os.environ["TRITON_NPU_COMPILER_PATH"] = os.path.expanduser("~")
+os.environ["ASCEND_HOME_PATH"] = "123"
+os.environ["CC"] = "true"
+os.environ["TRITON_ALWAYS_COMPILE"] = '1'
 
 
 
-def npu_mod():
-    # {"load_kernel_binary", loadKernelBinary, METH_VARARGS, "Load NPU kernel binary into NPU driver"},
+def plugger(name):
+    from triton.backends.ascend import utils
+    script_path = Path(utils.__file__).resolve().parent / "bishengir" / "bin" / name
+
+    script_path.parent.mkdir(parents=True, exist_ok=True)
+
+    script_path.write_text(rf"""#!/bin/bash
+if [[ "$1" == "--help" ]]; then
+    echo "{name} mock compiler"
+    echo "Supported options:"
+    echo "  --help"
+    echo "  -o <output>"
+    echo "limit-auto-multi-buffer-buffer"
+    exit 0
+fi
+
+echo "==== {name} called ===="
+echo "PWD: $(pwd)"
+echo "ARGV: $0 $@"
+echo "-------------------------"
+
+INPUT="$1"
+OUTPUT=""
+while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "-o" ]]; then
+        OUTPUT="$2"
+        break
+    fi
+    shift
+done
+
+if [[ -n "$OUTPUT" ]]; then
+    if [[ "$OUTPUT" != *.o ]]; then
+        OUTPUT="$OUTPUT.o"
+    fi
+    cp "$INPUT" "$OUTPUT"
+else
+    echo "{name}: ERROR: no -o output file found"
+fi
+""")
+    script_path.chmod(0o755)
+
+plugger("bishengir-compile")
+plugger("hivmc-a5")
+
+
+
+from triton.backends import backends
+AscendBackend = backends['ascend'].compiler
+real_add_stages = AscendBackend.add_stages
+def add_stages(self, stages, options):
+    real_add_stages(self, stages, options)
+    assert len(stages) == 3, "Видимо, у вас получился cpu-пайплайн: ttir, ttadapter, llir, cpuasm! А ожидается npu-бэкенд"
+    real_ttir, real_ttadapter, real_npubin = stages.values()
+
+    def ttir(src, metadata):
+        # print(src)
+        return src # real_ttir(src, metadata)
+
+    def ttadapter(src, metadata):
+        return str(src) # real_ttadapter(src, metadata)
+
+    def npubin(linalg, metadata):
+        import re
+        DISABLE_AUTO_TILE_AND_BIND_SUBBLOCK_REGEX = r'hivm.disable_auto_tile_and_bind_subblock'
+        MIX_MODE_REGEX = r'mix_mode\s*=\s*"([^"]+)"'
+        PARALLEL_MODE_REGEX = r'parallel_mode\s*=\s*"([^"]+)"'
+        KERNEL_NAME_REGEX = r"(?:tt|func)\.func[\s\w]+@(\w+)"
+        TENSOR_KIND_REGEX = r'%arg(\d+):[^,)]*?\{[^}]*?tt\.tensor_kind\s*=\s*([^:\s}]+)\s*:[^}]*?\}'
+        BITCODES_REGEX = r'bitcode\s*=\s*(?:"([^"]+)"|\'([^\']+)\'|(\w+))'
+        metadata["shared"] = 1
+        metadata["auto_tile_and_bind_subblock"] = not re.search(DISABLE_AUTO_TILE_AND_BIND_SUBBLOCK_REGEX, linalg)
+        metadata["mix_mode"]      = 'aiv'  # re.search(MIX_MODE_REGEX, linalg).group(1)
+        metadata["parallel_mode"] = 'simd' # re.search(PARALLEL_MODE_REGEX, linalg).group(1)
+        metadata["kernel_name"] = re.search(KERNEL_NAME_REGEX, linalg).group(1)
+        metadata["name"] = metadata["kernel_name"] + "_" + metadata["mix_mode"]
+        metadata["tensor_kinds"] = [1] # [int(kind) for _, kind in re.findall(TENSOR_KIND_REGEX, linalg)]
+        metadata["required_ub_bits"] = 0
+        bitcodes = re.findall(BITCODES_REGEX, linalg)
+        metadata["bitcodes"] = [val for group in bitcodes for val in group if val]
+        return linalg # real_npubin(linalg, metadata)
+
+    stages.clear()
+    stages["ttir"]      = ttir
+    stages["ttadapter"] = ttadapter
+    stages["npubin"]    = npubin
+AscendBackend.add_stages = add_stages
+
+
+
+def _launcher(IR, grid_0, grid_1, grid_2, stream, packed_metadata, launch_metadata, *non_constexpr_vals, **kwargs):
+    IR = IR.decode("utf-8")
+    print(IR)
+    print("[LAUNCHER] grid:", (grid_0, grid_1, grid_2))
+    assert stream == 123
+    print("[LAUNCHER] metadata:", packed_metadata['kernel_name'], packed_metadata['hash'], packed_metadata['debug'], packed_metadata['tensor_kinds'])
+    assert launch_metadata is None
+    for i, arg in enumerate(non_constexpr_vals):
+        print(f"[LAUNCHER] arg_{i}: {str(arg)}")
+    assert not kwargs
+    print("~" * 77)
+    return False
+
+class npu_mod:
+    _npu_arch = "Ascend950PR_957c"
+    _total_memory = (79 * 1024 + 736) * 1024 * 1024   # 79 Gb, 736 Mb
+    _ai_core_num = 28
+    _cube_core_num = 28
+    _vector_core_num = 28 * 2
+    _L2_cache_size = 112 * 1024 * 1024   # 112 Mb
+
+    def load_kernel_binary(name: str, data: bytes, shared: int, device: int, kernel_mode: str):
+        "Load NPU kernel binary into NPU driver"
+        module = 0
+        from torch_npu._simulator import _launcher   # pyright: ignore[reportMissingImports]
+        func = lambda *a, **kw: _launcher(data, *a, **kw)
+        return module, func, 0, 0
     def get_arch(*args):
         "Get soc version of NPU"
-        return "Ascend950PR_957c"
+        return _npu_arch   # pyright: ignore[reportUndefinedVariable]
     def get_aicore_num(*args):
         "Get the number of AI core"
-        return 28
+        return _ai_core_num    # pyright: ignore[reportUndefinedVariable]
 	# {"create_stream", createStream, METH_VARARGS, "Create a stream"},
     def read_data_from_file(filename: str, buffer: bytearray):
         "Read binary file into the array already allocated"
@@ -43,58 +164,125 @@ def npu_mod():
 	# {"allocate_host_memory", allocateHostMemory, METH_VARARGS, "Allocate host memory"},
 	# {"copy_memory", copyMemory, METH_VARARGS, "Copy data between host and device"},
 
-src = inspect.getsource(npu_mod)
-npu_utils_src = src.replace('def npu_mod():', 'if 1:')
+class run_mod:
+    def launch(grid_0, grid_1, grid_2, stream, function, packed_metadata, launch_metadata,
+               launch_enter_hook, launch_exit_hook, *non_constexpr_vals, **kwargs):
+        assert launch_enter_hook is None
+        result = function(grid_0, grid_1, grid_2, stream, packed_metadata, launch_metadata, *non_constexpr_vals, **kwargs)
+        assert launch_exit_hook is None
+        return result
 
-real_get_file = FileCacheManager.get_file
-def get_file(self, filename):
-    if filename != 'npu_utils.so':
-        return real_get_file(self, filename)
+@lru_cache(maxsize=1)
+def get_replacers():
+    replacers = {}
+    launcher_name = f"launcher_cxx11abi{int(torch._C._GLIBCXX_USE_CXX11_ABI)}{sysconfig.get_config_var('EXT_SUFFIX')}"
+
+    replacers['npu_utils.so'] = cache_replacer(npu_mod, "npu_utils.py")
+    replacers[launcher_name]  = cache_replacer(run_mod, "npu_launcher.py")
+
+    return replacers
+
+
+
+def cache_replacer(src_container, py_name, always_put=0):
+    src = inspect.getsource(src_container)
+    idx = src.find('\n')
+    patched_src = f"if 1:{src[idx:]}"
     cache = FileCacheManager("abcd")
-    cache.put(npu_utils_src, "npu_utils.py", binary=False)
-    path = cache.get_file("npu_utils.py")
+    if always_put:
+        cache.put(patched_src, py_name, binary=False)
+    path = cache.get_file.__wrapped__(cache, py_name)
     if path is None:
-        path = cache.put(npu_utils_src, "npu_utils.py", binary=False)
+        path = cache.put(patched_src, py_name, binary=False)
     return path
+
+@wraps(FileCacheManager.get_file)
+def get_file(self, filename):
+    try:
+        return get_replacers()[filename]
+    except KeyError:
+        return get_file.__wrapped__(self, filename)
 FileCacheManager.get_file = get_file
 
 
 
-dummy     = types.ModuleType("torch_npu")
-dummy_C   = types.ModuleType("torch_npu._C")
-dummy_npu = types.ModuleType("torch_npu.npu")
-dummy._C  = dummy_C
-dummy.npu = dummy_npu
-dummy.__file__     = "dummy"
-dummy_C.__file__   = "dummy_C"
-dummy_npu.__file__ = "dummy_npu"
-dummy_C._npu_getCurrentRawStream = lambda device_id: 123 + device_id
-sys.modules["torch_npu"]    = dummy
-sys.modules["torch_npu._C"] = dummy_C
+dummy           = types.ModuleType("torch_npu")
+dummy.__file__  = "dummy"
+sys.modules["torch_npu"] = dummy
+
+dummies = {}
+for name in ("_C", "npu", "version", "_simulator"):
+    dummies[name] = new_dummy = types.ModuleType(f"torch_npu.{name}")
+    setattr(dummy, name, new_dummy)
+    new_dummy.__file__ = f"dummy{name}"
+    sys.modules[f"torch_npu.{name}"] = new_dummy
+
+dummies["_C"]._npu_getCurrentRawStream = lambda device_id: 123 + device_id
+dummies["version"].git_version = "simulator"   # Кстати! Через это можно менять хеши кешей тритона, в которые пишутся ядра :)
+dummies["_simulator"]._launcher = _launcher
+
+
 
 class npu:
     device_id = 0
+
     def current_device():
         return npu.device_id
+
     def set_device(device_id):
         npu.device_id = device_id
+
     def device_count():
         return 1 # используется flag_gems
+
     def get_device_capability(device_id):
         return (0, 0) # (9, 0) # или даже (10, 0), никто пока это не знает :)
         # мне же хуже, т.к. будет SUPPORTED_FP8_DTYPE = torch.float8_e4m3fn вместо torch.float32
         # а в реальных DTS там вообще будет (0, 0) + warning 'Failed to get device properties for device_id=0, fallback to None'
         # т.е. лучше сделать заглушку, чтобы выкинуть warning, но имитировать условия, близкие к DTS
+
     def is_available():
         return npu.device_count() > 0
+
+    class _CUuuid:
+        def __init__(self, data=None):
+            if data is not None:
+                data = bytes(data)
+            self._data = data
+
+        @property
+        def bytes(self):
+            return list(self._data)
+
+        def __str__(self):
+            data = self._data
+            return f"{hex(data[:4])}-{hex(data[4:6])}-{hex(data[6:8])}-{hex(data[8:10])}-{hex(data[10:])}"
+
     def get_device_properties(device_id):
-        # TODO: это лишь угаданные значения
         return {
+            "name":            npu_mod._npu_arch,
+            "total_memory":    npu_mod._total_memory,
+            "cube_core_num":   npu_mod._cube_core_num,
+            "vector_core_num": npu_mod._vector_core_num,
+            "uuid":            npu._CUuuid(),
+            "L2_cache_size":   npu_mod._L2_cache_size,
             "max_shared_memory": 0,
             "max_shared_memory_per_multiprocessor": 0,
         }
 
-dummy_npu.__dict__.update(npu.__dict__)
+    class device:
+        def __init__(self, device):
+            self.idx = 0
+            self.prev_idx = -1
+
+        def __enter__(self):
+            pass
+
+        def __exit__(self, *args):
+            return False
+
+# забавный факт! DeviceDetector из FlagGems имеет quick-режим проверки. Если есть torch.npu, значит vendor 100% = ascend :)
+dummies["npu"].__dict__.update(npu.__dict__)
 torch.npu = npu
 
 
@@ -353,7 +541,6 @@ class BoolTensor(Tensor):     ...
 
 
 
-import functools
 import contextlib
 
 SKIPED_TYPES = {
@@ -390,10 +577,10 @@ def type_wrapper(obj, real_device):
     exit()
 
 def wrap_torch_function(fn):
-    @functools.wraps(fn)
+    @wraps(fn)
     def wrapper(*args, **kwargs):
         fn_name = fn.__name__ # отдельная переменная, т.к. отладчик не видит closure
-        print("[RUN]", fn_name)
+        # print("[RUN]", fn_name)
         # 1. Распаковываем позиционные аргументы (NotTorch.Tensor → torch.Tensor)
         new_args = []
         founded_device = None
@@ -473,15 +660,52 @@ visited[torch].device = device
 
 
 
-import not_aten
+from not_aten import PythonArgParser   # pyright: ignore[reportMissingImports]
 
-# def wrap_torch_function(fn):
-#    @functools.wraps(fn)
-#    def wrapper(*args, **kwargs):
-#        out = nottorch_dispatch(fn, args, kwargs)
-#        return type_wrapper(out)
-#
-#    return wrapper
+class LibWrapper:
+    index = {}
+
+    def __init__(self, base, sig):
+        self.base = base
+        self.ops = {}
+
+        module_name = sig.python_module
+        self.module = torch if module_name is None else getattr(torch, module_name)
+
+        self.real_fn = getattr(self.module, base)
+        parser = PythonArgParser.base_index[base]
+
+        @wraps(self.real_fn)
+        def wrapper(*args, **kwargs):
+            py_args = parser.raw_parse(None, args, kwargs)
+            op = self.ops.get(py_args.signature.name)
+            if op is None:
+                return wrapper.__wrapped__(*args, **kwargs)
+            result = op(*args, **kwargs)
+            # exit()
+            # return type_wrapper(out)
+            return result
+
+        setattr(torch, base, wrapper)
+
+    def apply(self, name, fn):
+        self.ops[name] = fn
+
+    def reset(self):
+        setattr(self.module, self.base, self.real_fn)
+
+    @staticmethod
+    def get_wrapper(base, sig) -> LibWrapper:
+        try: return LibWrapper.index[base]
+        except KeyError: pass
+        result = LibWrapper.index[base] = LibWrapper(base, sig)
+        return result
+
+    @staticmethod
+    def clear():
+        for wrapper in LibWrapper.index.values():
+            wrapper.reset()
+        LibWrapper.index.clear()
 
 _reserved_namespaces = ["prim"]
 _impls: set[str] = set()
@@ -495,12 +719,12 @@ class Library:
         self.ns           = ns
         self.kind         = kind
         self.dispatch_key = dispatch_key
-        print("[LIB INIT]", self)
+      # print("[LIB INIT]", self)
         self._op_impls: set[str] = set()
 
     def __repr__(self):
         return f"Library(kind={self.kind}, ns={self.ns}, dispatch_key={self.dispatch_key})>"
-        # разрабы потеряли '<' в начале... емаё!!!)))
+        # разрабы потеряли '<' в начале... ёмаё!!! ;'-}
 
     def impl(self, op_name, fn, dispatch_key="", *, with_keyset=False, allow_override=False):
         if not callable(fn):
@@ -518,23 +742,32 @@ class Library:
         else:
             raise RuntimeError("impl should be passed either a name or an OpOverload object as the first argument")
 
-        key = f"{self.ns}/{name.split('::')[-1]}/{dispatch_key}"
+        name = name.split('::')[-1]
+
+        key = f"{self.ns}/{name}/{dispatch_key}"
         if (not allow_override) and key in _impls:
-            # TODO: in future, add more info about where the existing function is registered (this info is
-            # today already returned by the C++ warning when impl is called but we error out before that)
             raise RuntimeError(
                 "This is not allowed since there's already a kernel registered from python overriding {}"
-                "'s behavior for {} dispatch key and {} namespace.".format(
-                    name.split("::")[-1], dispatch_key, self.ns
-                )
+                "'s behavior for {} dispatch key and {} namespace.".format(name, dispatch_key, self.ns)
             )
 
-        if dispatch_key == "": dispatch_key = "CompositeImplicitAutograd"
+        if dispatch_key == "":
+            dispatch_key = "CompositeImplicitAutograd"
 
+        assert self.ns == "aten"
         assert dispatch_key == "PrivateUse1"
         assert with_keyset == False
         assert allow_override == False
-        print("[LIB IMPL]", key, fn)
+
+        if name in PythonArgParser.sig_index:
+            base_name = name.split(".", 1)[0]
+            sig = PythonArgParser.sig_index[name]
+            try:
+                LibWrapper.get_wrapper(base_name, sig).apply(name, fn)
+            except Exception as e:
+                pass # print("[LIB IMPL ERROR]", e)
+        else:
+            pass # print("[LIB IMPL WARNING] Unsupported:", name, fn)
 
         _impls.add(key)
         self._op_impls.add(key)
@@ -542,25 +775,8 @@ class Library:
     def _destroy(self):
         global _impls
         _impls -= self._op_impls
-        print("[LIB DESTROY]")
-        """   имеет смысла, если бы нужен был 'define':
-        for name in self._op_defs:
-            # Delete the cached torch.ops.ns.foo if it was registered.
-            # Otherwise, accessing it leads to a segfault.
-            # It's possible that we only registered an overload in this Library
-            # and another library owns an alive overload.
-            # That's OK - the next time torch.ops.ns.foo gets called, it'll be
-            # recomputed to point at the right collection of overloads.
-            ns, name_with_overload = name.split("::")
-            name = name_with_overload.split(".")[0]
-            if not hasattr(torch.ops, ns):
-                continue
-            namespace = getattr(torch.ops, ns)
-            if not hasattr(namespace, name):
-                continue
-            delattr(namespace, name)
-            namespace._dir.remove(name)
-        """
+      # print("[LIB DESTROY]")
+        LibWrapper.clear()
 
 not_library = types.ModuleType("torch.library")
 not_library.Library = Library

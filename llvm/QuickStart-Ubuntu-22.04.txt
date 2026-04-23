@@ -732,6 +732,13 @@ python llvm_checker.py CMakeCache.txt /usr/lib/llvm-19/bin
 # И ЭТО ВСЯ ПРОБЛЕМА Ubuntu-22.04?! Затолкал пребилженный LLVM-19, поменял заголовок, всёёё!)
 
 
+INNER_BISHENG_INSTALL_PATH=$(python -c 'from triton.backends.ascend import utils; import os; print(os.path.join(os.path.dirname(os.path.abspath(utils.__file__)), "bishengir", "bin"))')
+#   А никто и не знал про этот трюк, что самое надёжное НЕ ПЕРЕЗАПИСЫВАЕМОЕ никак через env место имеено здесь :) Смотрите _get_npucompiler_path() в этом utils
+#   Ранее, по этой инструкции, уже выданы права на эту директории + установлен triton
+mkdir -p "$INNER_BISHENG_INSTALL_PATH"
+strip ~/bisheng/AscendNPU-IR-Dev/build/bin/bishengir-compile -o "$INNER_BISHENG_INSTALL_PATH/bishengir-compile"
+
+
 
 # ~~~ Нейронка 🧠🧠🧠 :) ~~~
 

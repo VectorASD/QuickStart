@@ -70,6 +70,10 @@ TYPE_MAP = {
 
     "ScalarList":     ParameterType.SCALAR_LIST,
     "DispatchKeySet": ParameterType.DISPATCH_KEY_SET,
+
+# mappings:
+    "float": ParameterType.DOUBLE,
+    "int":   ParameterType.INT64
 }
 
 
@@ -508,7 +512,8 @@ class Parameter:
         elif type_ == ParameterType.BOOL:
             self.default_bool = str == "True" or str == "true"
         elif type_ == ParameterType.DOUBLE:
-            self.default_double = float(str)
+            if str != "None":
+                self.default_double = float(str)
         elif type_ == ParameterType.COMPLEX:
             self.default_complex = (float(str), 0) # TODO: parse "x + xj"?
             # ахах, в python это просто complex(str), но сделаю, как в реальном aten
@@ -624,7 +629,7 @@ def find_matching_paren(s, start):
 
 def find_comma_outside_parens(s, start):
     # Tensor(a!, b!) out, Tensor(a!, b!) other
-    #                   ^ ище только это!
+    #                   ^ ищем только это!
     depth = 0
     i = start
     while i < len(s):
@@ -639,8 +644,10 @@ def find_comma_outside_parens(s, start):
 
 class Signature:
     # source: https://github.com/pytorch/pytorch/blob/50eea6cd/torch/csrc/utils/python_arg_parser.cpp#L1488-L1547
-    def __init__(self, fmt: str, index: int = 0):
+    def __init__(self, item, index: int = 0):
+        fmt = item["func"]
         self.index = index
+        self.python_module = item.get("python_module")
 
         # --- 1. Найти '(' ---
         open_paren = fmt.find("(")
@@ -657,6 +664,10 @@ class Signature:
         keyword_only = False
         done = False
         self.params = []
+
+        arrow = fmt.find("->")
+        if arrow != -1:
+            fmt = fmt[:arrow]
 
         while not done:
             offset = find_comma_outside_parens(fmt, last_offset)
@@ -1220,15 +1231,23 @@ class PythonArgs:
         self.overloaded_args = overloaded_args
 
 class PythonArgParser:
+    sig_index = {}
+    base_index = {}
+
     # source: https://github.com/pytorch/pytorch/blob/50eea6cd/torch/csrc/utils/python_arg_parser.cpp#L1828-L1851
-    def __init__(self, *fmts, traceable=False):
+    def __init__(self, items, traceable=False):
         self.traceable = traceable
-        self.signatures = [Signature(fmt, i) for i, fmt in enumerate(fmts)]
+        self.signatures = [Signature(item, i) for i, item in enumerate(items)]
         self.max_args = max(sig.max_args for sig in self.signatures)
         self.function_name = self.signatures[0].name.split(".", 1)[0] if self.signatures else None
 
         # deprecated → в конец
         self.signatures.sort(key=lambda s: s.deprecated)
+
+        for sig in self.signatures:
+            self.sig_index[sig.name] = sig
+        if self.function_name is not None:
+            self.base_index[self.function_name] = self
 
     # source: https://github.com/pytorch/pytorch/blob/50eea6cd/torch/csrc/utils/python_arg_parser.cpp#L1853-L1872
     def check_deprecated(self, signature):
@@ -1295,93 +1314,6 @@ class PythonArgParser:
 
 
 
-# https://github.com/pytorch/pytorch/blob/2cb9a5bf/torch/csrc/Event.cpp#L26-L28
-Event_parser = PythonArgParser(
-    "Event(Device device=None, *, bool enable_timing=False, bool blocking=False, bool interprocess=False)",
-)
-
-# https://github.com/pytorch/pytorch/blob/2cb9a5bf/torch/csrc/Event.cpp#L134-L136
-from_ipc_handle_parser = PythonArgParser(
-    "from_ipc_handle(Device device, std::string ipc_handle)",
-)
-
-# https://github.com/pytorch/pytorch/blob/2cb9a5bf/torch/csrc/autograd/python_nested_functions_manual.cpp#L14-L16
-nested_tensor_parser = PythonArgParser(
-    "nested_tensor(PyObject* data, *, ScalarType dtype=None, Device? device=None, bool pin_memory=False, bool requires_grad=False)",
-)
-
-# https://github.com/pytorch/pytorch/blob/2cb9a5bf/torch/csrc/Device.cpp#L51-L53
-device_parser = PythonArgParser(
-    "device(Device device)",
-    "device(std::string_view type, int64_t? index=-1)",
-)
-
-# https://github.com/pytorch/pytorch/blob/2cb9a5bf/tools/autograd/templates/python_nn_functions.cpp#L39-L43
-to_parser = PythonArgParser(
-    "to(Device device=None, ScalarType dtype=None, bool non_blocking=False, bool copy=False, *, MemoryFormat? memory_format=None)",
-    "to(ScalarType dtype, bool non_blocking=False, bool copy=False, *, MemoryFormat? memory_format=None)",
-    "to(Tensor tensor, bool non_blocking=False, bool copy=False, *, MemoryFormat? memory_format=None)",
-)
-
-# https://github.com/pytorch/pytorch/blob/2cb9a5bf/torch/csrc/autograd/init.cpp#L703-L705
-set_autocast_enabled_parser = PythonArgParser(
-    "set_autocast_enabled(std::string_view device_type, bool enabled)",
-    "set_autocast_enabled(bool enabled)",
-) # this signature is deprecated.
-
-# https://github.com/pytorch/pytorch/blob/2cb9a5bf/torch/csrc/autograd/init.cpp#L726-L728
-is_autocast_enabled_parser = PythonArgParser(
-    "is_autocast_enabled(std::string_view device_type)",
-    "is_autocast_enabled()",
-) # this signature is deprecated.
-
-# https://github.com/pytorch/pytorch/blob/2cb9a5bf/torch/csrc/utils/tensor_new.cpp#L611-L617
-new_parser = PythonArgParser(
-    "new(*, Device? device=None)",
-    "new(*, int64_t cdata)|hidden",
-    "new(Tensor indices, Tensor values, *, Device? device=None)",
-    "new(Tensor indices, Tensor values, IntArrayRef size, *, Device? device=None)",
-    "new(SymIntArrayRef size, *, Device? device=None)",
-)
-
-# https://github.com/pytorch/pytorch/blob/2cb9a5bf/torch/csrc/utils/tensor_new.cpp#L717-L730
-legacy_new = PythonArgParser(
-    "new(*, Device? device=None)",
-    "new(Storage storage)",
-    "new(*, int64_t cdata)|hidden",
-    # This constructor is no longer legacy, it will also be usable for
-    # subclass initialization
-    "new(Tensor other)",
-    "new(Tensor other, *, Device? device=None)|hidden", # prevent Tensor
-                                                        # matching with
-                                                        # IntArrayRef,
-                                                        # PyObject*
-    "new(SymIntArrayRef size, *, Device? device=None)",
-    "new(PyObject* data, *, Device? device=None)",
-)
-
-# https://github.com/pytorch/pytorch/blob/2cb9a5bf/torch/csrc/TypeInfo.cpp#L41
-finfo_parser = PythonArgParser(
-    "finfo(ScalarType type)",
-    "finfo()",
-)
-
-# https://github.com/pytorch/pytorch/blob/2cb9a5bf/torch/csrc/TypeInfo.cpp#L72-L74
-iinfo_parser = PythonArgParser(
-    "iinfo(ScalarType type)",
-)
-
-THPStorageStr = "torch.UntypedStorage"
-THPStorage_parser = PythonArgParser(
-    f"{THPStorageStr}(*, int64_t allocator=None, Device device=None)",
-    f"{THPStorageStr}(int64_t size, *, int64_t allocator=None, Device device=None)",
-    f"{THPStorageStr}(PyObject* sequence, *, int64_t allocator=None, Device device=None)",
-)
-
-# ... Чёт всё не то выпадает при поиске PythonArgParser в github
-
-
-
 #     Источник НУЖНЫХ нам функций:
 # https://github.com/pytorch/pytorch/blob/2cb9a5bf/aten/src/ATen/native/native_functions.yaml
 
@@ -1398,34 +1330,287 @@ def load_native_functions(yaml_text):
     data   = yaml.safe_load(yaml_text)
     groups = defaultdict(list)
 
-    for row in data:
-        func = row["func"]
+    for item in data:
+        func = item["func"]
+        item["func"]
         name = func.split("(", 1)[0]
         base = name.split(".", 1)[0]
-        groups[base].append(func)
+        groups[base].append(item)
 
-    return {base: PythonArgParser(*group) for base, group in groups.items()}
+    return {base: PythonArgParser(items) for base, items in groups.items()}
 
 native_functions = """
+- func: _flash_attention_forward(Tensor query, Tensor key, Tensor value, Tensor? cum_seq_q, Tensor? cum_seq_k, SymInt max_q, SymInt max_k, float dropout_p, bool is_causal, bool return_debug_mask, *, float? scale=None, SymInt? window_size_left=None, SymInt? window_size_right=None, Tensor? seqused_k=None, Tensor? alibi_slopes=None, Tensor? block_table=None, int? num_splits=None) -> (Tensor output, Tensor softmax_logsumexp, Tensor rng_state, Tensor unused, Tensor debug_attn_mask)
+  variants: function
+
+- func: _flash_attention_forward.quantized(Tensor query, Tensor key, Tensor value, Tensor? cum_seq_q, Tensor? cum_seq_k, SymInt max_q, SymInt max_k, float dropout_p, bool is_causal, bool return_debug_mask, Tensor? q_descale, Tensor? k_descale, Tensor? v_descale, *, float? scale=None, SymInt? window_size_left=None, SymInt? window_size_right=None, Tensor? seqused_k=None, Tensor? alibi_slopes=None) -> (Tensor output, Tensor softmax_logsumexp, Tensor rng_state, Tensor unused, Tensor debug_attn_mask)
+  variants: function
+
+
+- func: _softmax(Tensor self, int dim, bool half_to_float) -> Tensor
+  structured_delegate: _softmax.out
+
+- func: _softmax.out(Tensor self, int dim, bool half_to_float, *, Tensor(a!) out) -> Tensor(a!)
+  structured: True
+
+
+- func: _softmax_backward_data(Tensor grad_output, Tensor output, int dim, ScalarType input_dtype) -> Tensor
+  structured_delegate: _softmax_backward_data.out
+
+- func: _softmax_backward_data.out(Tensor grad_output, Tensor output, int dim, ScalarType input_dtype, *, Tensor(a!) grad_input) -> Tensor(a!)
+  structured: True
+
+
+- func: _log_softmax(Tensor self, int dim, bool half_to_float) -> Tensor
+  structured_delegate: _log_softmax.out
+  tags: core
+
+- func: _log_softmax.out(Tensor self, int dim, bool half_to_float, *, Tensor(a!) out) -> Tensor(a!)
+  structured: True
+
+
+- func: _log_softmax_backward_data(Tensor grad_output, Tensor output, int dim, ScalarType input_dtype) -> Tensor
+  structured_delegate: _log_softmax_backward_data.out
+
+- func: _log_softmax_backward_data.out(Tensor grad_output, Tensor output, int dim, ScalarType input_dtype, *, Tensor(a!) out) -> Tensor(a!)
+  structured: True
+
+
+- func: _to_copy(Tensor self, *, ScalarType? dtype=None, Layout? layout=None, Device? device=None, bool? pin_memory=None, bool non_blocking=False, MemoryFormat? memory_format=None) -> Tensor
+  device_check: NoCheck
+  device_guard: False
+  autogen: _to_copy.out
+
+
+- func: _unique2(Tensor self, bool sorted=True, bool return_inverse=False, bool return_counts=False) -> (Tensor, Tensor, Tensor)
+  variants: function
+  autogen: _unique2.out
+
+
+- func: _upsample_bicubic2d_aa.vec(Tensor input, SymInt[]? output_size, bool align_corners, float[]? scale_factors) -> Tensor
+  python_module: nn
+  autogen: _upsample_bicubic2d_aa.vec_out
+
+
+- func: _upsample_bicubic2d_aa(Tensor self, SymInt[2] output_size, bool align_corners, float? scales_h=None, float? scales_w=None) -> Tensor
+  python_module: nn
+  structured_delegate: _upsample_bicubic2d_aa.out
+
+- func: _upsample_bicubic2d_aa.out(Tensor self, SymInt[2] output_size, bool align_corners, float? scales_h=None, float? scales_w=None, *, Tensor(a!) out) -> Tensor(a!)
+  python_module: nn
+  structured: True
+
+
+- func: _weight_norm_interface(Tensor v, Tensor g, int dim=0) -> (Tensor, Tensor)
+  variants: function
+  autogen: _weight_norm_interface.out
+
+
+- func: _weight_norm_interface_backward(Tensor grad_w, Tensor saved_v, Tensor saved_g, Tensor saved_norms, int dim) -> (Tensor, Tensor)
+  variants: function
+  autogen: _weight_norm_interface_backward.out
+
+
+- func: abs(Tensor self) -> Tensor
+  device_check: NoCheck   # TensorIterator
+  variants: function, method
+
+- func: abs.out(Tensor self, *, Tensor(a!) out) -> Tensor(a!)
+  device_check: NoCheck   # TensorIterator
+
+
+- func: abs_(Tensor(a!) self) -> Tensor(a!)
+  device_check: NoCheck   # TensorIterator
+  variants: function, method
+
+
+- func: acos(Tensor self) -> Tensor
+  device_check: NoCheck   # TensorIterator
+  variants: function, method
+  structured_delegate: acos.out
+
+- func: acos.out(Tensor self, *, Tensor(a!) out) -> Tensor(a!)
+  device_check: NoCheck   # TensorIterator
+  structured: True
+  structured_inherits: TensorIteratorBase
+
+
+- func: add.Tensor(Tensor self, Tensor other, *, Scalar alpha=1) -> Tensor
+  device_check: NoCheck   # TensorIterator
+  structured_delegate: add.out
+  variants: function, method
+
+- func: add.out(Tensor self, Tensor other, *, Scalar alpha=1, Tensor(a!) out) -> Tensor(a!)
+  device_check: NoCheck   # TensorIterator
+  structured: True
+  structured_inherits: TensorIteratorBase
+  ufunc_inner_loop:
+    Generic: add (AllAndComplex, BFloat16, Half, ComplexHalf)
+    ScalarOnly: add (Bool)
+
+- func: add.Scalar(Tensor self, Scalar other, Scalar alpha=1) -> Tensor
+  device_check: NoCheck   # TensorIterator
+  variants: function, method
+
+
+- func: add_.Tensor(Tensor(a!) self, Tensor other, *, Scalar alpha=1) -> Tensor(a!)
+  device_check: NoCheck   # TensorIterator
+  variants: method
+  structured_delegate: add.out
+
+- func: add_.Scalar(Tensor(a!) self, Scalar other, Scalar alpha=1) -> Tensor(a!)
+  device_check: NoCheck   # TensorIterator
+  variants: method
+  autogen: add.Scalar_out
+
+  
+- func: addcdiv(Tensor self, Tensor tensor1, Tensor tensor2, *, Scalar value=1) -> Tensor
+  structured_delegate: addcdiv.out
+  device_check: NoCheck   # TensorIterator
+  variants: method, function
+
+- func: addcdiv.out(Tensor self, Tensor tensor1, Tensor tensor2, *, Scalar value=1, Tensor(a!) out) -> Tensor(a!)
+  structured: True
+  structured_inherits: TensorIteratorBase
+  device_check: NoCheck   # TensorIterator
+
+
 - func: eye(SymInt n, *, ScalarType? dtype=None, Layout? layout=None, Device? device=None, bool? pin_memory=None) -> Tensor
-  dispatch:
-    CompositeExplicitAutograd: eye
 
 - func: eye.m(SymInt n, SymInt m, *, ScalarType? dtype=None, Layout? layout=None, Device? device=None, bool? pin_memory=None) -> Tensor
-  dispatch:
-    CompositeExplicitAutograd: eye
 
 - func: eye.out(SymInt n, *, Tensor(a!) out) -> Tensor(a!)
-  dispatch:
-    CPU, Meta: eye_out_cpu
-    CUDA: eye_out_cuda
-    MPS: eye_out_mps
 
 - func: eye.m_out(SymInt n, SymInt m, *, Tensor(a!) out) -> Tensor(a!)
-  dispatch:
-    CPU, Meta: eye_out_cpu
-    CUDA: eye_out_cuda
-    MPS: eye_out_mps
+
+
+- func: true_divide.Tensor(Tensor self, Tensor other) -> Tensor
+  device_check: NoCheck   # TensorIterator
+  variants: function, method
+
+- func: true_divide_.Tensor(Tensor(a!) self, Tensor other) -> Tensor(a!)
+  device_check: NoCheck   # TensorIterator
+  variants: method
+
+- func: true_divide.out(Tensor self, Tensor other, *, Tensor(a!) out) -> Tensor(a!)
+  device_check: NoCheck   # TensorIterator
+
+- func: true_divide.Scalar(Tensor self, Scalar other) -> Tensor
+  device_check: NoCheck   # TensorIterator
+  variants: function, method
+
+- func: true_divide_.Scalar(Tensor(a!) self, Scalar other) -> Tensor(a!)
+  device_check: NoCheck   # TensorIterator
+  variants: method
+
+
+- func: uniform_(Tensor(a!) self, float from=0, float to=1, *, Generator? generator=None) -> Tensor(a!)
+  device_check: NoCheck   # TensorIterator
+  variants: method
+  autogen: uniform, uniform.out
+
+
+- func: upsample_nearest1d(Tensor self, SymInt[1] output_size, float? scales=None) -> Tensor
+  python_module: nn
+  structured_delegate: upsample_nearest1d.out
+
+- func: upsample_nearest1d.vec(Tensor input, SymInt[]? output_size, float[]? scale_factors) -> Tensor
+  python_module: nn
+  autogen: upsample_nearest1d.vec_out
+
+- func: upsample_nearest1d.out(Tensor self, SymInt[1] output_size, float? scales=None, *, Tensor(a!) out) -> Tensor(a!)
+  python_module: nn
+  structured: True
+
+
+- func: upsample_nearest2d(Tensor self, SymInt[2] output_size, float? scales_h=None, float? scales_w=None) -> Tensor
+  python_module: nn
+  structured_delegate: upsample_nearest2d.out
+
+- func: upsample_nearest2d.vec(Tensor input, SymInt[]? output_size, float[]? scale_factors) -> Tensor
+  python_module: nn
+  autogen: upsample_nearest2d.vec_out
+
+- func: upsample_nearest2d.out(Tensor self, SymInt[2] output_size, float? scales_h=None, float? scales_w=None, *, Tensor(a!) out) -> Tensor(a!)
+  python_module: nn
+  structured: True
+
+
+- func: var_mean(Tensor self, bool unbiased=True) -> (Tensor, Tensor)
+  device_check: NoCheck   # TensorIterator
+  variants: function
+  cpp_no_default_args: ["unbiased"]
+
+- func: var_mean.dim(Tensor self, int[1]? dim, bool unbiased=True, bool keepdim=False) -> (Tensor, Tensor)
+  device_check: NoCheck   # TensorIterator
+  variants: function
+  cpp_no_default_args: ["unbiased"]
+
+- func: var_mean.correction(Tensor self, int[1]? dim=None, *, Scalar? correction=None, bool keepdim=False) -> (Tensor, Tensor)
+  device_check: NoCheck   # TensorIterator
+  variants: function
+  autogen: var_mean.correction_out
+
+- func: var_mean.names_dim(Tensor self, Dimname[1] dim, bool unbiased=True, bool keepdim=False) -> (Tensor, Tensor)
+  device_check: NoCheck   # TensorIterator
+  variants: function
+  cpp_no_default_args: ["unbiased"]
+
+- func: var_mean.correction_names(Tensor self, Dimname[1] dim, *, Scalar? correction=None, bool keepdim=False) -> (Tensor, Tensor)
+  device_check: NoCheck   # TensorIterator
+  variants: function
+
+
+- func: vdot(Tensor self, Tensor other) -> Tensor
+  variants: function, method
+
+- func: vdot.out(Tensor self, Tensor other, *, Tensor(a!) out) -> Tensor(a!)
+
+
+- func: vstack(Tensor[] tensors) -> Tensor
+
+- func: vstack.out(Tensor[] tensors, *, Tensor(a!) out) -> Tensor(a!)
+
+
+- func: where(Tensor condition) -> Tensor[]
+  device_check: NoCheck   # TensorIterator
+  variants: function
+
+- func: where.self(Tensor condition, Tensor self, Tensor other) -> Tensor
+  device_check: NoCheck   # TensorIterator
+  variants: function, method
+
+- func: where.self_out(Tensor condition, Tensor self, Tensor other, *, Tensor(a!) out) -> Tensor(a!)
+  device_check: NoCheck   # TensorIterator
+
+- func: where.ScalarSelf(Tensor condition, Scalar self, Tensor other) -> Tensor
+  variants: function
+
+- func: where.ScalarOther(Tensor condition, Tensor self, Scalar other) -> Tensor
+  variants: function, method
+
+- func: where.Scalar(Tensor condition, Scalar self, Scalar other) -> Tensor
+  variants: function
+
+
+- func: zeros(SymInt[] size, *, ScalarType? dtype=None, Layout? layout=None, Device? device=None, bool? pin_memory=None) -> Tensor
+
+- func: zeros.names(int[] size, *, Dimname[]? names, ScalarType? dtype=None, Layout? layout=None, Device? device=None, bool? pin_memory=None) -> Tensor
+  device_check: NoCheck
+  device_guard: False
+  autogen: zeros.names_out
+
+- func: zeros.out(SymInt[] size, *, Tensor(a!) out) -> Tensor(a!)
+
+
+- func: zero_(Tensor(a!) self) -> Tensor(a!)
+  device_check: NoCheck   # TensorIterator
+  variants: method, function
+  autogen: zero, zero.out
+
+
+- func: zeros_like(Tensor self, *, ScalarType? dtype=None, Layout? layout=None, Device? device=None, bool? pin_memory=None, MemoryFormat? memory_format=None) -> Tensor
+  autogen: zeros_like.out
 """
 
 loaded_natives = load_native_functions(native_functions)
@@ -1433,6 +1618,8 @@ loaded_natives = load_native_functions(native_functions)
 if __name__ == "__main__":
     # for sig in loaded_natives["eye"].signatures:
     #     print(sig.name, sig)
+
+    # print(PythonArgParser.index)
 
     for kwargs in ({}, {"out": torch.randn(2, 3)}):
         for args in ((1,), (True, 2), (1.0, 2)):
