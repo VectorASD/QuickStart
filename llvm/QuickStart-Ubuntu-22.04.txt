@@ -748,8 +748,10 @@ sudo ./llvm.sh 23
 
 sudo apt install libc++-23-dev libc++abi-23-dev -y
 
+
 cp -rp ~/gitpool/llama.cpp . ; cd ~/tmp/llama.cpp
 git reset --hard HEAD
+rm -rf build
 
 mkdir -p build; cd build
 
@@ -763,7 +765,6 @@ CC=clang-23 CXX=clang++-23 cmake .. \
   -DLLAMA_AVX2=ON \
   -DLLAMA_AVX512=ON \
   -DLLAMA_FMA=ON \
-  -DLLAMA_ACCELERATE=OFF \
   -DLLAMA_BUILD_EXAMPLES=OFF
 
 if [ ! -f llvm_checker.py ]; then
@@ -780,6 +781,10 @@ for name in llama-cli llama-quantize llama-server; do
     sudo update-alternatives --install /usr/bin/$name $name /opt/llama/bin/$name 1
 done
 sudo update-alternatives --install /usr/bin/convert-hf-to-gguf convert-hf-to-gguf /opt/llama/bin/convert_hf_to_gguf.py 1
+
+
+
+# ~~~ веса нейронки ~~~
 
 # выбор разного квантования здесь: https://huggingface.co/mradermacher/DeepSeek-V2-Lite-GGUF
 cd ~/tmp
@@ -846,7 +851,15 @@ llama-cli \
 
 # ~~~ Автоматическая нейронка ~~~
 
-sudo CMAKE_ARGS="-DLLAMA_NATIVE=ON -DLLAMA_LTO=ON" pip install llama-cpp-python
+#   CPU-версия:
+sudo CMAKE_ARGS="-DLLAMA_NATIVE=ON -DLLAMA_LTO=ON" \
+  pip install -v llama-cpp-python
+
+#   GPU-версия (ставится после блока "GPU нейронка"):
+sudo -E env CUDACXX="$(which nvcc)" \
+  CMAKE_ARGS="-DGGML_CUDA=ON -DGGML_CUDA_F16=ON -DGGML_CUDA_KQUANTS=ON -DLLAMA_NATIVE=ON -DLLAMA_LTO=ON -DLLAMA_CPP_PYTHON_USE_SYSTEM_LLAMA=ON" \
+  LLAMA_CPP_LIB=/opt/llama/lib \
+  pip install -v --no-deps --force-reinstall --no-cache-dir --no-binary=llama-cpp-python llama-cpp-python
 
 # Successfully built llama-cpp-python
 # Installing collected packages: diskcache, llama-cpp-python
@@ -859,6 +872,100 @@ code neuro_bot.py
 # Смотрите в этом же репозитории в этой же директории neuro_bot.py
 # Разумеется я больше НЕ буду обновлять этот код, оно переместится в приватный репозиторий на gitcode про мой самопишущийся симулятор MLIR-диалектов!
 # И так уже привёл полностью рабочий пример коммуникации с Deepseek V2 B16 Q4_K_M через llama-cpp-python в реальном времени без пересчитывания всех токенов, а только новых :)
+
+
+
+# ~~~ GPU нейронка ~~~
+
+# У меня: NVIDIA GeForce RTX 3050   (8 GB VRAM)
+# CUDA backend   (LLAMA_CUDA)   - сырое днище для прямой работы с CUDA-ядрами, много багов
+#   Требуется nvcc-компилятор
+# cuBLAS backend (LLAMA_CUBLAS) - оптимизировано всё, что только невозможно оптимизировать
+#   Здесь набор готовых GPU‑функций, которые уже скомпилированы nvcc
+# GGML CUDA backend (GGML_CUDA) — новый основной GPU‑бэкенд llama.cpp: CUDA и cuBLAS теперь затолканы в GGML
+#   Собственные CUDA‑ядра (.cu), компиляция под конкретную архитектуру GPU
+#   Требует установленный CUDA Toolkit и nvcc
+
+nvidia-smi   # уже было в WSL само по себе, т.к. винда сама автоматически прокидывает прокси
+# | NVIDIA-SMI 590.57                 Driver Version: 591.86         CUDA Version: 13.1     |
+# Значит нужен драйвер 13.1
+
+sudo apt install gnupg -y
+
+mkdir -p ~/tmp; cd ~/tmp
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt update
+apt list | grep "^cuda-toolkit-"   # теперь появился cuda-toolkit-13-1
+
+sudo apt install cuda-toolkit-13-1 -y
+
+ADD_CUDA='export PATH="/usr/local/cuda-13.1/bin:$PATH"'
+grep -qxF "$ADD_CUDA" ~/.bashrc \
+  || echo "$ADD_CUDA" >> ~/.bashrc
+
+eval "$ADD_CUDA"
+nvcc --version
+#   nvcc: NVIDIA (R) Cuda compiler driver
+#   Copyright (c) 2005-2025 NVIDIA Corporation
+#   Built on Tue_Dec_16_07:23:41_PM_PST_2025
+#   Cuda compilation tools, release 13.1, V13.1.115
+#   Build cuda_13.1.r13.1/compiler.37061995_
+
+
+mkdir -p ~/tmp; cd ~/tmp
+if [ ! -f llvm.sh ]; then
+    wget https://apt.llvm.org/llvm.sh
+    chmod +x llvm.sh
+fi
+sudo ./llvm.sh 23
+
+sudo apt install libc++-23-dev libc++abi-23-dev -y
+
+cp -rp ~/gitpool/llama.cpp . ; cd ~/tmp/llama.cpp
+git reset --hard HEAD
+rm -rf build
+
+mkdir -p build; cd build
+
+CC=clang-23 CXX=clang++-23 cmake .. \
+  -G Ninja \
+  -DCMAKE_INSTALL_PREFIX=/opt/llama \
+  -DLLAMA_NATIVE=ON \
+  -DLLAMA_LTO=ON \
+  -DLLAMA_AVX2=ON \
+  -DLLAMA_FMA=ON \
+  -DLLAMA_BUILD_EXAMPLES=OFF \
+  -DGGML_CUDA=ON \
+  -DGGML_CUDA_F16=ON \
+  -DGGML_CUDA_KQUANTS=ON \
+  -DCMAKE_CUDA_ARCHITECTURES="86"
+
+# У вас может быть другой DCMAKE_CUDA_ARCHITECTURES: RTX 3050 = SM 8.6 = "86"
+# Случился некоторый переезд флагов:
+#   -DLLAMA_CUBLAS         ->   -DGGML_CUDA=ON
+#   -DLLAMA_CUDA_F16       ->   -DGGML_CUDA_F16=ON
+#   -DLLAMA_CUDA_KQUANTS   ->   -DGGML_CUDA_KQUANTS=ON
+
+
+#   Вырезаем навязанные кем-то проблемы в консоли
+code ~/tmp/llama.cpp/ggml/src/ggml-impl.h
+#   Ищем: #define GGML_LOG_INFO(...)  ggml_log_internal(GGML_LOG_LEVEL_INFO , __VA_ARGS__)
+#   И:    #define GGML_LOG_DEBUG(...) ggml_log_internal(GGML_LOG_LEVEL_DEBUG, __VA_ARGS__)
+#   Просто удаляем всё, что справа от '(...)'
+
+
+ninja -j $(nproc)
+
+sudo cmake --build . --target install
+[ -f /opt/llama/lib/libggml-cuda.so ] || { echo "Install failed"; exit 1; }
+
+for name in llama-cli llama-quantize llama-server; do
+    sudo update-alternatives --install /usr/bin/$name $name /opt/llama/bin/$name 1
+done
+sudo update-alternatives --install /usr/bin/convert-hf-to-gguf convert-hf-to-gguf /opt/llama/bin/convert_hf_to_gguf.py 1
+
+# а далее, смотрите общий раздел "веса нейронки"
 
 
 

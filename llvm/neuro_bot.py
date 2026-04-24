@@ -7,12 +7,20 @@ def update(path = Path.home() / "FlagGems" / "neuro_bot.py"):
     # супер удобный способ прямо из интерактивного python загрузить весь этот скрипт целиком неограниченное количество раз
     # гарантируется, что вы не сможете инициализировать сразу две llm за раз из-за общего globals()
 
+use_gpu = True
+
 if "llm" not in globals():
     n_threads = os.cpu_count()   # 20 на работе, дома 12, при тех же 16 GB RAM и настройках WSL... из этой же инструкции :) дома чувствуются тормоза, а на работе летает
+    gpu_args = {}
+    if use_gpu:
+        gpu_args["n_gpu_layers"] = 999  # лучший способ сказать «всё, что влезет»
+        gpu_args["main_gpu"]     = 0    # можно менять на случай, если у вас несколько GPU, а надо выбрать самый мощный девайс
+        gpu_args["offload_kqv"]  = True # закручать ли KV-кеш в VRAM?
     llm = llama_cpp.Llama(
         (Path.home() / 'tmp' / 'DeepSeek-V2-Lite.Q4_K_M.gguf').as_posix(),
         n_ctx          = 8192,
         n_threads      = n_threads,
+        **gpu_args
     )
 
 # temperature    = 0.7
