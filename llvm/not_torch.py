@@ -1,11 +1,15 @@
 from __future__ import annotations
+import types, sys
 
+# запускаем этот файл not_torch.py (__name__ == "__main__"),
+# он же загружается в torch, как обёртка (__name__ == "not_torch.py"),
+# получаем целый космос из глюков в этом модуле
+sys.modules["$not_torch_is_loaded$"] = True   # это блокирует двойную загрузку
 import torch
 from triton.runtime.cache import FileCacheManager
 
 import os
 import inspect
-import types, sys
 from pprint import pformat
 import warnings
 import sysconfig
@@ -343,6 +347,7 @@ else:
     _torch.__dict__.update(torch.__dict__)
     _torch._C = types.ModuleType("torch._C")
     _torch._C.__dict__.update(torch._C.__dict__)
+    sys.modules["$torch$"] = _torch
 
 
 
@@ -512,6 +517,9 @@ class Tensor:
     def __getitem__(self, idx):
         return Tensor(self._tensor[idx], self._device)
 
+    def __len__(self):
+        return len(self._tensor)
+
 """
 from typing import Any, TypeAlias, Union
 
@@ -548,6 +556,7 @@ SKIPED_TYPES = {
     int,
     str,
     torch.dtype,
+    torch.layout,
     contextlib._GeneratorContextManager,
     torch._ops._ModeStackStateForPreDispatch,
     torch._vendor.packaging._structures.InfinityType, # здесь всего 2 типа, без родительского общего класса
@@ -569,11 +578,49 @@ def type_wrapper(obj, real_device):
     if isinstance(obj, UnpackedDualTensor):
         return type(obj)(*(type_wrapper(v, real_device) for v in obj))
     if isinstance(obj, tuple):
+        assert type(obj) is tuple
         return tuple(type_wrapper(v, real_device) for v in obj)
     if isinstance(obj, list):
         return [type_wrapper(v, real_device) for v in obj]
 
     print("[my type_wrapper] unsupported type:", type(obj))
+    exit()
+
+def type_unwrapper(obj, founded_device):
+    T = type(obj)
+
+    if obj is None or T in SKIPED_TYPES or callable(obj):
+        return obj
+
+    if T is Tensor:
+        if founded_device[0] is None:
+            founded_device[0] = obj._device
+        elif founded_device[0] != obj._device:
+            raise RuntimeError(f"Device mismatch: {founded_device[0]} vs {obj._device}")
+        return obj._tensor
+
+    if T is _torch.Tensor:
+        return obj
+
+    if T is tuple:
+        return tuple(type_unwrapper(v, founded_device) for v in obj)
+
+    if T is list:
+        return [type_unwrapper(v, founded_device) for v in obj]
+
+    if T is dict:
+        new_kwargs = {}
+        for k, v in obj.items():
+            if k == "device":
+                if not isinstance(v, device):
+                    v = device(v)
+                assert v.type in ("cpu", "npu")
+                founded_device[1] = v   # real_device
+            else:
+                new_kwargs[k] = type_unwrapper(v, founded_device)
+        return new_kwargs
+
+    print("[my type_unwrapper] unsupported type:", type(obj))
     exit()
 
 def wrap_torch_function(fn):
@@ -582,37 +629,13 @@ def wrap_torch_function(fn):
         fn_name = fn.__name__ # отдельная переменная, т.к. отладчик не видит closure
         # print("[RUN]", fn_name)
         # 1. Распаковываем позиционные аргументы (NotTorch.Tensor → torch.Tensor)
-        new_args = []
-        founded_device = None
-        for a in args:
-            if isinstance(a, Tensor):
-                new_args.append(a._tensor)
-                if founded_device is None:
-                    founded_device = a._device
-                elif founded_device != a._device:
-                    raise RuntimeError(f"Device mismatch: {founded_device} vs {a._device}")
-            else:
-                new_args.append(a)
+        founded_device = [None, None]
+        new_args = type_unwrapper(args, founded_device)
 
         # 2. Распаковываем именованные аргументы (Tensor / dtype / device)
-        new_kwargs = {}
-        real_device = None
-        for k, v in kwargs.items():
-            # 2.1 Tensor
-            if isinstance(v, Tensor):
-                new_kwargs[k] = v._tensor
-                if founded_device is None:
-                    founded_device = v._device
-                elif founded_device != v._device:
-                    raise RuntimeError(f"Device mismatch: {founded_device} vs {v._device}")
-            elif k == "device":
-                if not isinstance(v, device):
-                    v = device(v)
-                assert v.type in ("cpu", "npu")
-                real_device = v
-            else:
-                new_kwargs[k] = v
+        new_kwargs = type_unwrapper(kwargs, founded_device)
 
+        founded_device, real_device = founded_device
         if real_device is None:
             real_device = founded_device
 
@@ -815,6 +838,8 @@ if __name__ == "__main__":
     print(torch.randn(2, 3).to("npu"))
     print(torch.library.Library == Library)
 
+    print(torch.randn(100, 100))
+
     torch_path = Path(inspect.getfile(torch))
     my_path   = Path(__file__)
     aten_path = Path(sys.modules[PythonArgParser.__module__].__file__)
@@ -835,11 +860,11 @@ if not not_torch_path.exists():
     print(f"[TORCH IMPL] {{not_torch_path!s}} is not defined")
 elif not not_aten_path.exists():
     print(f"[TORCH IMPL] {{not_aten_path!s}} is not defined")
-else:
+elif "$not_torch_is_loaded$" not in sys.modules:
     p = str(not_torch_path.parent)
     if p not in sys.path:
         sys.path.insert(0, p)
-    import not_torch 
+    import not_torch
 """[:-1]
 
     implemented = torch_path.read_text().split(splitter, 1)[0] + implementor

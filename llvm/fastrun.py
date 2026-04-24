@@ -31,3 +31,5 @@ if __name__ == "__main__":
     tests.test_accuracy_eye((2, 2), dtype=torch.bfloat16)
     # result = eye_m(2, 2, dtype=torch.bfloat16)
     # print(result)
+
+# python -m pytest tests/test_tensor_constructor_ops.py::test_accuracy_eye -sv
