@@ -562,10 +562,7 @@ git reset --hard HEAD
 
 sudo pip install torch==2.11.0+cpu --index-url https://download.pytorch.org/whl/cpu
 
-sudo groupadd python
-sudo usermod -aG python $USER
-sudo chown root:python -R /opt/python311
-sudo chmod -R g+w /opt/python311
+sudo chown $(id -u):python -R /opt/python311
 
 # должен быть установлен VSCode + 'wsl' плагин:
 code /opt/python311/lib/python3.11/site-packages/triton

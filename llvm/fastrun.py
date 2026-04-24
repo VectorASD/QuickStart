@@ -1,4 +1,8 @@
-import not_torch   # type: ignore
+# import not_torch
+# Смотрите блок 'if __name__ == "__main__":' внутри not_torch.py
+# Теперь эта штука самая себя вшивает в torch для гарантирования оборачивания этого же torch
+
+
 
 try: import sqlalchemy
 except ImportError: exit("sudo pip install sqlalchemy")

@@ -642,7 +642,12 @@ def wrapper_bot(module, visited):
             wrapped = value
         elif inspect.isfunction(value) or inspect.isbuiltin(value):
             # print(" ", type(value), value.__module__, attr_name, value)
-            wrapped = wrap_torch_function(value)
+            try:
+                startswith = value.__module__.startswith
+            except AttributeError:
+                wrapped = value
+            else:
+                wrapped = wrap_torch_function(value) if startswith("torch") else value
         else:
             wrapped = value
 
@@ -804,8 +809,38 @@ not_torch_switcher.on()
 
 
 
-# print(torch.randn(2, 3))
-# print(torch.randn(2, 3, device="npu"))
-# print(torch.randn(2, 3).to("npu"))
-# print(torch.library.Library, Library)
-# exit()
+if __name__ == "__main__":
+    print(torch.randn(2, 3))
+    print(torch.randn(2, 3, device="npu"))
+    print(torch.randn(2, 3).to("npu"))
+    print(torch.library.Library == Library)
+
+    torch_path = Path(inspect.getfile(torch))
+    my_path   = Path(__file__)
+    aten_path = Path(sys.modules[PythonArgParser.__module__].__file__)
+
+    assert torch_path.exists()
+    assert my_path.exists()
+    assert aten_path.exists()
+
+    splitter = "# ~~~ my implementor ~~~"
+
+    implementor = f"""
+{splitter}
+from pathlib import Path
+import sys
+not_torch_path = Path({str(my_path)!r})
+not_aten_path  = Path({str(aten_path)!r})
+if not not_torch_path.exists():
+    print(f"[TORCH IMPL] {{not_torch_path!s}} is not defined")
+elif not not_aten_path.exists():
+    print(f"[TORCH IMPL] {{not_aten_path!s}} is not defined")
+else:
+    p = str(not_torch_path.parent)
+    if p not in sys.path:
+        sys.path.insert(0, p)
+    import not_torch 
+"""[:-1]
+
+    implemented = torch_path.read_text().split(splitter, 1)[0] + implementor
+    torch_path.write_text(implemented) # enter in terminal:   sudo chown $(id -u):python -R /opt/python311
