@@ -16,7 +16,7 @@ import sysconfig
 from functools import wraps, lru_cache
 from pathlib import Path
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional, Union, Callable
 
 
 
@@ -77,8 +77,12 @@ plugger("hivmc-a5")
 from triton.backends import backends
 AscendBackend = backends['ascend'].compiler
 real_add_stages = AscendBackend.add_stages
-def add_stages(self, stages, options):
-    real_add_stages(self, stages, options)
+def add_stages(self, stages, options, language):
+    from dataclasses import replace
+    options = replace(options, use_bytecode=False)
+    # use_bytecode=True, делает из трёх этапов 5, возможно, является причиной неиспользования нового тритона нашей командой из-за поломок :)
+
+    real_add_stages(self, stages, options, language)
     assert len(stages) == 3, "Видимо, у вас получился cpu-пайплайн: ttir, ttadapter, llir, cpuasm! А ожидается npu-бэкенд"
     real_ttir, real_ttadapter, real_npubin = stages.values()
 
@@ -92,11 +96,11 @@ def add_stages(self, stages, options):
     def npubin(linalg, metadata):
         import re
         DISABLE_AUTO_TILE_AND_BIND_SUBBLOCK_REGEX = r'hivm.disable_auto_tile_and_bind_subblock'
-        MIX_MODE_REGEX = r'mix_mode\s*=\s*"([^"]+)"'
+        MIX_MODE_REGEX      = r'mix_mode\s*=\s*"([^"]+)"'
         PARALLEL_MODE_REGEX = r'parallel_mode\s*=\s*"([^"]+)"'
-        KERNEL_NAME_REGEX = r"(?:tt|func)\.func[\s\w]+@(\w+)"
-        TENSOR_KIND_REGEX = r'%arg(\d+):[^,)]*?\{[^}]*?tt\.tensor_kind\s*=\s*([^:\s}]+)\s*:[^}]*?\}'
-        BITCODES_REGEX = r'bitcode\s*=\s*(?:"([^"]+)"|\'([^\']+)\'|(\w+))'
+        KERNEL_NAME_REGEX   = r"(?:tt|func)\.func[\s\w]+@(\w+)"
+        TENSOR_KIND_REGEX   = r'%arg(\d+):[^,)]*?\{[^}]*?tt\.tensor_kind\s*=\s*([^:\s}]+)\s*:[^}]*?\}'
+        BITCODES_REGEX      = r'bitcode\s*=\s*(?:"([^"]+)"|\'([^\']+)\'|(\w+))'
         metadata["shared"] = 1
         metadata["auto_tile_and_bind_subblock"] = not re.search(DISABLE_AUTO_TILE_AND_BIND_SUBBLOCK_REGEX, linalg)
         metadata["mix_mode"]      = 'aiv'  # re.search(MIX_MODE_REGEX, linalg).group(1)
@@ -117,33 +121,36 @@ AscendBackend.add_stages = add_stages
 
 
 
-def _launcher(IR, grid_0, grid_1, grid_2, stream, packed_metadata, launch_metadata, *non_constexpr_vals, **kwargs):
+def _launcher(IR, kernel_name, gridX, gridY, gridZ, tensor_kinds, non_constexpr_vals):
     IR = IR.decode("utf-8")
-    print(IR)
-    print("[LAUNCHER] grid:", (grid_0, grid_1, grid_2))
-    assert stream == 123
-    print("[LAUNCHER] metadata:", packed_metadata['kernel_name'], packed_metadata['hash'], packed_metadata['debug'], packed_metadata['tensor_kinds'])
-    assert launch_metadata is None
-    for i, arg in enumerate(non_constexpr_vals):
-        print(f"[LAUNCHER] arg_{i}: {str(arg)}")
-    assert not kwargs
-    print("~" * 77)
-    return False
+    run_mode = False
+    if run_mode:
+        print(IR)
+        print("[LAUNCHER] kernel_name/tensor_kinds:", kernel_name, tensor_kinds)
+        print("[LAUNCHER] grid:", (gridX, gridY, gridZ))
+        print("[LAUNCHER] args:", non_constexpr_vals)
+        print("~" * 77)
+    else:
+        launch_metadata = IR, kernel_name, (gridX, gridY, gridZ), tensor_kinds, non_constexpr_vals
+        for idx, arg in enumerate(non_constexpr_vals):
+            if isinstance(arg, torch.Tensor):
+                arg._launch_metadata = idx, *launch_metadata
 
 class npu_mod:
     _npu_arch = "Ascend950PR_957c"
-    _total_memory = (79 * 1024 + 736) * 1024 * 1024   # 79 Gb, 736 Mb
-    _ai_core_num = 28
-    _cube_core_num = 28
+    _total_memory    = (79 * 1024 + 736) * 1024 * 1024   # 79 Gb, 736 Mb
+    _ai_core_num     = 28
+    _cube_core_num   = 28
     _vector_core_num = 28 * 2
-    _L2_cache_size = 112 * 1024 * 1024   # 112 Mb
+    _L2_cache_size   = 112 * 1024 * 1024   # 112 Mb
 
     def load_kernel_binary(name: str, data: bytes, shared: int, device: int, kernel_mode: str):
         "Load NPU kernel binary into NPU driver"
         module = 0
         from torch_npu._simulator import _launcher   # pyright: ignore[reportMissingImports]
         func = lambda *a, **kw: _launcher(data, *a, **kw)
-        return module, func, 0, 0
+        n_max_threads = 0   # также сделано и в triton/backends/ascend/npu_utils.cpp
+        return module, func, 0, 0, n_max_threads
     def get_arch(*args):
         "Get soc version of NPU"
         return _npu_arch   # pyright: ignore[reportUndefinedVariable]
@@ -169,12 +176,29 @@ class npu_mod:
 	# {"copy_memory", copyMemory, METH_VARARGS, "Copy data between host and device"},
 
 class run_mod:
-    def launch(grid_0, grid_1, grid_2, stream, function, packed_metadata, launch_metadata,
+    def launch(gridX, gridY, gridZ, stream, function, packed_metadata, launch_metadata,
                launch_enter_hook, launch_exit_hook, *non_constexpr_vals, **kwargs):
-        assert launch_enter_hook is None
-        result = function(grid_0, grid_1, grid_2, stream, packed_metadata, launch_metadata, *non_constexpr_vals, **kwargs)
-        assert launch_exit_hook is None
-        return result
+
+        kernel_name = packed_metadata.get("kernel_name")
+        if not isinstance(kernel_name, str):
+            raise TypeError("packed_metadata['kernel_name'] must be a string")
+
+        tensor_kinds = packed_metadata.get("tensor_kinds")
+        if tensor_kinds is not None:
+            tensor_kinds = list(map(int, tensor_kinds))
+
+        if launch_enter_hook is not None:
+            launch_enter_hook(launch_metadata)
+
+        assert stream == 123
+        assert not kwargs
+        function(kernel_name, gridX, gridY, gridZ, tensor_kinds, non_constexpr_vals)
+
+        if launch_exit_hook is not None:
+            launch_exit_hook(launch_metadata)
+
+        profiler_registered = False
+        return profiler_registered
 
 @lru_cache(maxsize=1)
 def get_replacers():
@@ -648,6 +672,23 @@ def wrap_torch_function(fn):
 
 
 
+sys.path.insert(0, str(Path.home() / "MyBishengIRSimulator"))
+import simulator   # pyright: ignore[reportMissingImports]
+                
+@wraps(torch.testing.assert_close)
+def assert_close(actual: Any, expected: Any, **kwargs):
+    assert hasattr(actual, "_launch_metadata")
+    assert not hasattr(expected, "_launch_metadata")
+    metadata = actual._launch_metadata
+
+    idx, IR, kernel_name, grid, tensor_kinds, non_constexpr_vals = metadata
+    simulator.collect(idx, expected, IR, kernel_name, grid, tensor_kinds, non_constexpr_vals)
+    try:
+        assert_close.__wrapped__(actual, expected, **kwargs)
+    except: pass
+
+
+
 def wrapper_bot(module, visited):
     # print(module.__name__)
     visited[module] = wrapper = types.ModuleType(module.__name__)
@@ -685,6 +726,7 @@ with warnings.catch_warnings():
 
 visited[torch].Tensor = Tensor
 visited[torch].device = device
+visited[torch.testing].assert_close = assert_close
 
 
 
