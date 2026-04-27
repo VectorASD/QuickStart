@@ -328,6 +328,18 @@ ninja --version
 
 
 
+# ~~~ установка mold ~~~
+
+sudo apt install mold -y
+
+mold -V
+# mold 1.0.3 (compatible with GNU ld)
+#   Supported emulations:
+#    elf_x86_64
+#    elf_i386
+
+
+
 # ~~~ инициализация triton ~~~
 
 mkdir -p ~/tmp; cd ~/tmp
@@ -388,7 +400,7 @@ fi
 python llvm_checker.py || { echo "Dependencies failed"; exit 1; }
 #   Ошибок нет! ;'-}
 
-ninja -j $(nproc)
+mold -run ninja -j $(nproc)
 # NVPTX   — лёгкий.
 # AArch64 — лёгкий.
 # AMDGPU  — монстр: 2-4 Гб на один процесс
@@ -664,22 +676,6 @@ chmod +x ~/.local/bin/npu-smi
 
 # ~~~ AscendNPU-IR-Dev ~~~
 
-# TODO: проверить, что действительно 19 не избежать, т.к. на другой машине всё хорошо билдилось всегда на 20.0.0 версии!)
-
-mkdir -p ~/tmp; cd ~/tmp
-if [ ! -f llvm.sh ]; then
-    wget https://apt.llvm.org/llvm.sh
-    chmod +x llvm.sh
-fi
-sudo ./llvm.sh 19 # поставит пребилденый llvm и ровно на том коммите, который используется в third-party :)
-clang-19 --version
-#   Ubuntu clang version 19.1.7 (++20250114103320+cd708029e0b2-1~exp1~20250114103432.75)
-#   Target: x86_64-pc-linux-gnu
-#   Thread model: posix
-#   InstalledDir: /usr/lib/llvm-19/bin
-
-sudo apt install libc++-19-dev libc++abi-19-dev -y
-
 mkdir -p ~/bisheng; cd ~/bisheng
 cp -rp ~/gitpool/AscendNPU-IR-Dev .; cd AscendNPU-IR-Dev
 git checkout A5/dev
@@ -690,22 +686,20 @@ git -C third-party/triton/ checkout v3.5.0   # git ls-tree HEAD third-party/trit
 git -C third-party/llvm-project/ branch -v
 # * (HEAD detached at llvmorg-19.1.7) cd708029e0b2 Fix print module manifest file for macos (#122370)
 #   main                              121f5a96ff38 [libclc] Enable LLVM_RUNTIME_TARGETS in build system (#189892)
-# АХАХ, сошлось, везде cd708029e0b2
 
 cd ~/bisheng/AscendNPU-IR-Dev
 build-tools/apply_patches.sh
 
-mkdir -p build; cd build
-IS_REBUILD="--rebuild" # ""
-../build-tools/build.sh \
-  --build-type Release \
-  --build . \
-  --install-prefix ./install \
-  --c-compiler clang-19 --cxx-compiler clang++-19 \
-  --enable-assertion --enable-lld \
-  --disable-werror --disable-mlir-werror --disable-bishengir-werror \
-  --build-triton \
-  --fast-build "$IS_REBUILD"
+BUILDER=~/bisheng/builder.sh
+if [ ! -f $BUILDER ]; then
+    wget https://raw.githubusercontent.com/VectorASD/QuickStart/refs/heads/master/llvm/builder.sh -O $BUILDER
+    chmod +x $BUILDER
+fi
+grep -qxF 'alias build="$HOME/bisheng/builder.sh"' ~/.bashrc \
+  || echo 'alias build="$HOME/bisheng/builder.sh"' >> ~/.bashrc
+alias build="$BUILDER"
+
+build -b
 
 
 # если что-то сломалось, чекаем кеши:
@@ -713,27 +707,7 @@ IS_REBUILD="--rebuild" # ""
 if [ ! -f llvm_checker.py ]; then
     wget https://raw.githubusercontent.com/VectorASD/QuickStart/refs/heads/master/llvm/llvm_checker.py
 fi
-python llvm_checker.py CMakeCache.txt /usr/lib/llvm-19/bin
-
-
-# /home/vectorasd/bisheng/AscendNPU-IR-Dev/third-party/llvm-project/mlir/include/mlir/Dialect/Affine/IR/ValueBoundsOpInterfaceImpl.h:31:11: error: unknown type name 'int64_t'; did you mean '__int64_t'
-# это последствия использования Ubuntu-22.04 вместо Ubuntu-20.04, где убрано неявное использование заголовка на системный int64_t
-#include "mlir/Support/LLVM.h" // уже было
-#include <cstdint>             // добавлено
-
-# /home/vectorasd/bisheng/AscendNPU-IR-Dev/third-party/llvm-project/mlir/include/mlir/Target/SPIRV/Deserialization.h:29:51: error: use of undeclared identifier 'uint32_t'
-#include "mlir/IR/OwningOpRef.h" // уже было
-#include "mlir/Support/LLVM.h"   // уже было
-#include <cstdint>               // добавлено
-
-# И ЭТО ВСЯ ПРОБЛЕМА Ubuntu-22.04?! Затолкал пребилженный LLVM-19, поменял заголовок, всёёё!)
-
-
-INNER_BISHENG_INSTALL_PATH=$(python -c 'from triton.backends.ascend import utils; import os; print(os.path.join(os.path.dirname(os.path.abspath(utils.__file__)), "bishengir", "bin"))')
-#   А никто и не знал про этот трюк, что самое надёжное НЕ ПЕРЕЗАПИСЫВАЕМОЕ никак через env место имеено здесь :) Смотрите _get_npucompiler_path() в этом utils
-#   Ранее, по этой инструкции, уже выданы права на эту директории + установлен triton
-mkdir -p "$INNER_BISHENG_INSTALL_PATH"
-strip ~/bisheng/AscendNPU-IR-Dev/build/bin/bishengir-compile -o "$INNER_BISHENG_INSTALL_PATH/bishengir-compile"
+python llvm_checker.py CMakeCache.txt /opt/llvm/bin
 
 
 
@@ -772,7 +746,7 @@ if [ ! -f llvm_checker.py ]; then
 fi
 python llvm_checker.py CMakeCache.txt /usr/lib/llvm-23/bin || { echo "Dependencies failed"; exit 1; }
 
-ninja -j $(nproc)
+mold -run ninja -j $(nproc)
 
 sudo cmake --build . --target install
 [ -x /opt/llama/bin/llama-cli ] || { echo "Install failed"; exit 1; }
@@ -955,7 +929,7 @@ code ~/tmp/llama.cpp/ggml/src/ggml-impl.h
 #   Просто удаляем всё, что справа от '(...)'
 
 
-ninja -j $(nproc)
+mold -run ninja -j $(nproc)
 
 sudo cmake --build . --target install
 [ -f /opt/llama/lib/libggml-cuda.so ] || { echo "Install failed"; exit 1; }
