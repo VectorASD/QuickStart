@@ -50,7 +50,8 @@ build() {
         --disable-werror --disable-mlir-werror --disable-bishengir-werror \
         --build-triton \
         $(get_rebuild_flag $1) \
-        --build-bishengir-template --bisheng-compiler $2
+        --build-bishengir-template --bisheng-compiler $2 \
+        --add-cmake-options "-DLLVM_PARALLEL_LINK_JOBS=1"
 }
 
 find_tail() {
