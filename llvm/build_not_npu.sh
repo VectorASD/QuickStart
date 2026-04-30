@@ -45,6 +45,19 @@ find . -name libacl_tdt_channel.so
     ./cann-npu-runtime/runtime/lib/libacl_tdt_channel.so
     ./cann-npu-runtime/runtime/devlib/linux/aarch64/libacl_tdt_channel.so
     ./cann-npu-runtime/runtime/devlib/linux/x86_64/libacl_tdt_channel.so
+
+
+cp /mnt/c/Users/VectorASD/Downloads/Ascend-cann-950-ops_9.0.0-beta.2_linux-x86_64.run .
+./Ascend-cann-950-ops_9.0.0-beta.2_linux-x86_64.run --noexec --extract=Ascend-cann-950
+rm Ascend-cann-950-ops_9.0.0-beta.2_linux-x86_64.run
+
+cd ~/tmp/Ascend-cann-950/run_package
+for f in *.run; do ./"$f" --noexec --extract="${f%%_*}"; done
+rm *.run
+
+find . -name libhccl.so
+    ./cann-hccl/hccl/lib64/libhccl.so
+    Нашлась потеряшка!)
 COMMENT
 
 
@@ -2048,10 +2061,42 @@ fi
 
 
 : << 'COMMENT'
-# общий поиск либы и заголовков по символу:
+# базовая логика:
 
 LIB_BASE="$HOME/tmp/Ascend-cann/run_package"
+LIB_BASE_OPS="$HOME/tmp/Ascend-cann-950/run_package"
 SYMBOL=aclAppLog
+
+LIBS=(
+    "$LIB_BASE/cann-npu-runtime/runtime/lib/libascendcl.so"
+    "$LIB_BASE/cann-npu-runtime/runtime/lib/libruntime.so"
+    "$LIB_BASE/cann-npu-runtime/runtime/lib/libprofapi.so"
+    "$LIB_BASE/cann-ge-compiler/ge-compiler/lib64/libacl_op_compiler.so"
+    "$LIB_BASE_OPS/cann-hccl/hccl/lib64/libhccl.so"
+)
+
+function cut_base() {
+    local short="$1"
+    case "$short" in
+        "$LIB_BASE"/*)
+            short="${short#$LIB_BASE/}"
+            ;;
+        "$LIB_BASE_OPS"/*)
+            short="(ops) ${short#$LIB_BASE_OPS/}"
+            ;;
+    esac
+    echo "$short"
+}
+
+function symbol_finder() {
+    local SYMBOL="$1"
+    for f in ${LIBS[*]}; do
+        nm -D "$f" 2>/dev/null | grep -F $SYMBOL && echo " → $(cut_base $f)"
+    done
+}
+
+
+# общий поиск либы и заголовков по символу:
 
 for f in $(find $LIB_BASE -name '*.so*'); do
     nm -D "$f" 2>/dev/null | grep -F $SYMBOL && echo " → $f"
@@ -2061,14 +2106,8 @@ grep -Rnw $LIB_BASE -e $SYMBOL --include='*.h' 2>/dev/null
 
 # точечный поиск по либам и заголовкам:
 
-LIBS=(
-    cann-npu-runtime/runtime/lib/libascendcl.so
-    cann-npu-runtime/runtime/lib/libruntime.so
-    cann-npu-runtime/runtime/lib/libprofapi.so
-    cann-ge-compiler/ge-compiler/lib64/libacl_op_compiler.so
-)
 for f in ${LIBS[*]}; do
-    nm -D "$LIB_BASE/$f" 2>/dev/null | grep -F $SYMBOL && echo " → $f"
+    nm -D "$f" 2>/dev/null | grep -F $SYMBOL && echo " → $(cut_base $f)"
 done
 
 INCLUDES=(
@@ -2103,8 +2142,8 @@ echo "$REQ"
 for sym in $REQ; do
     echo "$sym"
     for lib in ${LIBS[*]}; do
-        if nm -D --defined-only "$LIB_BASE/$lib" 2>/dev/null | grep -qw "$sym"; then
-            echo "    $lib"
+        if nm -D --defined-only "$lib" 2>/dev/null | grep -qw "$sym"; then
+            echo "    $(cut_base $lib)"
         fi
     done
     for f in ${INCLUDES[*]}; do
