@@ -206,6 +206,7 @@ sudo make altinstall
 
 sudo update-alternatives --install /usr/bin/python python /opt/python311/bin/python3.11 1
 sudo update-alternatives --install /usr/bin/pip    pip    /opt/python311/bin/pip3.11    1
+sudo update-alternatives --install /usr/bin/pip3   pip    /opt/python311/bin/pip3.11    1 
 
 echo -e "$(python -V)\n$(pip -V)\n$(python -c 'import ssl; print(ssl.OPENSSL_VERSION)')"
 #   Python 3.11.15
@@ -278,8 +279,8 @@ sudo apt install libc++-20-dev libc++abi-20-dev -y
 #   для отката:
 # sudo rm -f /etc/apt/sources.list.d/*_llvm_org_*.list
 # sudo apt update
-# sudo apt remove 'clang-*' 'llvm-*' 'lld-*' 'lldb-*' 'libclang-*' 'libllvm*' 'libc++*' 'libc++abi*'
-# sudo apt autoremove
+# sudo apt remove 'clang-*' 'llvm-*' 'lld-*' 'lldb-*' 'libclang-*' 'libllvm*' 'libc++*' 'libc++abi*' -y
+# sudo apt autoremove -y
 
 
 
@@ -392,6 +393,7 @@ cmake ../llvm \
   -DLLVM_ENABLE_LIBXML2=OFF \
   -DLLVM_PARALLEL_LINK_JOBS=1 \
   -DLIBCXX_ENABLE_SHARED=ON \
+  -DLLVM_USE_LINKER=lld \
   -DCPACK_GENERATOR=STGZ
 
 if [ ! -f llvm_checker.py ]; then
@@ -410,7 +412,7 @@ mold -run ninja -j $(nproc)
 # -DLLVM_PARALLEL_LINK_JOBS=1 уже не спасёт, т.к. проблема уже в table-gen, а это даже и не компиляция ;'-}
 
 sudo cmake --build . --target install
-[ -x /opt/llvm/bin/ninja ] || { echo "Install failed"; exit 1; }
+[ -x /opt/llvm/bin/llvm-dis ] || { echo "Install failed"; exit 1; }
 
 
 
@@ -686,6 +688,11 @@ git -C third-party/triton/ checkout v3.5.0   # git ls-tree HEAD third-party/trit
 git -C third-party/llvm-project/ branch -v
 # * (HEAD detached at llvmorg-19.1.7) cd708029e0b2 Fix print module manifest file for macos (#122370)
 #   main                              121f5a96ff38 [libclc] Enable LLVM_RUNTIME_TARGETS in build system (#189892)
+
+sudo apt install libc++-15-dev libc++abi-15-dev
+# иначе, после работы patch_template_cmake в builder.sh, будет
+# /usr/include/c++/v1/__type_traits/remove_cv.h:22:32: error: unknown type name '__remove_cv'; did you mean 'remove_cv'?
+# т.е. одну проблему с STL обменяли на другую. CCEC собран под LLVM-15, по тому такая версия
 
 cd ~/bisheng/AscendNPU-IR-Dev
 build-tools/apply_patches.sh

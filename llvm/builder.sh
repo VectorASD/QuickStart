@@ -44,15 +44,16 @@ build() {
         --c-compiler clang --cxx-compiler clang++ \
         --build-type $BUILD_TYPE \
         --build ./ \
-        --jobs $(nproc) \
         --fast-build \
         --enable-assertion \
         --disable-werror --disable-mlir-werror --disable-bishengir-werror \
         --build-triton \
         $(get_rebuild_flag $1) \
-        --build-template --bisheng-compiler $2
-      # --add-cmake-options "-DLLVM_PARALLEL_LINK_JOBS=1 -DPython3_EXECUTABLE=/opt/python311/bin/python3.11 -DCMAKE_C_COMPILER_WORKS=ON -DCMAKE_CXX_COMPILER_WORKS=ON -DLLVM_ENABLE_LTO=OFF" \
+        --build-template --bisheng-compiler $2 \
+        --add-cmake-options "-DLLVM_PARALLEL_LINK_JOBS=1"
       # --python-binding
+    # --jobs $(nproc) \ 
+    # -DPython3_EXECUTABLE=/opt/python311/bin/python3.11 -DCMAKE_C_COMPILER_WORKS=ON -DCMAKE_CXX_COMPILER_WORKS=ON -DLLVM_ENABLE_LTO=OFF
 }
 
 find_tail() {
@@ -80,7 +81,43 @@ test() {
 
 
 
-CCEC_COMPILER="$HOME/tmp/Ascend-cann/run_package/cann-bisheng-compiler/bisheng_compiler/bin"
+patch_template_cmake() {
+    local REPO="$1"
+    local cmake_file="$REPO/bishengir/lib/Template/CMakeLists.txt"
+
+    if ! grep -q "nostdinc++" "$cmake_file"; then
+        echo "[INFO] Патчу bishengir/lib/Template/CMakeLists.txt…"
+
+        # Делаем резервную копию
+        cp "$cmake_file" "$cmake_file.bak"
+
+        # Вставляем флаги сразу после строки со std=c++17
+        sed -i '/list(APPEND bisheng_args -std=c++17)/a\
+    list(APPEND bisheng_args -nostdinc++)\
+    list(APPEND bisheng_args -I/usr/include/c++/v1)\n' "$cmake_file"
+
+        echo "[INFO] Патч применён."
+    fi
+}
+
+: << COMMENT
+# Чтобы не писало [ge-compiler] [2026-05-04 15:57:02] [ERROR]: install /home/vectorasd/selfgz19276920183/ge-compiler/lib64/llm_datadist_v1-0.0.1-py3-none-any.whl failed, pip3 is not installed.
+# под видом неустановленного драйвера!!! -_- -_- -_-
+sudo update-alternatives --install /usr/bin/pip3   pip    /opt/python311/bin/pip3.11    1
+
+# Источник ПРЯМЫХ ссылок для скачивания тулкитов и ops: https://github.com/Ascend/cann-container-image/tree/main/cann
+cd ~/tmp
+cp /mnt/c/Users/p60113046-bz/Downloads/Ascend-cann-toolkit_9.0.0-beta.2_linux-x86_64.run .
+./Ascend-cann-toolkit_9.0.0-beta.2_linux-x86_64.run --full --install-path="$HOME"
+
+# Второй фикс: надо выставить более старый STL
+# это делает patch_template_cmake
+sudo apt install libc++-15-dev libc++abi-15-dev   # иначе будет /usr/include/c++/v1/__type_traits/remove_cv.h:22:32: error: unknown type name '__remove_cv'; did you mean 'remove_cv'?
+COMMENT
+
+source "$HOME/cann/set_env.sh"
+CCEC_COMPILER="$ASCEND_HOME_PATH/bin"
+
 
 main() {
     REPO=$1 && shift
@@ -145,26 +182,27 @@ ensure_include() {
   # echo "Добавлено: $inc_line → $file"
 }
 
+
+
 BISHENG="$HOME/bisheng"
 PATH="/opt/llvm/bin:$PATH"  # 20.0.0, собран под тритон (и AscendNPU-IR без приписки '-Dev'), но хорошо работает с AscendNPU-IR-Dev
 
-INNER_BISHENG_INSTALL_PATH=$(python -c 'from triton.backends.ascend import utils; import os; print(os.path.join(os.path.dirname(os.path.abspath(utils.__file__)), "bishengir", "bin"))')
+INNER_BISHENG_INSTALL_PATH=$(python -c 'from triton.backends.ascend import utils; import os; print(os.path.join(os.path.dirname(os.path.abspath(utils.__file__)), "bishengir"))')
 #   А никто и не знал про этот трюк, что самое надёжное НЕ ПЕРЕЗАПИСЫВАЕМОЕ никак через env место имеено здесь :) Смотрите _get_npucompiler_path() в этом utils
 #   Ранее, по этой инструкции, уже выданы права на эту директории + установлен triton
 
 build_hivmc() {
     local REPO="$BISHENG/hivmc"
-    local BIN="$INNER_BISHENG_INSTALL_PATH"  # "$BISHENG/bin"
-    mkdir -p "$BIN"
+    local BIN="$INNER_BISHENG_INSTALL_PATH/distrib/bin"  # "$BISHENG/bin"
 
     if [ -v FLAG_BUILD ]; then
         local FLAGS=""
         [ -v FLAG_REBUILD ] && ARGS="${ARGS}r"
-        main $REPO "-${ARGS}b"
+        main "$REPO" "-${ARGS}b"
 
         echo "installing..."
-        mkdir -p $BIN
-        strip $REPO/build/bin/hivmc-a5 -o $BIN/hivmc-a5
+        mkdir -p "$BIN"
+        strip "$REPO/build/bin/hivmc-a5" -o "$BIN/hivmc-a5"
         echo "installed to: $BIN"
     fi
 
@@ -176,7 +214,8 @@ build_hivmc() {
 
 build_bishengir_compile() {
     local REPO="$BISHENG/AscendNPU-IR-Dev"
-    local BIN="$INNER_BISHENG_INSTALL_PATH"  # "$BISHENG/bin"
+    local BIN="$INNER_BISHENG_INSTALL_PATH/distrib/bin"  # "$BISHENG/bin"
+    local LIB="$INNER_BISHENG_INSTALL_PATH/distrib/lib"  # "$BISHENG/lib"
     mkdir -p "$BIN"
 
     if [ -v FLAG_REBUILD ]; then
@@ -186,6 +225,8 @@ build_bishengir_compile() {
 
     ensure_include "$REPO/third-party/llvm-project/mlir/include/mlir/Dialect/Affine/IR/ValueBoundsOpInterfaceImpl.h" cstdint
     ensure_include "$REPO/third-party/llvm-project/mlir/include/mlir/Target/SPIRV/Deserialization.h" cstdint
+
+    patch_template_cmake "$REPO"   # иначе будет /usr/lib/gcc/x86_64-linux-gnu/16/../../../../include/c++/16/bits/stl_iterator.h:1337:19: error: member access into incomplete type 'const __gnu_cxx::__normal_iterator<const char *, std::basic_string<char>>'
 
     : << COMMENT
 /home/vectorasd/bisheng/AscendNPU-IR-Dev/third-party/llvm-project/mlir/include/mlir/Dialect/Affine/IR/ValueBoundsOpInterfaceImpl.h:31:11: error: unknown type name 'int64_t'; did you mean '__int64_t'
@@ -207,9 +248,9 @@ COMMENT
         main $REPO "-${ARGS}b"
 
         echo "installing..."
-        mkdir -p $BIN
-        strip $REPO/build/bin/bishengir-compile -o $BIN/bishengir-compile
-        echo "installed to: $BIN"
+        mkdir -p "$BIN" "$LIB"
+        strip "$REPO/build/bin/bishengir-compile" -o "$BIN/bishengir-compile"
+        echo "installed to: $BIN & $LIB"
     fi
 
     if [ -v FLAG_TEST ]; then
