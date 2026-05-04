@@ -50,8 +50,9 @@ build() {
         --disable-werror --disable-mlir-werror --disable-bishengir-werror \
         --build-triton \
         $(get_rebuild_flag $1) \
-        --build-bishengir-template --bisheng-compiler $2 \
-        --add-cmake-options "-DLLVM_PARALLEL_LINK_JOBS=1"
+        --build-template --bisheng-compiler $2
+      # --add-cmake-options "-DLLVM_PARALLEL_LINK_JOBS=1 -DPython3_EXECUTABLE=/opt/python311/bin/python3.11 -DCMAKE_C_COMPILER_WORKS=ON -DCMAKE_CXX_COMPILER_WORKS=ON -DLLVM_ENABLE_LTO=OFF" \
+      # --python-binding
 }
 
 find_tail() {
@@ -79,7 +80,7 @@ test() {
 
 
 
-CCEC_COMPILER="$BISHENG_INSTALL_PATH"
+CCEC_COMPILER="$HOME/tmp/Ascend-cann/run_package/cann-bisheng-compiler/bisheng_compiler/bin"
 
 main() {
     REPO=$1 && shift
@@ -177,6 +178,11 @@ build_bishengir_compile() {
     local REPO="$BISHENG/AscendNPU-IR-Dev"
     local BIN="$INNER_BISHENG_INSTALL_PATH"  # "$BISHENG/bin"
     mkdir -p "$BIN"
+
+    if [ -v FLAG_REBUILD ]; then
+        cd $REPO
+        . $REPO/build-tools/apply_patches.sh
+    fi
 
     ensure_include "$REPO/third-party/llvm-project/mlir/include/mlir/Dialect/Affine/IR/ValueBoundsOpInterfaceImpl.h" cstdint
     ensure_include "$REPO/third-party/llvm-project/mlir/include/mlir/Target/SPIRV/Deserialization.h" cstdint
