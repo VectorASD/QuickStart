@@ -124,6 +124,7 @@ safe_clone --tags    --no-checkout https://github.com/triton-lang/triton.git
 safe_clone --filter=blob:none --no-checkout https://gitcode.com/Ascend/triton-ascend.git
 safe_clone --filter=blob:none --no-checkout https://gitcode.com/Ascend/AscendNPU-IR.git
 safe_clone --depth 1 --no-checkout https://github.com/ggerganov/llama.cpp     # Сколько звёзд?! Трёхкратное уделывание llvm-project по звёздам и шестикратное по числу коммитов (чем меньше коммитов, но больше звёзде, тем лучше)!
+safe_clone --no-checkout https://gitcode.com/Ascend/pytorch.git
 
 TOKEN="???"   вытаскиваем его отсюда: https://gitcode.com/setting/token-classic
 # $USER меняем на своё, если юзер WSL != юзер гиткода
