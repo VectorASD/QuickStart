@@ -1,8 +1,8 @@
 #include "common.h"
-#include "not_acl.cpp"  // aclGetTensorDescType, calc_num_elements
-#include <cstring>      // memset, size_t
-#include <iostream>     // cout, endl
-#include <random>       // bernoulli_distribution, mt19937, normal_distribution, random_device, uniform_int_distribution
+#include "not_acl.cpp"  // aclGetTensorDescType
+#include "helpers.cpp"  // calc_num_elements, formatTensorList
+
+#include <cstring>      // memcpy, memset, size_t, strstr
 
 void __not_acl_op_compiler_placeholder() {}
 
@@ -81,108 +81,6 @@ typedef enum {
 
 
 
-static std::mt19937 g_rng(std::random_device{}());
-
-static void fill_random_normal(aclDataType dtype, void* data, size_t count, std::mt19937& rng) {
-    if (count == 0 || !data) return;
-    switch (dtype) {
-        case ACL_FLOAT: {
-            auto* p = static_cast<float*>(data);
-            std::normal_distribution<float> dist(0.0f, 1.0f);
-            for (size_t i = 0; i < count; ++i) p[i] = dist(rng);
-            break;
-        }
-        case ACL_FLOAT16:
-        case ACL_BF16: {
-            auto* p = static_cast<uint16_t*>(data);
-            std::normal_distribution<float> dist(0.0f, 1.0f);
-            for (size_t i = 0; i < count; ++i) {
-                float v = dist(rng);
-                uint32_t bits;
-                std::memcpy(&bits, &v, sizeof(v));
-                p[i] = static_cast<uint16_t>(bits >> 16);
-            }
-            break;
-        }
-        case ACL_DOUBLE: {
-            auto* p = static_cast<double*>(data);
-            std::normal_distribution<double> dist(0.0, 1.0);
-            for (size_t i = 0; i < count; ++i) p[i] = dist(rng);
-            break;
-        }
-        case ACL_INT8: {
-            auto* p = static_cast<int8_t*>(data);
-            std::uniform_int_distribution<int16_t> dist(-128, 127);
-            for (size_t i = 0; i < count; ++i) p[i] = static_cast<int8_t>(dist(rng));
-            break;
-        }
-        case ACL_INT16: {
-            auto* p = static_cast<int16_t*>(data);
-            std::uniform_int_distribution<int16_t> dist;
-            for (size_t i = 0; i < count; ++i) p[i] = dist(rng);
-            break;
-        }
-        case ACL_INT32: {
-            auto* p = static_cast<int32_t*>(data);
-            std::uniform_int_distribution<int32_t> dist;
-            for (size_t i = 0; i < count; ++i) p[i] = dist(rng);
-            break;
-        }
-        case ACL_INT64: {
-            auto* p = static_cast<int64_t*>(data);
-            std::uniform_int_distribution<int64_t> dist;
-            for (size_t i = 0; i < count; ++i) p[i] = dist(rng);
-            break;
-        }
-        case ACL_UINT8: {
-            auto* p = static_cast<uint8_t*>(data);
-            std::uniform_int_distribution<uint16_t> dist(0, 255);
-            for (size_t i = 0; i < count; ++i) p[i] = static_cast<uint8_t>(dist(rng));
-            break;
-        }
-        case ACL_UINT16: {
-            auto* p = static_cast<uint16_t*>(data);
-            std::uniform_int_distribution<uint16_t> dist;
-            for (size_t i = 0; i < count; ++i) p[i] = dist(rng);
-            break;
-        }
-        case ACL_UINT32: {
-            auto* p = static_cast<uint32_t*>(data);
-            std::uniform_int_distribution<uint32_t> dist;
-            for (size_t i = 0; i < count; ++i) p[i] = dist(rng);
-            break;
-        }
-        case ACL_UINT64: {
-            auto* p = static_cast<uint64_t*>(data);
-            std::uniform_int_distribution<uint64_t> dist;
-            for (size_t i = 0; i < count; ++i) p[i] = dist(rng);
-            break;
-        }
-        case ACL_BOOL: {
-            auto* p = static_cast<bool*>(data);
-            std::bernoulli_distribution dist(0.5);
-            for (size_t i = 0; i < count; ++i) p[i] = dist(rng);
-            break;
-        }
-        case ACL_COMPLEX64: {
-            float* p = static_cast<float*>(data);
-            std::normal_distribution<float> dist(0.0f, 1.0f);
-            for (size_t i = 0; i < count * 2; ++i) p[i] = dist(rng);
-            break;
-        }
-        case ACL_COMPLEX128: {
-            double* p = static_cast<double*>(data);
-            std::normal_distribution<double> dist(0.0, 1.0);
-            for (size_t i = 0; i < count * 2; ++i) p[i] = dist(rng);
-            break;
-        }
-        default:
-            memset(data, 0, count * aclDataTypeBytes(dtype));
-    }
-}
-
-
-
 ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
     int numInputs, const aclTensorDesc *const inputDesc[], const aclDataBuffer *const inputs[],
     int numOutputs, const aclTensorDesc *const outputDesc[], aclDataBuffer *const outputs[],
@@ -194,14 +92,16 @@ ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
         << " opPath=" << (opPath ? opPath : "(null)")
         << "\n    numInputs=" << numInputs << " numOutputs=" << numOutputs << '\n'
         << formatTensorList("input", inputDesc, inputs, numInputs);
+    log_output(log);
 
     // --- эмуляция операций ---
-    if (opType && strstr(opType, "StatelessRandomNormalV2")) {
-        // Извлечение seed из input[1]
+    if (!opType) {
+    } else if (strstr(opType, "StatelessRandomNormalV2")) {
+        // Извлечение seed (остаётся без изменений)
         uint64_t seed_value = 0;
         bool has_seed = false;
         if (numInputs >= 2 && inputs[1] && inputDesc[1] && inputs[1]->data) {
-            if (aclGetTensorDescType(inputDesc[1]) == ACL_UINT64) {
+            if (aclGetTensorDescType(inputDesc[1], false) == ACL_UINT64) {
                 size_t seed_count = calc_num_elements(inputDesc[1], inputs[1]->size);
                 if (seed_count >= 1) {
                     const uint64_t* seed_ptr = static_cast<const uint64_t*>(inputs[1]->data);
@@ -221,13 +121,308 @@ ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
 
         for (int i = 0; i < numOutputs; ++i) {
             if (outputs[i] && outputDesc[i] && outputs[i]->data) {
-                size_t count = calc_num_elements(outputDesc[i], outputs[i]->size);
-                aclDataType dt = aclGetTensorDescType(outputDesc[i]);
-                fill_random_normal(dt, outputs[i]->data, count, local_rng);
+                aclDataType dt = aclGetTensorDescType(outputDesc[i], false);
+                switch (dt) {
+                DISPATCH_RANDOM(ACL_FLOAT)
+                DISPATCH_RANDOM(ACL_DOUBLE)
+                DISPATCH_RANDOM(ACL_FLOAT16)
+                DISPATCH_RANDOM(ACL_BF16)
+                DISPATCH_RANDOM(ACL_INT8)
+                DISPATCH_RANDOM(ACL_UINT8)
+                DISPATCH_RANDOM(ACL_INT16)
+                DISPATCH_RANDOM(ACL_UINT16)
+                DISPATCH_RANDOM(ACL_INT32)
+                DISPATCH_RANDOM(ACL_UINT32)
+                DISPATCH_RANDOM(ACL_INT64)
+                DISPATCH_RANDOM(ACL_UINT64)
+                DISPATCH_RANDOM(ACL_BOOL)
+                // Остальные типы не поддерживаются, fallback — оставляем буфер без изменений
+                default: break;
+                }
+            }
+        }
+    } else if (strcmp(opType, "Mul") == 0 && numInputs == 2 && numOutputs == 1) {
+        // Поэлементное умножение с broadcasting
+        aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
+        if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data && inputs[1] && inputs[1]->data) {
+            switch (dt) {
+                DISPATCH_MUL(ACL_FLOAT)
+                DISPATCH_MUL(ACL_DOUBLE)
+                DISPATCH_MUL(ACL_INT8)
+                DISPATCH_MUL(ACL_UINT8)
+                DISPATCH_MUL(ACL_INT16)
+                DISPATCH_MUL(ACL_UINT16)
+                DISPATCH_MUL(ACL_INT32)
+                DISPATCH_MUL(ACL_UINT32)
+                DISPATCH_MUL(ACL_INT64)
+                DISPATCH_MUL(ACL_UINT64)
+                DISPATCH_MUL(ACL_FLOAT16)
+                DISPATCH_MUL(ACL_BF16)
+            default:
+                // fallback: копируем первый вход в выход (для неподдерживаемых типов)
+                size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
+                size_t elemSize = aclDataTypeBytes(dt);
+                if (count > 0 && elemSize > 0) {
+                    memcpy(outputs[0]->data, inputs[0]->data, std::min(count * elemSize, outputs[0]->size));
+                }
+                break;
+            }
+        }
+    } else if (strcmp(opType, "Add") == 0 && numInputs == 2 && numOutputs == 1) {
+        // Поэлементное сложение с broadcasting
+        aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
+        if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data && inputs[1] && inputs[1]->data) {
+            switch (dt) {
+                DISPATCH_ADD(ACL_FLOAT)
+                DISPATCH_ADD(ACL_DOUBLE)
+                DISPATCH_ADD(ACL_INT8)
+                DISPATCH_ADD(ACL_UINT8)
+                DISPATCH_ADD(ACL_INT16)
+                DISPATCH_ADD(ACL_UINT16)
+                DISPATCH_ADD(ACL_INT32)
+                DISPATCH_ADD(ACL_UINT32)
+                DISPATCH_ADD(ACL_INT64)
+                DISPATCH_ADD(ACL_UINT64)
+                DISPATCH_ADD(ACL_FLOAT16)
+                DISPATCH_ADD(ACL_BF16)
+            default:
+                size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
+                size_t elemSize = aclDataTypeBytes(dt);
+                if (count > 0 && elemSize > 0) {
+                    memcpy(outputs[0]->data, inputs[0]->data, std::min(count * elemSize, outputs[0]->size));
+                }
+                break;
+            }
+        }
+    } else if (strcmp(opType, "IsFinite") == 0 && numInputs == 1 && numOutputs == 1) {
+        aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+        if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data) {
+            switch (inDt) {
+                DISPATCH_ISFINITE(ACL_FLOAT)
+                DISPATCH_ISFINITE(ACL_DOUBLE)
+                DISPATCH_ISFINITE(ACL_FLOAT16)
+                DISPATCH_ISFINITE(ACL_BF16)
+                DISPATCH_ISFINITE(ACL_INT8)
+                DISPATCH_ISFINITE(ACL_UINT8)
+                DISPATCH_ISFINITE(ACL_INT16)
+                DISPATCH_ISFINITE(ACL_UINT16)
+                DISPATCH_ISFINITE(ACL_INT32)
+                DISPATCH_ISFINITE(ACL_UINT32)
+                DISPATCH_ISFINITE(ACL_INT64)
+                DISPATCH_ISFINITE(ACL_UINT64)
+                DISPATCH_ISFINITE(ACL_BOOL)
+            default:
+                // fallback: заполняем false
+                size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
+                if (count > 0 && outputs[0]->data) {
+                    memset(outputs[0]->data, 0, count * sizeof(bool));
+                }
+                break;
+            }
+        }
+    } else if (strcmp(opType, "NotEqual") == 0 && numInputs == 2 && numOutputs == 1) {
+        aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+        if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data && inputs[1] && inputs[1]->data) {
+            switch (inDt) {
+                DISPATCH_COMPARE(ACL_FLOAT,    std::not_equal_to<float>{})
+                DISPATCH_COMPARE(ACL_DOUBLE,   std::not_equal_to<double>{})
+                DISPATCH_COMPARE(ACL_INT8,     std::not_equal_to<int8_t>{})
+                DISPATCH_COMPARE(ACL_UINT8,    std::not_equal_to<uint8_t>{})
+                DISPATCH_COMPARE(ACL_INT16,    std::not_equal_to<int16_t>{})
+                DISPATCH_COMPARE(ACL_UINT16,   std::not_equal_to<uint16_t>{})
+                DISPATCH_COMPARE(ACL_INT32,    std::not_equal_to<int32_t>{})
+                DISPATCH_COMPARE(ACL_UINT32,   std::not_equal_to<uint32_t>{})
+                DISPATCH_COMPARE(ACL_INT64,    std::not_equal_to<int64_t>{})
+                DISPATCH_COMPARE(ACL_UINT64,   std::not_equal_to<uint64_t>{})
+                // Для half/bf16: преобразуем в float внутри предиката, или используем собственный функтор
+                DISPATCH_COMPARE(ACL_FLOAT16,  [](uint16_t a, uint16_t b) { return half_to_float(a) != half_to_float(b); })
+                DISPATCH_COMPARE(ACL_BF16,     [](uint16_t a, uint16_t b) { return bf16_to_float(a) != bf16_to_float(b); })
+                DISPATCH_COMPARE(ACL_BOOL,     std::not_equal_to<bool>{})
+            default:
+                size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
+                if (count > 0 && outputs[0]->data) {
+                    memset(outputs[0]->data, 0, count * sizeof(bool));
+                }
+                break;
+            }
+        }
+    } else if (strcmp(opType, "LogicalAnd") == 0 && numInputs == 2 && numOutputs == 1) {
+        aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+        if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data && inputs[1] && inputs[1]->data) {
+            switch (inDt) {
+                DISPATCH_LOGICAL(ACL_BOOL, std::logical_and<bool>{})
+            default:
+                size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
+                if (count > 0 && outputs[0]->data) {
+                    memset(outputs[0]->data, 0, count * sizeof(bool));
+                }
+                break;
+            }
+        }
+    } else if (strcmp(opType, "MaskedSelect") == 0 && numInputs == 2 && numOutputs == 1) {
+        aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+        if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data && inputs[1] && inputs[1]->data) {
+            switch (inDt) {
+                DISPATCH_MASKED_SELECT(ACL_FLOAT)
+                DISPATCH_MASKED_SELECT(ACL_DOUBLE)
+                DISPATCH_MASKED_SELECT(ACL_INT8)
+                DISPATCH_MASKED_SELECT(ACL_UINT8)
+                DISPATCH_MASKED_SELECT(ACL_INT16)
+                DISPATCH_MASKED_SELECT(ACL_UINT16)
+                DISPATCH_MASKED_SELECT(ACL_INT32)
+                DISPATCH_MASKED_SELECT(ACL_UINT32)
+                DISPATCH_MASKED_SELECT(ACL_INT64)
+                DISPATCH_MASKED_SELECT(ACL_UINT64)
+                DISPATCH_MASKED_SELECT(ACL_FLOAT16)
+                DISPATCH_MASKED_SELECT(ACL_BF16)
+                DISPATCH_MASKED_SELECT(ACL_BOOL)
+            default:
+                break; // оставляем выходной буфер как есть
+            }
+        }
+    } else if (strcmp(opType, "Abs") == 0 && numInputs == 1 && numOutputs == 1) {
+        aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);  // false подавляет лог
+        if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data) {
+            switch (inDt) {
+                DISPATCH_UNARY(ACL_FLOAT,   std::abs)
+                DISPATCH_UNARY(ACL_DOUBLE,  std::abs)
+                DISPATCH_UNARY(ACL_INT8,    std::abs)
+                DISPATCH_UNARY(ACL_INT16,   std::abs)
+                DISPATCH_UNARY(ACL_INT32,   std::abs)
+                DISPATCH_UNARY(ACL_INT64,   std::abs)
+                DISPATCH_UNARY(ACL_FLOAT16, [](uint16_t v) { return float_to_half(std::abs(half_to_float(v))); })
+                DISPATCH_UNARY(ACL_BF16,    [](uint16_t v) { return float_to_bf16(std::abs(bf16_to_float(v))); })
+            default:
+                // fallback: копируем вход в выход
+                size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
+                size_t elemSize = aclDataTypeBytes(inDt);
+                if (count > 0 && elemSize > 0) {
+                    memcpy(outputs[0]->data, inputs[0]->data, count * elemSize);
+                }
+                break;
+            }
+        }
+    } else if (strcmp(opType, "ReduceMin") == 0 && numInputs == 2 && numOutputs == 1) {
+        aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+        if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data) {
+            switch (inDt) {
+                DISPATCH_REDUCE_MIN(ACL_FLOAT)
+                DISPATCH_REDUCE_MIN(ACL_DOUBLE)
+                DISPATCH_REDUCE_MIN(ACL_INT8)
+                DISPATCH_REDUCE_MIN(ACL_UINT8)
+                DISPATCH_REDUCE_MIN(ACL_INT16)
+                DISPATCH_REDUCE_MIN(ACL_UINT16)
+                DISPATCH_REDUCE_MIN(ACL_INT32)
+                DISPATCH_REDUCE_MIN(ACL_UINT32)
+                DISPATCH_REDUCE_MIN(ACL_INT64)
+                DISPATCH_REDUCE_MIN(ACL_UINT64)
+                DISPATCH_REDUCE_MIN(ACL_FLOAT16)
+                DISPATCH_REDUCE_MIN(ACL_BF16)
+            default:
+                // fallback: копируем первый элемент входа в выходной буфер
+                size_t elemSize = aclDataTypeBytes(inDt);
+                size_t outCount = calc_num_elements(outputDesc[0], outputs[0]->size);
+                if (outCount > 0 && elemSize > 0 && outputs[0]->data && inputs[0]->data) {
+                    memcpy(outputs[0]->data, inputs[0]->data, std::min(elemSize, outputs[0]->size));
+                }
+                break;
+            }
+        }
+    } else if (strcmp(opType, "ReduceMax") == 0 && numInputs == 2 && numOutputs == 1) {
+        aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+        if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data && inputs[1] && inputs[1]->data) {
+            switch (inDt) {
+                DISPATCH_REDUCE_MAX(ACL_FLOAT)
+                DISPATCH_REDUCE_MAX(ACL_DOUBLE)
+                DISPATCH_REDUCE_MAX(ACL_INT8)
+                DISPATCH_REDUCE_MAX(ACL_UINT8)
+                DISPATCH_REDUCE_MAX(ACL_INT16)
+                DISPATCH_REDUCE_MAX(ACL_UINT16)
+                DISPATCH_REDUCE_MAX(ACL_INT32)
+                DISPATCH_REDUCE_MAX(ACL_UINT32)
+                DISPATCH_REDUCE_MAX(ACL_INT64)
+                DISPATCH_REDUCE_MAX(ACL_UINT64)
+                DISPATCH_REDUCE_MAX(ACL_FLOAT16)
+                DISPATCH_REDUCE_MAX(ACL_BF16)
+            default:
+                // fallback: копируем первый элемент входа в выходной буфер
+                size_t elemSize = aclDataTypeBytes(inDt);
+                size_t outCount = calc_num_elements(outputDesc[0], outputs[0]->size);
+                if (outCount > 0 && elemSize > 0 && outputs[0]->data && inputs[0]->data) {
+                    memcpy(outputs[0]->data, inputs[0]->data, std::min(elemSize, outputs[0]->size));
+                }
+                break;
+            }
+        }
+    } else if (strcmp(opType, "Ceil") == 0 && numInputs == 1 && numOutputs == 1) {
+        aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+        if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data) {
+            switch (inDt) {
+                DISPATCH_UNARY(ACL_FLOAT,   std::ceil)
+                DISPATCH_UNARY(ACL_DOUBLE,  std::ceil)
+                DISPATCH_UNARY(ACL_FLOAT16, [](uint16_t v) { return float_to_half(std::ceil(half_to_float(v))); })
+                DISPATCH_UNARY(ACL_BF16,    [](uint16_t v) { return float_to_bf16(std::ceil(bf16_to_float(v))); })
+            default:
+                // Для целых типов ceil не меняет значение, просто копируем вход
+                size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
+                size_t elemSize = aclDataTypeBytes(inDt);
+                if (count > 0 && elemSize > 0) {
+                    memcpy(outputs[0]->data, inputs[0]->data, std::min(count * elemSize, outputs[0]->size));
+                }
+                break;
+            }
+        }
+    } else if (strcmp(opType, "RealDiv") == 0 && numInputs == 2 && numOutputs == 1) {
+        aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
+        if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data && inputs[1] && inputs[1]->data) {
+            switch (dt) {
+                DISPATCH_DIV(ACL_FLOAT)
+                DISPATCH_DIV(ACL_DOUBLE)
+                DISPATCH_DIV(ACL_INT8)    // деление целых — осторожно!
+                DISPATCH_DIV(ACL_UINT8)
+                DISPATCH_DIV(ACL_INT16)
+                DISPATCH_DIV(ACL_UINT16)
+                DISPATCH_DIV(ACL_INT32)
+                DISPATCH_DIV(ACL_UINT32)
+                DISPATCH_DIV(ACL_INT64)
+                DISPATCH_DIV(ACL_UINT64)
+                DISPATCH_DIV(ACL_FLOAT16)
+                DISPATCH_DIV(ACL_BF16)
+            default:
+                size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
+                size_t elemSize = aclDataTypeBytes(dt);
+                if (count > 0 && elemSize > 0) {
+                    memcpy(outputs[0]->data, inputs[0]->data, std::min(count * elemSize, outputs[0]->size));
+                }
+                break;
+            }
+        }
+    } else if (strcmp(opType, "Greater") == 0 && numInputs == 2 && numOutputs == 1) {
+        aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+        if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data && inputs[1] && inputs[1]->data) {
+            switch (inDt) {
+                DISPATCH_COMPARE(ACL_FLOAT,    std::greater<float>{})
+                DISPATCH_COMPARE(ACL_DOUBLE,   std::greater<double>{})
+                DISPATCH_COMPARE(ACL_INT8,     std::greater<int8_t>{})
+                DISPATCH_COMPARE(ACL_UINT8,    std::greater<uint8_t>{})
+                DISPATCH_COMPARE(ACL_INT16,    std::greater<int16_t>{})
+                DISPATCH_COMPARE(ACL_UINT16,   std::greater<uint16_t>{})
+                DISPATCH_COMPARE(ACL_INT32,    std::greater<int32_t>{})
+                DISPATCH_COMPARE(ACL_UINT32,   std::greater<uint32_t>{})
+                DISPATCH_COMPARE(ACL_INT64,    std::greater<int64_t>{})
+                DISPATCH_COMPARE(ACL_UINT64,   std::greater<uint64_t>{})
+                DISPATCH_COMPARE(ACL_FLOAT16,  [](uint16_t a, uint16_t b) { return half_to_float(a) > half_to_float(b); })
+                DISPATCH_COMPARE(ACL_BF16,     [](uint16_t a, uint16_t b) { return bf16_to_float(a) > bf16_to_float(b); })
+                DISPATCH_COMPARE(ACL_BOOL,     std::greater<bool>{})
+            default:
+                size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
+                if (count > 0 && outputs[0]->data) {
+                    memset(outputs[0]->data, 0, count * sizeof(bool));
+                }
+                break;
             }
         }
     }
-    // Остальные операции пока без изменений (можно добавить fallback при необходимости)
 
     log << formatTensorList("output", outputDesc, outputs, numOutputs)
         << "    stream=" << stream;

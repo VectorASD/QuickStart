@@ -233,11 +233,6 @@ struct aclopAttr {
     std::unordered_map<std::string, std::vector<std::vector<int64_t>>> list_list_ints;
 };
 
-static inline void log_ptr(const char* name, const void* ptr) {
-    std::cout << name << "=0x"
-              << std::hex << reinterpret_cast<size_t>(ptr)
-              << std::dec;
-}
 
 static std::mutex g_log_mutex;
 
@@ -249,5 +244,6 @@ static void log_output(const std::string& msg) {
     std::lock_guard<std::mutex> lock(g_log_mutex);
     std::cout << msg << std::endl;
 }
+
 
 #endif // NOT_NPU_COMMON_H
