@@ -32,13 +32,14 @@ function symbol_finder() {
     done
 }
 
-
-# общий поиск либы и заголовков по символу:
-
-for f in $(find $LIB_BASE -name '*.so*'); do
-    nm -D "$f" 2>/dev/null | grep -F $SYMBOL && echo " → $f"
-done
-grep -Rnw $LIB_BASE -e $SYMBOL --include='*.h' 2>/dev/null
+function lib_finder() {
+    # общий поиск либы и заголовков по символу
+    local SYMBOL="$1"
+    for f in $(find $LIB_BASE -name '*.so*') $(find $LIB_BASE_OPS -name '*.so*'); do
+        nm -D "$f" 2>/dev/null | grep -F $SYMBOL && echo " → $f"
+    done
+    grep -Rnw $LIB_BASE -e $SYMBOL --include='*.h' 2>/dev/null
+}
 
 
 # точечный поиск по либам и заголовкам:
@@ -70,11 +71,15 @@ done | sort -u)
 echo "$SYM_BASE"
 
 TORCH_NPU_LIBS=/opt/python311/lib/python3.11/site-packages/torch_npu/lib
-REQ=$(for f in $(find $TORCH_NPU_LIBS -name '*.so*'); do
-    nm -D --undefined-only "$f" 2>/dev/null \
-        | awk '$NF !~ /_/ && $NF !~ /@/ && $NF ~ /[A-Z]/ {print $NF}'
-done | sort -u)
-echo "$REQ"
+#   статическая линковка:
+# REQ=$(for f in $(find $TORCH_NPU_LIBS -name '*.so*'); do
+#     nm -D --undefined-only "$f" 2>/dev/null \
+#         | awk '$NF !~ /_/ && $NF !~ /@/ && $NF ~ /[A-Z]/ {print $NF}'
+# done | sort -u)
+# echo "$REQ"
+#   динамическая загрузка функций из torch_npu (собраны посредством register_finder.py):
+REQ=(AmlAicoreDetectOnline AmlP2PDetectOnline HcclAllGather HcclAllGatherV HcclAllReduce HcclAlltoAll HcclAlltoAllV HcclBatchSendRecv HcclBroadcast HcclCommActivateCommMemory HcclCommDeactivateCommMemory HcclCommDeregister HcclCommDestroy HcclCommExchangeMem HcclCommInitAll HcclCommInitClusterInfoConfig HcclCommInitRootInfo HcclCommInitRootInfoConfig HcclCommRegister HcclCommResume HcclCommSetMemoryRange HcclCommUnsetMemoryRange HcclCommWorkingDevNicSet HcclCreateSubCommConfig HcclGetCommAsyncError HcclGetCommConfigCapability HcclGetCommName HcclGetRootInfo HcclGroupEnd HcclGroupStart HcclRecv HcclReduce HcclReduceScatter HcclReduceScatterV HcclScatter HcclSend HcclSetConfig LcalCommInit LcalCommInitRankLocal LcclAllGather LcclAllReduce LcclBroadcast LcclCommDestroy LcclReduceScatter aclCreateGraphDumpOpt aclDestroyAclOpExecutor aclDestroyGraphDumpOpt aclGenGraphAndDumpForOp aclGetCannAttribute aclGetCannAttributeList aclGetCompileopt aclGetCompileoptSize aclGetDeviceCapability aclGetRecentErrMsg aclSetCompileopt aclmdlRICaptureBegin aclmdlRICaptureEnd aclmdlRICaptureGetInfo aclmdlRICaptureTaskGrpBegin aclmdlRICaptureTaskGrpEnd aclmdlRICaptureTaskUpdateBegin aclmdlRICaptureTaskUpdateEnd aclmdlRICaptureThreadExchangeMode aclmdlRIDebugJsonPrint aclmdlRIDebugPrint aclmdlRIDestroy aclmdlRIExecuteAsync aclnnReselectStaticKernel aclnnSilentCheck aclnnSilentCheckV2 aclopCompileAndExecuteV2 aclopStartDumpArgs aclopStopDumpArgs aclprofCreateConfig aclprofCreateStepInfo aclprofDestroyConfig aclprofDestroyStepInfo aclprofFinalize aclprofGetStepTimestamp aclprofGetSupportedFeatures aclprofGetSupportedFeaturesV2 aclprofInit aclprofMarkEx aclprofRegisterDeviceCallback aclprofSetConfig aclprofStart aclprofStop aclprofWarmup aclrtCmoAsync aclrtCreateEventExWithFlag aclrtCreateEventWithFlag aclrtCreateStream aclrtCreateStreamWithConfig aclrtCtxSetSysParamOpt aclrtDestroyStreamForce aclrtDeviceCanAccessPeer aclrtDeviceGetBareTgid aclrtDeviceGetUuid aclrtDeviceTaskAbort aclrtEventGetTimestamp aclrtFreePhysical aclrtGetDeviceInfo aclrtGetDeviceResLimit aclrtGetDeviceUtilizationRate aclrtGetErrorVerbose aclrtGetLastError aclrtGetMemUceInfo aclrtGetMemUsageInfo aclrtGetPrimaryCtxState aclrtGetResInCurrentThread aclrtGetSocName aclrtGetStreamOverflowSwitch aclrtGetStreamResLimit aclrtHostRegister aclrtHostRegisterV2 aclrtHostUnregister aclrtIpcGetEventHandle aclrtIpcMemClose aclrtIpcMemGetExportKey aclrtIpcMemImportByKey aclrtIpcMemSetImportPid aclrtIpcOpenEventHandle aclrtLaunchCallback aclrtLaunchHostFunc aclrtMallocAlign32 aclrtMallocHostWithCfg aclrtMallocPhysical aclrtMapMem aclrtMemExportToShareableHandle aclrtMemImportFromShareableHandle aclrtMemSetPidToShareableHandle aclrtMemUceRepair aclrtMemcpyAsyncWithCondition aclrtMemcpyBatch aclrtMemcpyBatchAsync aclrtMemset aclrtPeekAtLastError aclrtPointerGetAttributes aclrtQueryEventStatus aclrtQueryEventWaitStatus aclrtReleaseMemAddress aclrtRepairError aclrtReserveMemAddress aclrtResetDeviceResLimit aclrtResetStreamResLimit aclrtSetDeviceResLimit aclrtSetDeviceSatMode aclrtSetOpExecuteTimeOut aclrtSetOpExecuteTimeOutV2 aclrtSetOpWaitTimeout aclrtSetStreamAttribute aclrtSetStreamFailureMode aclrtSetStreamOverflowSwitch aclrtSetStreamResLimit aclrtSetSysParamOpt aclrtStreamGetId aclrtStreamQuery aclrtSubscribeReport aclrtSynchronizeDevice aclrtSynchronizeDeviceWithTimeout aclrtSynchronizeStream aclrtSynchronizeStreamWithTimeout aclrtUnSubscribeReport aclrtUnmapMem aclrtUnuseStreamResInCurrentThread aclrtUseStreamResInCurrentThread aclrtValueWait aclrtValueWrite aclshmem_finalize aclshmem_free aclshmem_malloc aclshmem_ptr aclshmemx_get_uniqueid aclshmemx_getmem_on_stream aclshmemx_init_attr aclshmemx_putmem_on_stream aclshmemx_set_attr_uniqueid_args aclshmemx_set_conf_store_tls aclskOptimize aclskScopeBegin aclskScopeEnd aclsysGetCANNVersion aclsysGetVersionStr dcmi_get_affinity_cpu_info_by_device_id dcmi_get_card_num_list dcmi_get_device_id_in_card dcmi_init dcmiv2_get_affinity_cpu_info_by_dev_id dcmiv2_get_affinity_cpu_info_by_device_id dcmiv2_get_device_list dcmiv2_init halGetAPIVersion halGetDeviceInfo mstxDomainCreateA mstxDomainDestroy mstxDomainMarkA mstxDomainRangeEnd mstxDomainRangeStartA mstxMarkA mstxMemHeapRegister mstxMemHeapUnregister mstxMemRegionsRegister mstxMemRegionsUnregister mstxRangeEnd mstxRangeStartA shmem_finalize shmem_free shmem_get_uniqueid shmem_malloc shmem_ptr shmem_set_attr shmem_set_attr_uniqueid_args shmem_set_conf_store_tls)
+REQ="${REQ[*]}"
 
 for sym in $REQ; do
     echo "$sym"

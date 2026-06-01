@@ -169,6 +169,10 @@ if __name__ == "__main__":
             status = ", ".join(files)
             print(f"    {func}: ({status})")
 
+    all_funcs = sorted({func for funcs in registrations.values() for func in funcs})
+    req_str = "REQ=(" + " ".join(all_funcs) + ")"
+    print("\n" + req_str)
+
 
 """
 Собранные регистрации по библиотекам и статусам реализации:
