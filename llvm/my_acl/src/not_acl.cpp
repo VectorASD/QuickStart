@@ -1,8 +1,9 @@
 #include "common.h"
-#include <iostream>
-#include <cstdarg>       // va_start, va_end
-#include <cstring>       // memcpy
-#include <thread>        // std::thread
+#include <iostream>  // cout, endl
+#include <cstdarg>   // va_end, va_list, va_start
+#include <cstring>   // memcpy, memset, size_t
+#include <thread>    // get_id, thread
+#include <sstream>   // ostringstream
 
 void __not_acl_placeholder() {}
 
@@ -136,6 +137,16 @@ ACL_FUNC_VISIBILITY aclError aclrtSynchronizeStream(aclrtStream stream) {
     log_ptr("stream", stream);
     std::cout << std::endl;
 
+    // not‑NPU: стрим не хранит реальных задач, синхронизация не требуется
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtSynchronizeStreamWithTimeout(aclrtStream stream, int32_t timeout) {
+    std::cout << "[aclrtSynchronizeStreamWithTimeout] ";
+    log_ptr("stream", stream);
+    std::cout << " timeout=" << timeout << " ms" << std::endl;
+
+    // not‑NPU: стрим не хранит реальных задач, синхронизация не требуется
     return ACL_SUCCESS;
 }
 
@@ -218,6 +229,36 @@ ACL_FUNC_VISIBILITY aclError aclrtMallocHost(void **hostPtr, size_t size) {
         std::cout << "    allocation failed → ACL_ERROR_BAD_ALLOC" << std::endl;
         return ACL_ERROR_BAD_ALLOC;
     }
+
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtMallocAlign32(void **devPtr,
+                                                size_t size,
+                                                aclrtMemMallocPolicy policy) {
+    std::cout << "[aclrtMallocAlign32] size=" << size
+              << " policy=" << policy << " ";
+    log_ptr("devPtr", devPtr);
+    std::cout << std::endl;
+
+    if (!devPtr) {
+        std::cout << "    devPtr is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        return ACL_ERROR_INVALID_PARAM;
+    }
+
+    // not‑NPU: выделяем память, выровненную на 32 байта
+    void *ptr = nullptr;
+    int ret = posix_memalign(&ptr, 32, size);
+    if (ret != 0 || !ptr) {
+        std::cout << "    aligned_alloc failed → ACL_ERROR_BAD_ALLOC" << std::endl;
+        return ACL_ERROR_BAD_ALLOC;
+    }
+
+    *devPtr = ptr;
+
+    std::cout << "    ";
+    log_ptr("allocated", ptr);
+    std::cout << std::endl;
 
     return ACL_SUCCESS;
 }
@@ -774,6 +815,38 @@ ACL_FUNC_VISIBILITY aclError aclrtSetOpExecuteTimeOut(uint32_t timeout) {
     std::cout << "[aclrtSetOpExecuteTimeOut] timeout=" << timeout << " sec" << std::endl;
 
     // not‑NPU: таймауты не поддерживаются, но Torch‑NPU ожидает успех
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtSetStreamOverflowSwitch(aclrtStream stream, uint32_t flag) {
+    std::cout << "[aclrtSetStreamOverflowSwitch] ";
+    log_ptr("stream", stream);
+    std::cout << " flag=" << flag << std::endl;
+
+    // not‑NPU: no real stream overflow switch, just log and accept any flag
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtDestroyStreamForce(aclrtStream stream) {
+    std::cout << "[aclrtDestroyStreamForce] ";
+    log_ptr("stream", stream);
+    std::cout << std::endl;
+
+    // not‑NPU: стримы не управляются, принудительное уничтожение эквивалентно обычному
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtSynchronizeDevice(void) {
+    std::cout << "[aclrtSynchronizeDevice]" << std::endl;
+
+    // not‑NPU: нет реального устройства, синхронизация не требуется
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtSynchronizeDeviceWithTimeout(int32_t timeout) {
+    std::cout << "[aclrtSynchronizeDeviceWithTimeout] timeout=" << timeout << std::endl;
+
+    // not‑NPU: нет реального устройства, синхронизация не требуется
     return ACL_SUCCESS;
 }
 
@@ -1638,3 +1711,133 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrString(aclopAttr *attr, const char *att
 #ifdef __cplusplus
 }
 #endif
+
+
+
+// ~~~ helpers ~~~
+
+static size_t calc_num_elements(const aclTensorDesc* desc, size_t bufferSize) {
+    if (!desc) return 0;
+    size_t numDims = aclGetTensorDescNumDims(desc);
+    size_t numElements = 1;
+    if (numDims == ACL_UNKNOWN_RANK) {
+        // вычисляем по размеру буфера и типу
+        aclDataType dt = aclGetTensorDescType(desc);
+        size_t elemSize = aclDataTypeBytes(dt);
+        if (elemSize > 0) numElements = bufferSize / elemSize;
+        else numElements = 0;
+    } else {
+        for (size_t d = 0; d < numDims; ++d) {
+            int64_t dimSize;
+            if (aclGetTensorDescDimV2(desc, d, &dimSize) == ACL_SUCCESS)
+                numElements *= dimSize;
+        }
+    }
+    return numElements;
+}
+
+static const char* aclDataTypeToString(aclDataType dtype) {
+    switch (dtype) {
+        case ACL_FLOAT:           return "float32";
+        case ACL_FLOAT16:         return "float16";
+        case ACL_INT8:            return "int8";
+        case ACL_INT32:           return "int32";
+        case ACL_UINT8:           return "uint8";
+        case ACL_INT16:           return "int16";
+        case ACL_UINT16:          return "uint16";
+        case ACL_UINT32:          return "uint32";
+        case ACL_INT64:           return "int64";
+        case ACL_UINT64:          return "uint64";
+        case ACL_DOUBLE:          return "float64";
+        case ACL_BOOL:            return "bool";
+        case ACL_STRING:          return "string";
+        case ACL_COMPLEX64:       return "complex64";
+        case ACL_COMPLEX128:      return "complex128";
+        case ACL_BF16:            return "bfloat16";
+        case ACL_INT4:            return "int4";
+        case ACL_UINT1:           return "uint1";
+        case ACL_COMPLEX32:       return "complex32";
+        case ACL_HIFLOAT8:        return "hifloat8";
+        case ACL_FLOAT8_E5M2:     return "float8_e5m2";
+        case ACL_FLOAT8_E4M3FN:   return "float8_e4m3fn";
+        case ACL_FLOAT8_E8M0:     return "float8_e8m0";
+        case ACL_FLOAT6_E3M2:     return "float6_e3m2";
+        case ACL_FLOAT6_E2M3:     return "float6_e2m3";
+        case ACL_FLOAT4_E2M1:     return "float4_e2m1";
+        case ACL_FLOAT4_E1M2:     return "float4_e1m2";
+        case ACL_HIFLOAT4:        return "hifloat4";
+        default:                  return "unknown";
+    }
+}
+
+static const char* aclFormatToString(aclFormat fmt) {
+    switch (fmt) {
+        case ACL_FORMAT_UNDEFINED:    return "UNDEFINED";
+        case ACL_FORMAT_NCHW:         return "NCHW";
+        case ACL_FORMAT_NHWC:         return "NHWC";
+        case ACL_FORMAT_ND:           return "ND";
+        case ACL_FORMAT_NC1HWC0:      return "NC1HWC0";
+        case ACL_FORMAT_FRACTAL_Z:    return "FRACTAL_Z";
+        case ACL_FORMAT_NC1HWC0_C04:  return "NC1HWC0_C04";
+        case ACL_FORMAT_HWCN:         return "HWCN";
+        case ACL_FORMAT_NDHWC:        return "NDHWC";
+        case ACL_FORMAT_FRACTAL_NZ:   return "FRACTAL_NZ";
+        case ACL_FORMAT_NCDHW:        return "NCDHW";
+        case ACL_FORMAT_NDC1HWC0:     return "NDC1HWC0";
+        case ACL_FRACTAL_Z_3D:        return "FRACTAL_Z_3D";
+        case ACL_FORMAT_NC:           return "NC";
+        case ACL_FORMAT_NCL:          return "NCL";
+        case ACL_FORMAT_FRACTAL_NZ_C0_16: return "FRACTAL_NZ_C0_16";
+        case ACL_FORMAT_FRACTAL_NZ_C0_32: return "FRACTAL_NZ_C0_32";
+        case ACL_FORMAT_FRACTAL_NZ_C0_2:  return "FRACTAL_NZ_C0_2";
+        case ACL_FORMAT_FRACTAL_NZ_C0_4:  return "FRACTAL_NZ_C0_4";
+        case ACL_FORMAT_FRACTAL_NZ_C0_8:  return "FRACTAL_NZ_C0_8";
+        default:                      return "unknown";
+    }
+}
+
+static const char* aclMemTypeToString(aclMemType memType) {
+    switch (memType) {
+        case ACL_MEMTYPE_DEVICE: return "device";
+        case ACL_MEMTYPE_HOST:   return "host";
+        case ACL_MEMTYPE_HOST_COMPILE_INDEPENDENT: return "host_compile_indep";
+        default:                 return "unknown";
+    }
+}
+
+static void tensorDescToString(const aclTensorDesc* desc, std::ostringstream &oss) {
+    if (!desc) {
+        oss << "null";
+        return;
+    }
+    oss << aclDataTypeToString(desc->dtype) << '[';
+    if (desc->dims.empty()) {
+        oss << "scalar";
+    } else {
+        for (size_t i = 0; i < desc->dims.size(); ++i) {
+            if (i > 0) oss << ", ";
+            oss << desc->dims[i];
+        }
+    }
+    oss << ']';
+    oss << " fmt=" << aclFormatToString(desc->format);
+    oss << " mem=" << aclMemTypeToString(desc->memType);
+    if (!desc->name.empty()) oss << " name='" << desc->name << "'";
+}
+static std::string tensorDescToString(const aclTensorDesc* desc) {
+    std::ostringstream oss;
+    tensorDescToString(desc, oss);
+    return oss.str();
+}
+
+static std::string formatTensorList(const char* label,
+                                    const aclTensorDesc* const descs[],
+                                    int count) {
+    std::ostringstream oss;
+    for (int i = 0; i < count; ++i) {
+        oss << "  " << label << '[' << i << "]: ";
+        tensorDescToString(descs[i], oss);
+        oss << '\n';
+    }
+    return oss.str();
+}

@@ -7,6 +7,8 @@
 #include <string>         // std::string
 #include <unordered_map>  // std::unordered_map
 #include <vector>         // std::vector
+#include <mutex>          // std::lock_guard, std::mutex
+#include <sstream>        // std::ostringstream
 
 #if defined(_MSC_VER)
     #ifdef FUNC_VISIBILITY
@@ -165,6 +167,44 @@ typedef enum {
     ACL_HIFLOAT4 = 42,
 } aclDataType;
 
+static size_t aclDataTypeBits(aclDataType dtype) {
+    switch (dtype) {
+        case ACL_FLOAT:           return 32;
+        case ACL_FLOAT16:         return 16;
+        case ACL_INT8:            return 8;
+        case ACL_INT32:           return 32;
+        case ACL_UINT8:           return 8;
+        case ACL_INT16:           return 16;
+        case ACL_UINT16:          return 16;
+        case ACL_UINT32:          return 32;
+        case ACL_INT64:           return 64;
+        case ACL_UINT64:          return 64;
+        case ACL_DOUBLE:          return 64;
+        case ACL_BOOL:            return 1;
+        case ACL_STRING:          return 0;  // неизвестен
+        case ACL_COMPLEX64:       return 64; // два float
+        case ACL_COMPLEX128:      return 128; // два double
+        case ACL_BF16:            return 16;
+        case ACL_INT4:            return 4;
+        case ACL_UINT1:           return 1;
+        case ACL_COMPLEX32:       return 64; // условно
+        case ACL_HIFLOAT8:        return 8;
+        case ACL_FLOAT8_E5M2:     return 8;
+        case ACL_FLOAT8_E4M3FN:   return 8;
+        case ACL_FLOAT8_E8M0:     return 8;
+        case ACL_FLOAT6_E3M2:     return 6;
+        case ACL_FLOAT6_E2M3:     return 6;
+        case ACL_FLOAT4_E2M1:     return 4;
+        case ACL_FLOAT4_E1M2:     return 4;
+        case ACL_HIFLOAT4:        return 4;
+        default:                  return 8;  // неизвестный тип – считаем байт
+    }
+}
+
+static size_t aclDataTypeBytes(aclDataType dtype) {
+    return (aclDataTypeBits(dtype) + 7) / 8;
+}
+
 struct aclTensorDesc {
     aclDataType dtype;
     aclFormat format;
@@ -197,6 +237,17 @@ static inline void log_ptr(const char* name, const void* ptr) {
     std::cout << name << "=0x"
               << std::hex << reinterpret_cast<size_t>(ptr)
               << std::dec;
+}
+
+static std::mutex g_log_mutex;
+
+static void log_output(const std::ostringstream& oss) {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+    std::cout << oss.str() << std::endl;
+}
+static void log_output(const std::string& msg) {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+    std::cout << msg << std::endl;
 }
 
 #endif // NOT_NPU_COMMON_H

@@ -11,6 +11,15 @@ LIBS=(
     "$LIB_BASE/cann-ge-compiler/ge-compiler/lib64/libacl_op_compiler.so"
     "$LIB_BASE_OPS/cann-hccl/hccl/lib64/libhccl.so"
 )
+INCLUDES=(
+    cann-npu-runtime/runtime/include/external/acl/acl_base_rt.h
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    cann-npu-runtime/runtime/pkg_inc/profiling/aprof_pub.h
+    cann-npu-runtime/runtime/pkg_inc/runtime/runtime/kernel.h
+    cann-ge-executor/ge-executor/include/acl/acl_base_mdl.h
+    cann-ge-executor/ge-executor/include/acl/acl_op.h
+    cann-ge-compiler/ge-compiler/include/acl/acl_op_compiler.h
+)
 
 function cut_base() {
     local short="$1"
@@ -47,16 +56,6 @@ function lib_finder() {
 for f in ${LIBS[*]}; do
     nm -D "$f" 2>/dev/null | grep -F $SYMBOL && echo " → $(cut_base $f)"
 done
-
-INCLUDES=(
-    cann-npu-runtime/runtime/include/external/acl/acl_base_rt.h
-    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
-    cann-npu-runtime/runtime/pkg_inc/profiling/aprof_pub.h
-    cann-npu-runtime/runtime/pkg_inc/runtime/runtime/kernel.h
-    cann-ge-executor/ge-executor/include/acl/acl_base_mdl.h
-    cann-ge-executor/ge-executor/include/acl/acl_op.h
-    cann-ge-compiler/ge-compiler/include/acl/acl_op_compiler.h
-)
 for f in ${INCLUDES[*]}; do
     grep -F "$SYMBOL(" "$LIB_BASE/$f" 2>/dev/null && echo " → $f"
 done
@@ -110,8 +109,675 @@ for sym in $REQ; do
 done
 
 
+
 : << 'COMMENT'
-# финальный результат анализа символов
+# временный результат анализа ДИНАМИЧЕСКИХ символов
+AmlAicoreDetectOnline
+    UNRELEASE
+AmlP2PDetectOnline
+    UNRELEASE
+HcclAllGather
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclAllGatherV
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclAllReduce
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclAlltoAll
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclAlltoAllV
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclBatchSendRecv
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclBroadcast
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCommActivateCommMemory
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCommDeactivateCommMemory
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCommDeregister
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCommDestroy
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCommExchangeMem
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCommInitAll
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCommInitClusterInfoConfig
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCommInitRootInfo
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCommInitRootInfoConfig
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCommRegister
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCommResume
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCommSetMemoryRange
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCommUnsetMemoryRange
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCommWorkingDevNicSet
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclCreateSubCommConfig
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclGetCommAsyncError
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclGetCommConfigCapability
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclGetCommName
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclGetRootInfo
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclGroupEnd
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclGroupStart
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclRecv
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclReduce
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclReduceScatter
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclReduceScatterV
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclScatter
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclSend
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+HcclSetConfig
+    (ops) cann-hccl/hccl/lib64/libhccl.so
+    UNRELEASE
+LcalCommInit
+    UNRELEASE
+LcalCommInitRankLocal
+    UNRELEASE
+LcclAllGather
+    UNRELEASE
+LcclAllReduce
+    UNRELEASE
+LcclBroadcast
+    UNRELEASE
+LcclCommDestroy
+    UNRELEASE
+LcclReduceScatter
+    UNRELEASE
+aclCreateGraphDumpOpt
+    cann-ge-compiler/ge-compiler/lib64/libacl_op_compiler.so
+    cann-ge-compiler/ge-compiler/include/acl/acl_op_compiler.h
+    UNRELEASE
+aclDestroyAclOpExecutor
+    UNRELEASE
+aclDestroyGraphDumpOpt
+    cann-ge-compiler/ge-compiler/lib64/libacl_op_compiler.so
+    cann-ge-compiler/ge-compiler/include/acl/acl_op_compiler.h
+    UNRELEASE
+aclGenGraphAndDumpForOp
+    cann-ge-compiler/ge-compiler/lib64/libacl_op_compiler.so
+    cann-ge-compiler/ge-compiler/include/acl/acl_op_compiler.h
+    UNRELEASE
+aclGetCannAttribute
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_base_rt.h
+    UNRELEASE
+aclGetCannAttributeList
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_base_rt.h
+    UNRELEASE
+aclGetCompileopt
+    cann-ge-compiler/ge-compiler/lib64/libacl_op_compiler.so
+    cann-ge-compiler/ge-compiler/include/acl/acl_op_compiler.h
+    UNRELEASE
+aclGetCompileoptSize
+    cann-ge-compiler/ge-compiler/lib64/libacl_op_compiler.so
+    cann-ge-compiler/ge-compiler/include/acl/acl_op_compiler.h
+    UNRELEASE
+aclGetDeviceCapability
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_base_rt.h
+aclGetRecentErrMsg
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+aclSetCompileopt
+    cann-ge-compiler/ge-compiler/lib64/libacl_op_compiler.so
+    cann-ge-compiler/ge-compiler/include/acl/acl_op_compiler.h
+aclmdlRICaptureBegin
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclmdlRICaptureEnd
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclmdlRICaptureGetInfo
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclmdlRICaptureTaskGrpBegin
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclmdlRICaptureTaskGrpEnd
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclmdlRICaptureTaskUpdateBegin
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclmdlRICaptureTaskUpdateEnd
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclmdlRICaptureThreadExchangeMode
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclmdlRIDebugJsonPrint
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclmdlRIDebugPrint
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclmdlRIDestroy
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclmdlRIExecuteAsync
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclnnReselectStaticKernel
+    UNRELEASE
+aclnnSilentCheck
+    UNRELEASE
+aclnnSilentCheckV2
+    UNRELEASE
+aclopCompileAndExecuteV2
+    cann-ge-compiler/ge-compiler/lib64/libacl_op_compiler.so
+    cann-ge-compiler/ge-compiler/include/acl/acl_op_compiler.h
+    UNRELEASE
+aclopStartDumpArgs
+    UNRELEASE
+aclopStopDumpArgs
+    UNRELEASE
+aclprofCreateConfig
+    UNRELEASE
+aclprofCreateStepInfo
+    UNRELEASE
+aclprofDestroyConfig
+    UNRELEASE
+aclprofDestroyStepInfo
+    UNRELEASE
+aclprofFinalize
+    UNRELEASE
+aclprofGetStepTimestamp
+    UNRELEASE
+aclprofGetSupportedFeatures
+    UNRELEASE
+aclprofGetSupportedFeaturesV2
+    UNRELEASE
+aclprofInit
+    UNRELEASE
+aclprofMarkEx
+    UNRELEASE
+aclprofRegisterDeviceCallback
+    UNRELEASE
+aclprofSetConfig
+    UNRELEASE
+aclprofStart
+    UNRELEASE
+aclprofStop
+    UNRELEASE
+aclprofWarmup
+    UNRELEASE
+aclrtCmoAsync
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtCreateEventExWithFlag
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtCreateEventWithFlag
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtCreateStream
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+aclrtCreateStreamWithConfig
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtCtxSetSysParamOpt
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+aclrtDestroyStreamForce
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtDeviceCanAccessPeer
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+aclrtDeviceGetBareTgid
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtDeviceGetUuid
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtDeviceTaskAbort
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtEventGetTimestamp
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtFreePhysical
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtGetDeviceInfo
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+aclrtGetDeviceResLimit
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtGetDeviceUtilizationRate
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtGetErrorVerbose
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtGetLastError
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtGetMemUceInfo
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtGetMemUsageInfo
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtGetPrimaryCtxState
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtGetResInCurrentThread
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtGetSocName
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_base_rt.h
+    UNRELEASE
+aclrtGetStreamOverflowSwitch
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtGetStreamResLimit
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtHostRegister
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtHostRegisterV2
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtHostUnregister
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtIpcGetEventHandle
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtIpcMemClose
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtIpcMemGetExportKey
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtIpcMemImportByKey
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtIpcMemSetImportPid
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtIpcOpenEventHandle
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtLaunchCallback
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtLaunchHostFunc
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtMallocAlign32
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtMallocHostWithCfg
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtMallocPhysical
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtMapMem
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtMemExportToShareableHandle
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtMemImportFromShareableHandle
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtMemSetPidToShareableHandle
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtMemUceRepair
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtMemcpyAsyncWithCondition
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtMemcpyBatch
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtMemcpyBatchAsync
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtMemset
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+aclrtPeekAtLastError
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtPointerGetAttributes
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtQueryEventStatus
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtQueryEventWaitStatus
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtReleaseMemAddress
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtRepairError
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtReserveMemAddress
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtResetDeviceResLimit
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtResetStreamResLimit
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtSetDeviceResLimit
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtSetDeviceSatMode
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+aclrtSetOpExecuteTimeOut
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+aclrtSetOpExecuteTimeOutV2
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtSetOpWaitTimeout
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtSetStreamAttribute
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtSetStreamFailureMode
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtSetStreamOverflowSwitch
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtSetStreamResLimit
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtSetSysParamOpt
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtStreamGetId
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtStreamQuery
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtSubscribeReport
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtSynchronizeDevice
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtSynchronizeDeviceWithTimeout
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtSynchronizeStream
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+aclrtSynchronizeStreamWithTimeout
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtUnSubscribeReport
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtUnmapMem
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtUnuseStreamResInCurrentThread
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtUseStreamResInCurrentThread
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtValueWait
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclrtValueWrite
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclshmem_finalize
+    UNRELEASE
+aclshmem_free
+    UNRELEASE
+aclshmem_malloc
+    UNRELEASE
+aclshmem_ptr
+    UNRELEASE
+aclshmemx_get_uniqueid
+    UNRELEASE
+aclshmemx_getmem_on_stream
+    UNRELEASE
+aclshmemx_init_attr
+    UNRELEASE
+aclshmemx_putmem_on_stream
+    UNRELEASE
+aclshmemx_set_attr_uniqueid_args
+    UNRELEASE
+aclshmemx_set_conf_store_tls
+    UNRELEASE
+aclskOptimize
+    UNRELEASE
+aclskScopeBegin
+    UNRELEASE
+aclskScopeEnd
+    UNRELEASE
+aclsysGetCANNVersion
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+aclsysGetVersionStr
+    cann-npu-runtime/runtime/lib/libascendcl.so
+    cann-npu-runtime/runtime/include/external/acl/acl_rt.h
+    UNRELEASE
+dcmi_get_affinity_cpu_info_by_device_id
+    UNRELEASE
+dcmi_get_card_num_list
+    UNRELEASE
+dcmi_get_device_id_in_card
+    UNRELEASE
+dcmi_init
+    UNRELEASE
+dcmiv2_get_affinity_cpu_info_by_dev_id
+    UNRELEASE
+dcmiv2_get_affinity_cpu_info_by_device_id
+    UNRELEASE
+dcmiv2_get_device_list
+    UNRELEASE
+dcmiv2_init
+    UNRELEASE
+halGetAPIVersion
+    UNRELEASE
+halGetDeviceInfo
+    UNRELEASE
+mstxDomainCreateA
+    UNRELEASE
+mstxDomainDestroy
+    UNRELEASE
+mstxDomainMarkA
+    UNRELEASE
+mstxDomainRangeEnd
+    UNRELEASE
+mstxDomainRangeStartA
+    UNRELEASE
+mstxMarkA
+    UNRELEASE
+mstxMemHeapRegister
+    UNRELEASE
+mstxMemHeapUnregister
+    UNRELEASE
+mstxMemRegionsRegister
+    UNRELEASE
+mstxMemRegionsUnregister
+    UNRELEASE
+mstxRangeEnd
+    UNRELEASE
+mstxRangeStartA
+    UNRELEASE
+shmem_finalize
+    UNRELEASE
+shmem_free
+    UNRELEASE
+shmem_get_uniqueid
+    UNRELEASE
+shmem_malloc
+    UNRELEASE
+shmem_ptr
+    UNRELEASE
+shmem_set_attr
+    UNRELEASE
+shmem_set_attr_uniqueid_args
+    UNRELEASE
+shmem_set_conf_store_tls
+    UNRELEASE
+COMMENT
+
+
+
+: << 'COMMENT'
+# финальный результат анализа СТАТИЧЕСКИХ символов
 
 MsprofGetHashId
     cann-npu-runtime/runtime/lib/libprofapi.so

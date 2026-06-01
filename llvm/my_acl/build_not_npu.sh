@@ -35,7 +35,14 @@ fi
 g++ -shared -fPIC "$SRC/not_acl.cpp" -o "$LIB/libascendcl.so"
 echo "Created lib/libascendcl.so"
 
-g++ -shared -fPIC "$SRC/not_acl_op_compiler.cpp" -o "$LIB/libacl_op_compiler.so"
+LINK_IT=(
+    -L"$LIB"
+    -Wl,--no-as-needed
+    -lascendcl
+    -Wl,--as-needed
+    -Wl,-rpath='$ORIGIN'
+)
+g++ -shared -fPIC "$SRC/not_acl_op_compiler.cpp" "${LINK_IT[@]}" -o "$LIB/libacl_op_compiler.so"
 echo "Created lib/libacl_op_compiler.so"
 
 if [ ! -f "$LIB/libge_runner.so" ]; then
