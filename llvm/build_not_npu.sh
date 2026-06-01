@@ -61,16 +61,28 @@ find . -name libhccl.so
 COMMENT
 
 
-mkdir -p lib
+
+LIB="$HOME/not_npu/lib"
+mkdir -p "$LIB"
+
+if ! grep -qxF "export LD_LIBRARY_PATH=\"$LIB:\$LD_LIBRARY_PATH\"" ~/.bashrc; then
+    echo "export LD_LIBRARY_PATH=\"$LIB:\$LD_LIBRARY_PATH\"" >> ~/.bashrc
+    echo "reopen terminal"
+    exit 1
+fi
+# ~/not_npu/build_not_npu.sh && python -c "import torch_npu"   # stage 1, чтобы просто завелись библиотеки .so внутри torch_npu
+# ~/not_npu/build_not_npu.sh && python -c "import torch; print(torch.randn(2, 3, device='npu'))"
+
+# grep "aclrtSetStreamOverflowSwitch" ~/tmp/pytorch/ -rn
 
 
 
-if [ ! -f lib/libhccl.so ]; then
-    cat > lib/not_hccl.c << 'EOF'
+if [ ! -f "$LIB/libhccl.so" ]; then
+    cat > "$LIB/not_hccl.c" << 'EOF'
 void __not_hccl_placeholder() {}
 EOF
 
-    gcc -shared -fPIC lib/not_hccl.c -o lib/libhccl.so
+    gcc -shared -fPIC "$LIB/not_hccl.c" -o "$LIB/libhccl.so"
 
     echo "Created lib/libhccl.so"
 fi
@@ -283,7 +295,7 @@ EOF
 
 
 
-cat > lib/not_acl.cpp << EOF
+cat > "$LIB/not_acl.cpp" << EOF
 #include <iostream>
 #include <cstdarg>       // va_start, va_end
 #include <cstring>       // memcpy
@@ -1925,14 +1937,14 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrString(aclopAttr *attr, const char *att
 #endif
 EOF
 
-g++ -shared -fPIC lib/not_acl.cpp -o lib/libascendcl.so
+g++ -shared -fPIC "$LIB/not_acl.cpp" -o "$LIB/libascendcl.so"
 
 echo "Created lib/libascendcl.so"
 
 
 
-#if [ ! -f lib/libacl_op_compiler.so ]; then
-    cat > lib/not_acl_op_compiler.cpp << EOF
+#if [ ! -f "$LIB/libacl_op_compiler.so" ]; then
+    cat > "$LIB/not_acl_op_compiler.cpp" << EOF
 #include <iostream>
 $common
 
@@ -2011,52 +2023,46 @@ ACL_FUNC_VISIBILITY aclError aclSetCompileopt(aclCompileOpt opt, const char *val
 #endif
 EOF
 
-    g++ -shared -fPIC lib/not_acl_op_compiler.cpp -o lib/libacl_op_compiler.so
+    g++ -shared -fPIC "$LIB/not_acl_op_compiler.cpp" -o "$LIB/libacl_op_compiler.so"
 
     echo "Created lib/libacl_op_compiler.so"
 #fi
 
 
 
-if [ ! -f lib/libge_runner.so ]; then
-    cat > lib/not_ge_runner.c << 'EOF'
+if [ ! -f "$LIB/libge_runner.so" ]; then
+    cat > "$LIB/not_ge_runner.c" << 'EOF'
 void __not_ge_runner_placeholder() {}
 EOF
 
-    gcc -shared -fPIC lib/not_ge_runner.c -o lib/libge_runner.so
+    gcc -shared -fPIC "$LIB/not_ge_runner.c" -o "$LIB/libge_runner.so"
 
     echo "Created lib/libge_runner.so"
 fi
 
 
 
-if [ ! -f lib/libgraph.so ]; then
-    cat > lib/not_graph.c << 'EOF'
+if [ ! -f "$LIB/libgraph.so" ]; then
+    cat > "$LIB/not_graph.c" << 'EOF'
 void __not_graph_placeholder() {}
 EOF
 
-    gcc -shared -fPIC lib/not_graph.c -o lib/libgraph.so
+    gcc -shared -fPIC "$LIB/not_graph.c" -o "$LIB/libgraph.so"
 
     echo "Created lib/libgraph.so"
 fi
 
 
 
-if [ ! -f lib/libacl_tdt_channel.so ]; then
-    cat > lib/not_acl_tdt_channel.c << 'EOF'
+if [ ! -f "$LIB/libacl_tdt_channel.so" ]; then
+    cat > "$LIB/not_acl_tdt_channel.c" << 'EOF'
 void __not_acl_tdt_channel_placeholder() {}
 EOF
 
-    gcc -shared -fPIC lib/not_acl_tdt_channel.c -o lib/libacl_tdt_channel.so
+    gcc -shared -fPIC "$LIB/not_acl_tdt_channel.c" -o "$LIB/libacl_tdt_channel.so"
 
     echo "Created lib/libacl_tdt_channel.so"
 fi
-
-
-
-# export LD_LIBRARY_PATH="$HOME/not_npu/lib:$LD_LIBRARY_PATH"
-# ~/not_npu/build_not_npu.sh && python -c "import torch_npu"   # stage 1, чтобы просто завелись библиотеки .so внутри torch_npu
-# ~/not_npu/build_not_npu.sh && python -c "import torch; print(torch.randn(2, 3, device='npu'))"
 
 
 
