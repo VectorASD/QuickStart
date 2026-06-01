@@ -13,13 +13,15 @@ LIB="$SCRIPT_DIR/lib"
 
 mkdir -p "$LIB"
 
+# ~/QuickStart/llvm/my_acl/build_not_npu.sh
 if ! grep -qxF "export LD_LIBRARY_PATH=\"$LIB:\$LD_LIBRARY_PATH\"" ~/.bashrc; then
     echo "export LD_LIBRARY_PATH=\"$LIB:\$LD_LIBRARY_PATH\"" >> ~/.bashrc
+    echo "alias build_not_npu=\"$SCRIPT_DIR/build_not_npu.sh\"" >> ~/.bashrc
     echo "reopen terminal"
     exit 1
 fi
-# ~/not_npu/build_not_npu.sh && python -c "import torch_npu"   # stage 1, чтобы просто завелись библиотеки .so внутри torch_npu
-# ~/not_npu/build_not_npu.sh && python -c "import torch; print(torch.randn(2, 3, device='npu'))"
+# build_not_npu && python -c "import torch_npu"   # stage 1, чтобы просто завелись библиотеки .so внутри torch_npu
+# build_not_npu && python -c "import torch; print(torch.randn(2, 3, device='npu'))"
 
 # grep "aclrtSetStreamOverflowSwitch" ~/tmp/pytorch/ -rn
 
