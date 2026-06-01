@@ -26,10 +26,11 @@ extern "C" {
 
 ACL_FUNC_VISIBILITY void aclAppLog(aclLogLevel logLevel, const char *func, const char *file, uint32_t line,
                                    const char *fmt, ...) {
-    std::cout << "[aclAppLog] level=" << logLevel
-              << " func=" << (func ? func : "<null>")
-              << " file=" << (file ? file : "<null>")
-              << " line=" << line << std::endl;
+    std::ostringstream log;
+    log << "[aclAppLog] level=" << logLevel
+        << " func=" << (func ? func : "<null>")
+        << " file=" << (file ? file : "<null>")
+        << " line=" << line << '\n';
 
     char buffer[8192];
 
@@ -38,16 +39,19 @@ ACL_FUNC_VISIBILITY void aclAppLog(aclLogLevel logLevel, const char *func, const
     vsnprintf(buffer, sizeof(buffer), fmt, args);
     va_end(args);
 
-    std::cout << "    msg: " << buffer << std::endl;
+    log << "\n    msg: " << buffer << '\n';
+    log_output(log);
 }
 
 ACL_FUNC_VISIBILITY aclError aclGetDeviceCapability(uint32_t deviceId, aclDeviceInfo deviceInfo, int64_t *value) {
-    std::cout << "[aclGetDeviceCapability] deviceId=" << deviceId << " deviceInfo=" << deviceInfo << " ";
-    log_ptr("value_ptr", value);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclGetDeviceCapability] deviceId=" << deviceId
+        << " deviceInfo=" << deviceInfo
+        << " value_ptr=" << static_cast<const void*>(value);
 
     if (!value) {
-        std::cout << "    value is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    value is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -62,38 +66,39 @@ ACL_FUNC_VISIBILITY aclError aclGetDeviceCapability(uint32_t deviceId, aclDevice
             *value = info_L2_size;
             break;
         default:
-            std::cout << "    unknown deviceInfo → ACL_ERROR_INVALID_PARAM" << std::endl;
+            log << "\n    unknown deviceInfo → ACL_ERROR_INVALID_PARAM";
+            log_output(log);
             return ACL_ERROR_INVALID_PARAM;
     }
 
+    log_output(log);
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclDataBuffer *aclCreateDataBuffer(void *data, size_t size) {
-    std::cout << "[aclCreateDataBuffer] ";
-    log_ptr("data", data);
-    std::cout << " size=" << size << std::endl;
+    std::ostringstream log;
+    log << "[aclCreateDataBuffer] data=" << data
+        << " size=" << size;
 
     aclDataBuffer *buf = new aclDataBuffer();
     if (!buf) {
-        std::cout << "    new failed → nullptr" << std::endl;
+        log << "\n    new failed → nullptr";
+        log_output(log);
         return nullptr;
     }
 
     buf->data = data;
     buf->size = size;
 
-    std::cout << "    created aclDataBuffer ";
-    log_ptr("ptr", buf);
-    std::cout << std::endl;
-
+    log << "\n    created aclDataBuffer ptr=" << buf;
+    log_output(log);
     return buf;
 }
 
 ACL_FUNC_VISIBILITY aclError aclDestroyDataBuffer(const aclDataBuffer *dataBuffer) {
-    std::cout << "[aclDestroyDataBuffer] ";
-    log_ptr("dataBuffer", dataBuffer);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclDestroyDataBuffer] dataBuffer=" << dataBuffer;
+    log_output(log);
 
     delete dataBuffer;
     return ACL_SUCCESS;
@@ -133,18 +138,20 @@ typedef enum {
 
 
 ACL_FUNC_VISIBILITY aclError aclrtSynchronizeStream(aclrtStream stream) {
-    std::cout << "[aclrtSynchronizeStream] ";
-    log_ptr("stream", stream);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtSynchronizeStream] stream=" << stream;
+    log_output(log);
 
     // not‑NPU: стрим не хранит реальных задач, синхронизация не требуется
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtSynchronizeStreamWithTimeout(aclrtStream stream, int32_t timeout) {
-    std::cout << "[aclrtSynchronizeStreamWithTimeout] ";
-    log_ptr("stream", stream);
-    std::cout << " timeout=" << timeout << " ms" << std::endl;
+    std::ostringstream log;
+    log << "[aclrtSynchronizeStreamWithTimeout] stream=" << stream
+        << " timeout=" << timeout
+        << " ms";
+    log_output(log);
 
     // not‑NPU: стрим не хранит реальных задач, синхронизация не требуется
     return ACL_SUCCESS;
@@ -152,20 +159,22 @@ ACL_FUNC_VISIBILITY aclError aclrtSynchronizeStreamWithTimeout(aclrtStream strea
 
 ACL_FUNC_VISIBILITY aclError aclrtGetDeviceCount(uint32_t *count) {
     *count = g_device_count;
-    std::cout << "[aclrtGetDeviceCount] count=" << *count << std::endl;
+    std::ostringstream log;
+    log << "[aclrtGetDeviceCount] count=" << *count;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY const char *aclGetRecentErrMsg() {
-    std::cout << "[aclGetRecentErrMsg]" << std::endl;
+    log_output("[aclGetRecentErrMsg]");
     return "not-npu: no recent error";
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtFreeHost(void *hostPtr) {
-    std::cout << "[aclrtFreeHost] ";
-    log_ptr("hostPtr", hostPtr);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtFreeHost] hostPtr=" << hostPtr;
+    log_output(log);
 
     free(hostPtr);
 
@@ -189,13 +198,14 @@ typedef enum aclrtMemMallocPolicy {
 ACL_FUNC_VISIBILITY aclError aclrtMalloc(void **devPtr,
                                          size_t size,
                                          aclrtMemMallocPolicy policy) {
-    std::cout << "[aclrtMalloc] size=" << size
-              << " policy=" << policy << " ";
-    log_ptr("devPtr", devPtr);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtMalloc] size=" << size
+        << " policy=" << policy
+        << " devPtr=" << devPtr;
 
     if (!devPtr) {
-        std::cout << "    devPtr is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    devPtr is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -203,46 +213,48 @@ ACL_FUNC_VISIBILITY aclError aclrtMalloc(void **devPtr,
     void *ptr = malloc(size);
     *devPtr = ptr;
 
-    std::cout << "    ";
-    log_ptr("allocated", ptr);
-    std::cout << std::endl;
+    log << "\n    allocated" << ptr;
 
     if (!ptr) {
-        std::cout << "    allocation failed → ACL_ERROR_BAD_ALLOC" << std::endl;
+        log << "\n    allocation failed → ACL_ERROR_BAD_ALLOC";
+        log_output(log);
         return ACL_ERROR_BAD_ALLOC;
     }
 
+    log_output(log);
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtMallocHost(void **hostPtr, size_t size) {
-    std::cout << "[aclrtMallocHost] size=" << size << std::endl;
+    std::ostringstream log;
+    log << "[aclrtMallocHost] size=" << size;
 
     void *ptr = malloc(size);
     *hostPtr = ptr;
 
-    std::cout << "    ";
-    log_ptr("allocated", ptr);
-    std::cout << std::endl;
+    log << "\n    allocated=" << ptr;
 
     if (!ptr) {
-        std::cout << "    allocation failed → ACL_ERROR_BAD_ALLOC" << std::endl;
+        log << "\n    allocation failed → ACL_ERROR_BAD_ALLOC";
+        log_output(log);
         return ACL_ERROR_BAD_ALLOC;
     }
 
+    log_output(log);
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtMallocAlign32(void **devPtr,
                                                 size_t size,
                                                 aclrtMemMallocPolicy policy) {
-    std::cout << "[aclrtMallocAlign32] size=" << size
-              << " policy=" << policy << " ";
-    log_ptr("devPtr", devPtr);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtMallocAlign32] size=" << size
+        << " policy=" << policy
+        << " devPtr=" << devPtr;
 
     if (!devPtr) {
-        std::cout << "    devPtr is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    devPtr is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -250,40 +262,45 @@ ACL_FUNC_VISIBILITY aclError aclrtMallocAlign32(void **devPtr,
     void *ptr = nullptr;
     int ret = posix_memalign(&ptr, 32, size);
     if (ret != 0 || !ptr) {
-        std::cout << "    aligned_alloc failed → ACL_ERROR_BAD_ALLOC" << std::endl;
+        log << "\n    aligned_alloc failed → ACL_ERROR_BAD_ALLOC";
+        log_output(log);
         return ACL_ERROR_BAD_ALLOC;
     }
 
     *devPtr = ptr;
 
-    std::cout << "    ";
-    log_ptr("allocated", ptr);
-    std::cout << std::endl;
+    log << "\n    allocated=" << ptr;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtGetDevice(int32_t *deviceId) {
-    std::cout << "[aclrtGetDevice] ";
-    log_ptr("deviceId_ptr", deviceId);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtGetDevice] deviceId_ptr=" << deviceId;
 
     if (!deviceId) {
-        std::cout << "    deviceId is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    deviceId is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
+    log_output(log);
 
     *deviceId = g_current_device;
+
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtSetDevice(int32_t deviceId) {
-    std::cout << "[aclrtSetDevice] deviceId=" << deviceId << std::endl;
+    std::ostringstream log;
+    log << "[aclrtSetDevice] deviceId=" << deviceId;
 
     if (deviceId < 0 || deviceId >= g_device_count) {
-        std::cout << "    invalid deviceId → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid deviceId → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
+    log_output(log);
 
     g_current_device = deviceId;
 
@@ -295,24 +312,25 @@ ACL_FUNC_VISIBILITY aclError aclrtMemcpy(void *dst,
                                          const void *src,
                                          size_t count,
                                          aclrtMemcpyKind kind) {
-    std::cout << "[aclrtMemcpy] ";
-    log_ptr("dst", dst);
-    std::cout << " ";
-    log_ptr("src", src);
-    std::cout << " count=" << count
-              << " destMax=" << destMax
-              << " kind=" << kind
-              << std::endl;
+    std::ostringstream log;
+    log << "[aclrtMemcpy] dst=" << dst
+        << " src=" << src
+        << " count=" << count
+        << " destMax=" << destMax
+        << " kind=" << kind;
 
     if (!dst || !src) {
-        std::cout << "    null pointer → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    null pointer → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     if (count > destMax) {
-        std::cout << "    count > destMax → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    count > destMax → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
+    log_output(log);
 
     memcpy(dst, src, count);
 
@@ -325,25 +343,26 @@ ACL_FUNC_VISIBILITY aclError aclrtMemcpyAsync(void *dst,
                                               size_t count,
                                               aclrtMemcpyKind kind,
                                               aclrtStream stream) {
-    std::cout << "[aclrtMemcpyAsync] ";
-    log_ptr("dst", dst);
-    std::cout << " ";
-    log_ptr("src", src);
-    std::cout << " count=" << count
-              << " destMax=" << destMax
-              << " kind=" << kind << " ";
-    log_ptr("stream", stream);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtMemcpyAsync] dst=" << dst
+        << " src=" << src
+        << " count=" << count
+        << " destMax=" << destMax
+        << " kind=" << kind
+        << " stream=" << stream;
 
     if (!dst || !src) {
-        std::cout << "    null pointer → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    null pointer → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     if (count > destMax) {
-        std::cout << "    count > destMax → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    count > destMax → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
+    log_output(log);
 
     memcpy(dst, src, count);
 
@@ -351,9 +370,9 @@ ACL_FUNC_VISIBILITY aclError aclrtMemcpyAsync(void *dst,
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtFree(void *devPtr) {
-    std::cout << "[aclrtFree] ";
-    log_ptr("devPtr", devPtr);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtFree] devPtr=" << devPtr;
+    log_output(log);
 
     free(devPtr);
 
@@ -361,9 +380,9 @@ ACL_FUNC_VISIBILITY aclError aclrtFree(void *devPtr) {
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtDestroyStream(aclrtStream stream) {
-    std::cout << "[aclrtDestroyStream] ";
-    log_ptr("stream", stream);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtDestroyStream] stream=" << stream;
+    log_output(log);
 
     // not‑NPU: стримы не хранятся, просто no-op
 
@@ -371,7 +390,9 @@ ACL_FUNC_VISIBILITY aclError aclrtDestroyStream(aclrtStream stream) {
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtProcessReport(int32_t timeout) {
-    std::cout << "[aclrtProcessReport] timeout=" << timeout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtProcessReport] timeout=" << timeout;
+    log_output(log);
 
     // not‑NPU: no-op, Torch-NPU не использует отчёты
 
@@ -379,16 +400,17 @@ ACL_FUNC_VISIBILITY aclError aclrtProcessReport(int32_t timeout) {
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtEventElapsedTime(float *ms, aclrtEvent startEvent, aclrtEvent endEvent) {
-    std::cout << "[aclrtEventElapsedTime] ";
-    log_ptr("ms", ms);
-    log_ptr("startEvent", startEvent);
-    log_ptr("endEvent", endEvent);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtEventElapsedTime] ms=" << ms
+        << " startEvent=" << startEvent
+        << " endEvent=" << endEvent;
 
     if (!ms) {
-        std::cout << "    ms is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    ms is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
+    log_output(log);
 
     // not‑NPU: Torch-NPU не использует реальные события, возвращаем фиктивное время
     *ms = 0.1f;
@@ -397,10 +419,10 @@ ACL_FUNC_VISIBILITY aclError aclrtEventElapsedTime(float *ms, aclrtEvent startEv
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtRecordEvent(aclrtEvent event, aclrtStream stream) {
-    std::cout << "[aclrtRecordEvent] ";
-    log_ptr("event", event);
-    log_ptr("stream", stream);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtRecordEvent] event=" << event
+        << " stream=" << stream;
+    log_output(log);
 
     // not‑NPU: Torch-NPU не использует реальные события, no-op
 
@@ -408,12 +430,14 @@ ACL_FUNC_VISIBILITY aclError aclrtRecordEvent(aclrtEvent event, aclrtStream stre
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtGetDeviceInfo(uint32_t deviceId, aclrtDevAttr attr, int64_t *value) {
-    std::cout << "[aclrtGetDeviceInfo] deviceId=" << deviceId << " attr=" << attr << " ";
-    log_ptr("value", value);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtGetDeviceInfo] deviceId=" << deviceId
+        << " attr=" << attr
+        << " value=" << value;
 
     if (!value) {
-        std::cout << "    value is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    value is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -479,15 +503,17 @@ ACL_FUNC_VISIBILITY aclError aclrtGetDeviceInfo(uint32_t deviceId, aclrtDevAttr 
             break;
 
         default:
-            std::cout << "    unknown attr → ACL_ERROR_INVALID_PARAM" << std::endl;
+            log << "\n    unknown attr → ACL_ERROR_INVALID_PARAM";
+            log_output(log);
             return ACL_ERROR_INVALID_PARAM;
     }
 
+    log_output(log);
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclFinalize() {
-    std::cout << "[aclFinalize]" << std::endl;
+    log_output("[aclFinalize]");
 
     // not‑NPU: no-op, Torch-NPU не требует финализации
 
@@ -495,9 +521,9 @@ ACL_FUNC_VISIBILITY aclError aclFinalize() {
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtDestroyEvent(aclrtEvent event) {
-    std::cout << "[aclrtDestroyEvent] ";
-    log_ptr("event", event);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtDestroyEvent] event=" << event;
+    log_output(log);
 
     // not‑NPU: no-op
     return ACL_SUCCESS;
@@ -506,25 +532,28 @@ ACL_FUNC_VISIBILITY aclError aclrtDestroyEvent(aclrtEvent event) {
 ACL_FUNC_VISIBILITY aclError aclrtDeviceCanAccessPeer(int32_t *canAccessPeer,
                                                       int32_t deviceId,
                                                       int32_t peerDeviceId) {
-    std::cout << "[aclrtDeviceCanAccessPeer] ";
-    log_ptr("canAccessPeer", canAccessPeer);
-    std::cout << " deviceId=" << deviceId
-              << " peerDeviceId=" << peerDeviceId << std::endl;
+    std::ostringstream log;
+    log << "[aclrtDeviceCanAccessPeer] canAccessPeer=" << canAccessPeer
+        << " deviceId=" << deviceId
+        << " peerDeviceId=" << peerDeviceId;
 
     if (!canAccessPeer) {
-        std::cout << "    canAccessPeer is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    canAccessPeer is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     if (deviceId < 0 || deviceId >= (int)g_device_count ||
         peerDeviceId < 0 || peerDeviceId >= (int)g_device_count) {
-        std::cout << "    invalid deviceId/peerDeviceId → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid deviceId/peerDeviceId → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     *canAccessPeer = 0;
 
-    std::cout << "    peer access unsupported → canAccessPeer=0" << std::endl;
+    log << "\n    peer access unsupported → canAccessPeer=0";
+    log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -533,21 +562,24 @@ ACL_FUNC_VISIBILITY aclError aclrtMemset(void *devPtr,
                                          size_t maxCount,
                                          int32_t value,
                                          size_t count) {
-    std::cout << "[aclrtMemset] ";
-    log_ptr("devPtr", devPtr);
-    std::cout << " maxCount=" << maxCount
-              << " value=" << value
-              << " count=" << count << std::endl;
+    std::ostringstream log;
+    log << "[aclrtMemset] devPtr=" << devPtr
+        << " maxCount=" << maxCount
+        << " value=" << value
+        << " count=" << count;
 
     if (!devPtr) {
-        std::cout << "    devPtr is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    devPtr is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     if (count > maxCount) {
-        std::cout << "    count > maxCount → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    count > maxCount → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
+    log_output(log);
 
     // Torch‑NPU не использует асинхронность, не проверяет host/device,
     // не требует выравнивания — обычный memset полностью корректен.
@@ -557,7 +589,7 @@ ACL_FUNC_VISIBILITY aclError aclrtMemset(void *devPtr,
 }
 
 ACL_FUNC_VISIBILITY aclError aclmdlInitDump() {
-    std::cout << "[aclmdlInitDump]" << std::endl;
+    log_output("[aclmdlInitDump]");
 
     // not‑NPU: no-op, Torch-NPU не использует dump pipeline
 
@@ -565,7 +597,7 @@ ACL_FUNC_VISIBILITY aclError aclmdlInitDump() {
 }
 
 ACL_FUNC_VISIBILITY aclError aclmdlFinalizeDump() {
-    std::cout << "[aclmdlFinalizeDump]" << std::endl;
+    log_output("[aclmdlFinalizeDump]");
 
     // not‑NPU: no-op, Torch-NPU не использует dump pipeline
 
@@ -573,9 +605,9 @@ ACL_FUNC_VISIBILITY aclError aclmdlFinalizeDump() {
 }
 
 ACL_FUNC_VISIBILITY aclError aclmdlSetDump(const char *dumpCfgPath) {
-    std::cout << "[aclmdlSetDump] ";
-    log_ptr("dumpCfgPath", dumpCfgPath);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclmdlSetDump] dumpCfgPath=" << dumpCfgPath;
+    log_output(log);
 
     // not‑NPU: no-op, Torch-NPU не использует dump config
 
@@ -583,10 +615,10 @@ ACL_FUNC_VISIBILITY aclError aclmdlSetDump(const char *dumpCfgPath) {
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtStreamWaitEvent(aclrtStream stream, aclrtEvent event) {
-    std::cout << "[aclrtStreamWaitEvent] ";
-    log_ptr("stream", stream);
-    log_ptr("event", event);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtStreamWaitEvent] stream=" << stream
+        << " event=" << event;
+    log_output(log);
 
     // not‑NPU: Torch-NPU не использует реальные события и не ждёт их.
     // Полный no-op.
@@ -595,9 +627,9 @@ ACL_FUNC_VISIBILITY aclError aclrtStreamWaitEvent(aclrtStream stream, aclrtEvent
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtSynchronizeEvent(aclrtEvent event) {
-    std::cout << "[aclrtSynchronizeEvent] ";
-    log_ptr("event", event);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtSynchronizeEvent] event=" << event;
+    log_output(log);
 
     // not‑NPU: Torch-NPU не использует реальные события.
     // Полный no-op.
@@ -606,12 +638,12 @@ ACL_FUNC_VISIBILITY aclError aclrtSynchronizeEvent(aclrtEvent event) {
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtCreateStream(aclrtStream *stream) {
-    std::cout << "[aclrtCreateStream] ";
-    log_ptr("stream_ptr", stream);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtCreateStream] stream_ptr=" << stream;
 
     if (!stream) {
-        std::cout << "    stream_ptr is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    stream_ptr is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -620,9 +652,8 @@ ACL_FUNC_VISIBILITY aclError aclrtCreateStream(aclrtStream *stream) {
 
     *stream = fake_stream;
 
-    std::cout << "    created stream ";
-    log_ptr("stream", fake_stream);
-    std::cout << std::endl;
+    log << "\n    created stream=" << fake_stream;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -630,14 +661,15 @@ ACL_FUNC_VISIBILITY aclError aclrtCreateStream(aclrtStream *stream) {
 static aclrtContext g_current_context = nullptr;
 
 ACL_FUNC_VISIBILITY aclError aclrtSetCurrentContext(aclrtContext context) {
-    std::cout << "[aclrtSetCurrentContext] ";
-    log_ptr("context", context);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtSetCurrentContext] context=" << context;
 
     if (!context) {
-        std::cout << "    context is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    context is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
+    log_output(log);
 
     g_current_context = context;
 
@@ -645,51 +677,49 @@ ACL_FUNC_VISIBILITY aclError aclrtSetCurrentContext(aclrtContext context) {
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtGetCurrentContext(aclrtContext *context) {
-    std::cout << "[aclrtGetCurrentContext] ";
-    log_ptr("context_ptr", context);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtGetCurrentContext] context_ptr=" << context;
 
     if (!context) {
-        std::cout << "    context_ptr is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    context_ptr is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     // Если контекст ещё не создан — создаём фиктивный
     if (!g_current_context) {
         g_current_context = malloc(1);
-        std::cout << "    created default fake context ";
-        log_ptr("ctx", g_current_context);
-        std::cout << std::endl;
+        log << "\n    created default fake context";
     }
 
     *context = g_current_context;
 
-    std::cout << "    returned context ";
-    log_ptr("ctx", g_current_context);
-    std::cout << std::endl;
+    log << "\n    returned context=" << g_current_context;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtGetMemInfo(aclrtMemAttr attr, size_t *free, size_t *total) {
-    std::cout << "[aclrtGetMemInfo] attr=" << attr << " ";
-    log_ptr("free_ptr", free);
-    log_ptr("total_ptr", total);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtGetMemInfo] attr=" << attr
+        << " free_ptr=" << free
+        << " total_ptr=" << total;
 
     if (!free || !total) {
-        std::cout << "    null pointer → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    null pointer → ACL_ERROR_INVALID_PARAM";
+      log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     // not‑NPU: Torch-NPU не различает DDR/HBM/huge/P2P.
     // Возвращаем общий объём памяти устройства.
     *total = info_GM_size;
-
     // not‑NPU: считаем, что вся память свободна.
     *free = info_GM_size;
 
-    std::cout << "    free=" << *free << " total=" << *total << std::endl;
+    log << "\n    free=" << *free << " total=" << *total;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -697,48 +727,51 @@ ACL_FUNC_VISIBILITY aclError aclrtGetMemInfo(aclrtMemAttr attr, size_t *free, si
 static bool g_acl_initialized = false;
 
 ACL_FUNC_VISIBILITY aclError aclInit(const char *configPath) {
-    std::cout << "[aclInit] ";
-    log_ptr("configPath", configPath);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclInit] configPath=" << configPath;
 
     if (g_acl_initialized) {
-        std::cout << "    already initialized → ACL_SUCCESS" << std::endl;
+        log << "\n    already initialized → ACL_SUCCESS";
+        log_output(log);
         return ACL_SUCCESS;
     }
 
     g_acl_initialized = true;
 
-    std::cout << "    initialized ACL runtime (not‑NPU stub)" << std::endl;
+    log << "\n    initialized ACL runtime (not‑NPU stub)";
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtDeviceEnablePeerAccess(int32_t peerDeviceId, uint32_t flags) {
-    std::cout << "[aclrtDeviceEnablePeerAccess] peerDeviceId=" << peerDeviceId
-              << " flags=" << flags << std::endl;
+    std::ostringstream log;
+    log << "[aclrtDeviceEnablePeerAccess] peerDeviceId=" << peerDeviceId
+        << " flags=" << flags;
 
     if (peerDeviceId < 0 || peerDeviceId >= (int)g_device_count) {
-        std::cout << "    invalid peerDeviceId → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid peerDeviceId → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     if (flags != 0) {
-        std::cout << "    flags must be zero (ignored in not‑NPU)" << std::endl;
+        log << "\n    flags must be zero (ignored in not‑NPU)";
         // не возвращаем ошибку — Torch‑NPU не умеет её обрабатывать
     }
 
     // not‑NPU: P2P не поддерживается, но enable должен возвращать успех
-    std::cout << "    P2P unsupported → no-op" << std::endl;
+    log << "\n    P2P unsupported → no-op";
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtResetEvent(aclrtEvent event, aclrtStream stream) {
-    std::cout << "[aclrtResetEvent] ";
-    log_ptr("event", event);
-    std::cout << " ";
-    log_ptr("stream", stream);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtResetEvent] event=" << event
+        << " stream=" << stream;
+    log_output(log);
 
     // not‑NPU: Torch-NPU не использует реальные события.
     // Полный no-op.
@@ -747,17 +780,20 @@ ACL_FUNC_VISIBILITY aclError aclrtResetEvent(aclrtEvent event, aclrtStream strea
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtResetDevice(int32_t deviceId) {
-    std::cout << "[aclrtResetDevice] deviceId=" << deviceId << std::endl;
+    std::ostringstream log;
+    log << "[aclrtResetDevice] deviceId=" << deviceId;
 
     if (deviceId < 0 || deviceId >= (int)g_device_count) {
-        std::cout << "    invalid deviceId → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid deviceId → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     // not‑NPU: реального устройства нет, контексты/стримы фиктивные.
     // Ничего не делаем, просто считаем, что reset прошёл успешно.
 
-    std::cout << "    reset device (no-op in not‑NPU)" << std::endl;
+    log << "\n    reset device (no-op in not‑NPU)";
+    log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -771,7 +807,9 @@ typedef enum aclrtFloatOverflowMode {
 static aclrtFloatOverflowMode g_sat_mode = ACL_RT_OVERFLOW_MODE_SATURATION;
 
 ACL_FUNC_VISIBILITY aclError aclrtSetDeviceSatMode(aclrtFloatOverflowMode mode) {
-    std::cout << "[aclrtSetDeviceSatMode] mode=" << mode << std::endl;
+    std::ostringstream log;
+    log << "[aclrtSetDeviceSatMode] mode=" << mode;
+    log_output(log);
 
     // not‑NPU: просто сохраняем значение, чтобы Get мог вернуть то же самое
     g_sat_mode = mode;
@@ -780,18 +818,18 @@ ACL_FUNC_VISIBILITY aclError aclrtSetDeviceSatMode(aclrtFloatOverflowMode mode) 
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtGetDeviceSatMode(aclrtFloatOverflowMode *mode) {
-    std::cout << "[aclrtGetDeviceSatMode] ";
-    log_ptr("mode_ptr", mode);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtGetDeviceSatMode] mode_ptr=" << mode;
 
     if (!mode) {
-        std::cout << "    mode_ptr is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    mode_ptr is null → ACL_ERROR_INVALID_PARAM";
         return ACL_ERROR_INVALID_PARAM;
     }
 
     *mode = g_sat_mode;
 
-    std::cout << "    returned mode=" << *mode << std::endl;
+    log << "\n    returned mode=" << *mode;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -804,47 +842,54 @@ typedef enum {
 } aclSysParamOpt;
 
 ACL_FUNC_VISIBILITY aclError aclrtCtxSetSysParamOpt(aclSysParamOpt opt, int64_t value) {
-    std::cout << "[aclrtCtxSetSysParamOpt] opt=" << opt
-              << " value=" << value << std::endl;
+    std::ostringstream log;
+    log << "[aclrtCtxSetSysParamOpt] opt=" << opt
+        << " value=" << value;
+    log_output(log);
 
     // not‑NPU: системных параметров нет, просто принимаем и игнорируем
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtSetOpExecuteTimeOut(uint32_t timeout) {
-    std::cout << "[aclrtSetOpExecuteTimeOut] timeout=" << timeout << " sec" << std::endl;
+    std::ostringstream log;
+    log << "[aclrtSetOpExecuteTimeOut] timeout=" << timeout << " sec";
+    log_output(log);
 
     // not‑NPU: таймауты не поддерживаются, но Torch‑NPU ожидает успех
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtSetStreamOverflowSwitch(aclrtStream stream, uint32_t flag) {
-    std::cout << "[aclrtSetStreamOverflowSwitch] ";
-    log_ptr("stream", stream);
-    std::cout << " flag=" << flag << std::endl;
+    std::ostringstream log;
+    log << "[aclrtSetStreamOverflowSwitch] stream=" << stream
+        << " flag=" << flag;
+    log_output(log);
 
     // not‑NPU: no real stream overflow switch, just log and accept any flag
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtDestroyStreamForce(aclrtStream stream) {
-    std::cout << "[aclrtDestroyStreamForce] ";
-    log_ptr("stream", stream);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtDestroyStreamForce] stream=" << stream;
+    log_output(log);
 
     // not‑NPU: стримы не управляются, принудительное уничтожение эквивалентно обычному
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtSynchronizeDevice(void) {
-    std::cout << "[aclrtSynchronizeDevice]" << std::endl;
+    log_output("[aclrtSynchronizeDevice]");
 
     // not‑NPU: нет реального устройства, синхронизация не требуется
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtSynchronizeDeviceWithTimeout(int32_t timeout) {
-    std::cout << "[aclrtSynchronizeDeviceWithTimeout] timeout=" << timeout << std::endl;
+    std::ostringstream log;
+    log << "[aclrtSynchronizeDeviceWithTimeout] timeout=" << timeout;
+    log_output(log);
 
     // not‑NPU: нет реального устройства, синхронизация не требуется
     return ACL_SUCCESS;
@@ -858,21 +903,22 @@ ACL_FUNC_VISIBILITY aclTensorDesc *aclCreateTensorDesc(aclDataType dataType,
                                                        int numDims,
                                                        const int64_t *dims,
                                                        aclFormat format) {
-    std::cout << "[aclCreateTensorDesc] ";
-    std::cout << " dtype=" << static_cast<int>(dataType)
-              << " numDims=" << numDims
-              << " ";
-    log_ptr("dims", dims);
-    std::cout << " format=" << format << std::endl;
+    std::ostringstream log;
+    log << "[aclCreateTensorDesc] dtype=" << static_cast<int>(dataType)
+        << " numDims=" << numDims
+        << " dims=" << dims
+        << " format=" << format;
 
     if (numDims < 0 || (numDims > 0 && !dims)) {
-        std::cout << "    invalid dims → nullptr" << std::endl;
+        log << "\n    invalid dims → nullptr";
+        log_output(log);
         return nullptr;
     }
 
     aclTensorDesc *desc = new aclTensorDesc();
     if (!desc) {
-        std::cout << "    new failed → nullptr" << std::endl;
+        log << "\n    new failed → nullptr";
+        log_output(log);
         return nullptr;
     }
 
@@ -884,40 +930,43 @@ ACL_FUNC_VISIBILITY aclTensorDesc *aclCreateTensorDesc(aclDataType dataType,
     for (int i = 0; i < numDims; i++)
         desc->dims.push_back(dims[i]);
 
-    std::cout << "    created tensor desc ";
-    log_ptr("ptr", desc);
-    std::cout << " dims=" << numDims << std::endl;
+    log << "\n    created tensor desc=" << desc
+        << " dims=" << numDims;
+    log_output(log);
 
     return desc;
 }
 
 ACL_FUNC_VISIBILITY void aclDestroyTensorDesc(const aclTensorDesc *desc) {
-    std::cout << "[aclDestroyTensorDesc] ";
-    log_ptr("desc", desc);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclDestroyTensorDesc] desc=" << desc;
+    log_output(log);
 
     delete desc;
 }
 
 ACL_DEPRECATED_MESSAGE("aclGetTensorDescDim is deprecated, use aclGetTensorDescDimV2 instead")
 ACL_FUNC_VISIBILITY int64_t aclGetTensorDescDim(const aclTensorDesc *desc, size_t index) {
-    std::cout << "[aclGetTensorDescDim] ";
-    log_ptr("desc", desc);
-    std::cout << " index=" << index << std::endl;
+    std::ostringstream log;
+    log << "[aclGetTensorDescDim] desc=" << desc
+        << " index=" << index;
 
     if (!desc) {
-        std::cout << "    desc is null → -1" << std::endl;
+        log << "\n    desc is null → -1";
+        log_output(log);
         return -1;
     }
 
     if (index >= desc->dims.size()) {
-        std::cout << "    index out of range → -1" << std::endl;
+        log << "\n    index out of range → -1";
+        log_output(log);
         return -1;
     }
 
     int64_t v = desc->dims[index];
 
-    std::cout << "    dim=" << v << std::endl;
+    log << "\n    dim=" << v;
+    log_output(log);
 
     return v;
 }
@@ -925,143 +974,155 @@ ACL_FUNC_VISIBILITY int64_t aclGetTensorDescDim(const aclTensorDesc *desc, size_
 ACL_FUNC_VISIBILITY aclError aclGetTensorDescDimV2(const aclTensorDesc *desc,
                                                    size_t index,
                                                    int64_t *dimSize) {
-    std::cout << "[aclGetTensorDescDimV2] ";
-    log_ptr("desc", desc);
-    log_ptr("dimSize", dimSize);
-    std::cout << " index=" << index << std::endl;
+    std::ostringstream log;
+    log << "[aclGetTensorDescDimV2] desc=" << desc
+        << " dimSize" << dimSize
+        << " index=" << index;
 
     if (!desc || !dimSize) {
-        std::cout << "    invalid argument → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     if (index >= desc->dims.size()) {
-        std::cout << "    index out of range → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    index out of range → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     *dimSize = desc->dims[index];
 
-    std::cout << "    dim=" << *dimSize << std::endl;
+    log << "\n    dim=" << *dimSize;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclFormat aclGetTensorDescFormat(const aclTensorDesc *desc) {
-    std::cout << "[aclGetTensorDescFormat] ";
-    log_ptr("desc", desc);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclGetTensorDescFormat] desc=" << desc;
 
     if (!desc) {
-        std::cout << "    desc is null → ACL_FORMAT_UNDEFINED" << std::endl;
+        log << "\n    desc is null → ACL_FORMAT_UNDEFINED";
+        log_output(log);
         return ACL_FORMAT_UNDEFINED;
     }
 
     aclFormat fmt = desc->format;
 
-    std::cout << "    format=" << fmt << std::endl;
+    log << "\n    format=" << fmt;
+    log_output(log);
 
     return fmt;
 }
 
 ACL_FUNC_VISIBILITY size_t aclGetTensorDescNumDims(const aclTensorDesc *desc) {
-    std::cout << "[aclGetTensorDescNumDims] ";
-    log_ptr("desc", desc);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclGetTensorDescNumDims] desc=" << desc;
 
     if (!desc) {
-        std::cout << "    desc is null → 0" << std::endl;
+        log << "\n    desc is null → 0";
+        log_output(log);
         return 0;
     }
 
     if (desc->dims.size() == 1 && desc->dims[0] == -2) {
-        std::cout << "    dims = [-2] → ACL_UNKNOWN_RANK" << std::endl;
+        log << "\n    dims = [-2] → ACL_UNKNOWN_RANK";
+        log_output(log);
         return ACL_UNKNOWN_RANK;  // -2
     }
 
     size_t n = desc->dims.size();
 
-    std::cout << "    numDims=" << n << std::endl;
+    log << "\n    numDims=" << n;
+    log_output(log);
 
     return n;
 }
 
 ACL_FUNC_VISIBILITY aclDataType aclGetTensorDescType(const aclTensorDesc *desc) {
-    std::cout << "[aclGetTensorDescType] ";
-    log_ptr("desc", desc);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclGetTensorDescType] desc=" << desc;
 
     if (!desc) {
-        std::cout << "    desc is null → ACL_DT_UNDEFINED" << std::endl;
+        log << "\n    desc is null → ACL_DT_UNDEFINED";
+        log_output(log);
         return ACL_DT_UNDEFINED;
     }
 
     aclDataType t = desc->dtype;
 
-    std::cout << "    dtype=" << static_cast<int>(t) << std::endl;
+    log << "\n    dtype=" << static_cast<int>(t);
+    log_output(log);
 
     return t;
 }
 
 ACL_FUNC_VISIBILITY void aclSetTensorDescName(aclTensorDesc *desc, const char *name) {
-    std::cout << "[aclSetTensorDescName] ";
-    log_ptr("desc", desc);
-    log_ptr("name", name);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclSetTensorDescName] desc=" << desc
+        << " name=" << name;
 
     if (!desc || !name) {
-        std::cout << "    invalid argument → ignored" << std::endl;
+        log << "\n    invalid argument → ignored";
+        log_output(log);
         return;
     }
 
     desc->name = name;
 
-    std::cout << "    stored name=\"" << desc->name << "\"" << std::endl;
+    log << "\n    stored name=\"" << desc->name << "\"";
+    log_output(log);
 }
 
 ACL_FUNC_VISIBILITY aclError aclSetTensorFormat(aclTensorDesc *desc, aclFormat format) {
-    std::cout << "[aclSetTensorFormat] ";
-    log_ptr("desc", desc);
-    std::cout << " format=" << format << std::endl;
+    std::ostringstream log;
+    log << "[aclSetTensorFormat] desc" << desc
+        << " format=" << format;
 
     if (!desc) {
-        std::cout << "    desc is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    desc is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     desc->format = format;
 
-    std::cout << "    stored format=" << format << std::endl;
+    log << "\n    stored format=" << format;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclSetTensorPlaceMent(aclTensorDesc *desc, aclMemType memType) {
-    std::cout << "[aclSetTensorPlaceMent] ";
-    log_ptr("desc", desc);
-    std::cout << " memType=" << memType << std::endl;
+    std::ostringstream log;
+    log << "[aclSetTensorPlaceMent] desc=" << desc
+        << " memType=" << memType;
 
     if (!desc) {
-        std::cout << "    desc is null → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    desc is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     desc->memType = memType;
 
-    std::cout << "    stored memType=" << memType << std::endl;
+    log << "\n    stored memType=" << memType;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclSetTensorShape(aclTensorDesc *desc, int numDims, const int64_t *dims) {
-    std::cout << "[aclSetTensorShape] ";
-    log_ptr("desc", desc);
-    std::cout << " numDims=" << numDims << " ";
-    log_ptr("dims", dims);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclSetTensorShape] desc=" << desc
+        << " numDims=" << numDims << " "
+        << " dims=" << dims;
 
     if (!desc || !dims || numDims < 0) {
-        std::cout << "    invalid argument → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1071,7 +1132,8 @@ ACL_FUNC_VISIBILITY aclError aclSetTensorShape(aclTensorDesc *desc, int numDims,
     for (int i = 0; i < numDims; i++)
         desc->dims.push_back(dims[i]);
 
-    std::cout << "    stored shape: dims=" << numDims << std::endl;
+    log << "\n    stored shape: dims=" << numDims;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -1091,9 +1153,9 @@ ACL_FUNC_VISIBILITY aclError aclSetTensorShape(aclTensorDesc *desc, int numDims,
 typedef void* VOID_PTR;
 
 MSVP_PROF_API uint64_t MsprofGetHashId(const char *hashInfo, size_t length) {
-    std::cout << "[MsprofGetHashId] ";
-    log_ptr("hashInfo", hashInfo);
-    std::cout << " length=" << length << std::endl;
+    std::ostringstream log;
+    log << "[MsprofGetHashId] hashInfo=" << hashInfo
+        << " length=" << length;
 
     // простой детерминированный FNV‑1a hash
     uint64_t h = 1469598103934665603ULL;
@@ -1103,7 +1165,8 @@ MSVP_PROF_API uint64_t MsprofGetHashId(const char *hashInfo, size_t length) {
         h *= 1099511628211ULL;
     }
 
-    std::cout << "    h = " << h << std::endl;
+    log << "\n    h = " << h;
+    log_output(log);
 
     return h;
 }
@@ -1124,12 +1187,13 @@ struct MsprofApi { // for MsprofReportApi
 };
 
 MSVP_PROF_API int32_t MsprofReportApi(uint32_t nonPersistantFlag, const struct MsprofApi *api) {
-    std::cout << "[MsprofReportApi] nonPersistantFlag=" << nonPersistantFlag << " ";
-    log_ptr("api", api);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[MsprofReportApi] nonPersistantFlag=" << nonPersistantFlag
+        << " api=" << api;
 
     if (!api) {
-        std::cout << "    api is null → FAILED" << std::endl;
+        log << "\n    api is null → FAILED";
+        log_output(log);
         return -1;
     }
 
@@ -1162,14 +1226,14 @@ MSVP_PROF_API int32_t MsprofReportApi(uint32_t nonPersistantFlag, const struct M
     filled.reserve = 0;
 
     // magicNumber уже установлен конструктором
-    std::cout << "    filled: magic=" << filled.magicNumber
-              << " level=" << filled.level
-              << " type=" << filled.type
-              << " threadId=" << filled.threadId
-              << " begin=" << filled.beginTime
-              << " end=" << filled.endTime
-              << " itemId=" << filled.itemId
-              << std::endl;
+    log << "\n    filled: magic=" << filled.magicNumber
+        << " level=" << filled.level
+        << " type=" << filled.type
+        << " threadId=" << filled.threadId
+        << " begin=" << filled.beginTime
+        << " end=" << filled.endTime
+        << " itemId=" << filled.itemId;
+    log_output(log);
 
     // not‑NPU: no-op
     return 0;
@@ -1246,18 +1310,20 @@ struct MsprofCompactInfo {  // for MsprofReportCompactInfo buffer data
 };
 
 MSVP_PROF_API int32_t MsprofReportCompactInfo(uint32_t nonPersistantFlag, const VOID_PTR data, uint32_t length) {
-    std::cout << "[MsprofReportCompactInfo] nonPersistantFlag=" << nonPersistantFlag
-              << " length=" << length << " ";
-    log_ptr("data", data);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[MsprofReportCompactInfo] nonPersistantFlag=" << nonPersistantFlag
+        << " length=" << length
+        << " data=" << data;
 
     if (!data) {
-        std::cout << "    data is null → FAILED" << std::endl;
+        log << "\n    data is null → FAILED";
+        log_output(log);
         return -1;
     }
 
     if (length < sizeof(MsprofCompactInfo)) {
-        std::cout << "    length < sizeof(MsprofCompactInfo) → FAILED" << std::endl;
+        log << "\n    length < sizeof(MsprofCompactInfo) → FAILED";
+        log_output(log);
         return -1;
     }
 
@@ -1279,31 +1345,30 @@ MSVP_PROF_API int32_t MsprofReportCompactInfo(uint32_t nonPersistantFlag, const 
     // dataLen — оставляем как есть, Torch-NPU не проверяет
     // union data — не трогаем, просто логируем
 
-    std::cout << "    filled: magic=" << filled.magicNumber
-              << " level=" << filled.level
-              << " type=" << filled.type
-              << " threadId=" << filled.threadId
-              << " dataLen=" << filled.dataLen
-              << " timeStamp=" << filled.timeStamp
-              << std::endl;
+    log << "\n    filled: magic=" << filled.magicNumber
+        << " level=" << filled.level
+        << " type=" << filled.type
+        << " threadId=" << filled.threadId
+        << " dataLen=" << filled.dataLen
+        << " timeStamp=" << filled.timeStamp;
 
     // Логируем первые 32 байта info[] для отладки
-    std::cout << "    data[0..31]: ";
+    log << "\n    data[0..31]: ";
     for (int i = 0; i < 32; ++i) {
         uint8_t b = filled.data.info[i];
         const char *hex = "0123456789abcdef";
         char hi = hex[(b >> 4) & 0xF];
         char lo = hex[b & 0xF];
-        std::cout << hi << lo << " ";
+        log << hi << lo << " ";
     }
-    std::cout << std::endl;
+    log_output(log);
 
     // not‑NPU: no-op
     return 0;
 }
 
 MSVP_PROF_API uint64_t MsprofSysCycleTime(void) {
-    std::cout << "[MsprofSysCycleTime]" << std::endl;
+    log_output("[MsprofSysCycleTime]");
 
     // not‑NPU: фиктивное значение 1 ns
 
@@ -1336,28 +1401,28 @@ typedef struct tagRtDevBinary {
 } rtDevBinary_t;
 
 RTS_API rtError_t rtDevBinaryRegister(const rtDevBinary_t *bin, void **hdl) {
-    std::cout << "[rtDevBinaryRegister] ";
-    log_ptr("bin", bin);
-    log_ptr("hdl", hdl);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[rtDevBinaryRegister] bin=" << bin
+        << " hdl=" << hdl;
 
     if (!bin || !hdl) {
-        std::cout << "    bin or hdl is null → RT_ERROR_INVALID_VALUE" << std::endl;
+        log << "\n    bin or hdl is null → RT_ERROR_INVALID_VALUE";
+        log_output(log);
         return RT_ERROR_INVALID_VALUE;
     }
 
-    std::cout << "    rtDevBinary_t:" << std::endl;
-    std::cout << "        magic=" << bin->magic << std::endl;
-    std::cout << "        version=" << bin->version << std::endl;
-    std::cout << "        data=";
-    log_ptr("data", bin->data);
-    std::cout << "        length=" << bin->length << std::endl;
+    log << "\n    rtDevBinary_t:"
+        << "\n        magic=" << bin->magic
+        << "\n        version=" << bin->version
+        << "\n        data=" << bin->data
+        << "\n        length=" << bin->length;
 
     // not‑NPU: не загружаем бинарь, не парсим ELF, не регистрируем ничего.
     // Просто возвращаем фиктивный handle, чтобы последующие вызовы могли его логировать.
     *hdl = (void*)bin;
 
-    std::cout << "    handle set to bin (fake handle)" << std::endl;
+    log << "\n    handle set to bin (fake handle)";
+    log_output(log);
 
     return RT_ERROR_NONE;
 }
@@ -1368,18 +1433,19 @@ typedef char char_t;
 
 RTS_API rtError_t rtFunctionRegister(void *binHandle, const void *stubFunc, const char_t *stubName,
                                      const void *kernelInfoExt, uint32_t funcMode) {
-    std::cout << "[rtFunctionRegister] ";
-    log_ptr("binHandle", binHandle);
-    log_ptr("stubFunc", stubFunc);
-    log_ptr("stubName", stubName);
-    log_ptr("kernelInfoExt", kernelInfoExt);
-    std::cout << " funcMode=" << funcMode;
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[rtFunctionRegister] binHandle=" << binHandle
+        << " stubFunc=" << stubFunc
+        << " stubName=" << stubName
+        << " kernelInfoExt=" << kernelInfoExt
+        << " funcMode=" << funcMode;
 
     if (!binHandle || !stubFunc || !stubName) {
-        std::cout << "    invalid argument → RT_ERROR_INVALID_VALUE" << std::endl;
+        log << "\n    invalid argument → RT_ERROR_INVALID_VALUE";
+        log_output(log);
         return RT_ERROR_INVALID_VALUE;
     }
+    log_output(log);
 
     // not‑NPU: Torch-NPU не использует реальную регистрацию функций.
     // Мы просто логируем и возвращаем успех.
@@ -1412,48 +1478,47 @@ typedef struct tagRtSmCtrl {
 
 RTS_API rtError_t rtKernelLaunch(const void *stubFunc, uint32_t numBlocks, void *args, uint32_t argsSize,
                                  rtSmDesc_t *smDesc, rtStream_t stm) {
-    std::cout << "[rtKernelLaunch] ";
-    log_ptr("stubFunc", stubFunc);
-    std::cout << " numBlocks=" << numBlocks;
-    log_ptr("args", args);
-    std::cout << " argsSize=" << argsSize;
-    log_ptr("smDesc", smDesc);
-    log_ptr("stream", stm);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[rtKernelLaunch] stubFunc=" << stubFunc
+        << " numBlocks=" << numBlocks
+        << " args=" << args
+        << " argsSize=" << argsSize
+        << " smDesc=" << smDesc
+        << " stream=" << stm;
 
     if (!stubFunc) {
-        std::cout << "    stubFunc is null → RT_ERROR_INVALID_VALUE" << std::endl;
+        log << "\n    stubFunc is null → RT_ERROR_INVALID_VALUE";
+        log_output(log);
         return RT_ERROR_INVALID_VALUE;
     }
 
     // Логируем smDesc, если он есть
     if (smDesc) {
-        std::cout << "    rtSmDesc_t:" << std::endl;
-        std::cout << "        size=" << smDesc->size << std::endl;
-        std::cout << "        l2_in_main=" << (int)smDesc->l2_in_main << std::endl;
+        log << "\n    rtSmDesc_t:"
+            << "\n        size=" << smDesc->size
+            << "\n        l2_in_main=" << (int)smDesc->l2_in_main
 
-        std::cout << "        remap[0..7]: ";
+            << "\n        remap[0..7]: ";
         for (int i = 0; i < 8; i++) {
-            std::cout << (int)smDesc->remap[i] << " ";
+            log << (int)smDesc->remap[i] << " ";
         }
-        std::cout << std::endl;
 
         for (int i = 0; i < 8; i++) {
             const rtSmData_t &d = smDesc->data[i];
-            std::cout << "        data[" << i << "] L2_mirror_addr=" << d.L2_mirror_addr
-                      << " L2_data_section_size=" << d.L2_data_section_size
-                      << " L2_preload=" << (int)d.L2_preload
-                      << " modified=" << (int)d.modified
-                      << " priority=" << (int)d.priority
-                      << " prev_L2_page_offset_base=" << (int)d.prev_L2_page_offset_base
-                      << " L2_page_offset_base=" << (int)d.L2_page_offset_base
-                      << " L2_load_to_ddr=" << (int)d.L2_load_to_ddr
-                      << std::endl;
+            log << "\n        data[" << i << "]: L2_mirror_addr=" << d.L2_mirror_addr
+                << " L2_data_section_size=" << d.L2_data_section_size
+                << " L2_preload=" << (int)d.L2_preload
+                << " modified=" << (int)d.modified
+                << " priority=" << (int)d.priority
+                << " prev_L2_page_offset_base=" << (int)d.prev_L2_page_offset_base
+                << " L2_page_offset_base=" << (int)d.L2_page_offset_base
+                << " L2_load_to_ddr=" << (int)d.L2_load_to_ddr;
         }
     }
 
     // not‑NPU: Torch-NPU не использует реальный запуск ядра.
-    std::cout << "    kernel launched (fake)" << std::endl;
+    log << "\n    kernel launched (fake)";
+    log_output(log);
 
     return RT_ERROR_NONE;
 }
@@ -1463,111 +1528,120 @@ RTS_API rtError_t rtKernelLaunch(const void *stubFunc, uint32_t numBlocks, void 
 // ~~~ cann-ge-executor/ge-executor/include/acl/acl_op.h ~~~
 
 ACL_FUNC_VISIBILITY aclopAttr *aclopCreateAttr() {
-    std::cout << "[aclopCreateAttr]" << std::endl;
+    std::ostringstream log;
+    log << "[aclopCreateAttr]";
 
     aclopAttr *a = new aclopAttr();
     if (!a) {
-        std::cout << "    new failed → nullptr" << std::endl;
+        log << "\n    new failed → nullptr";
         return nullptr;
     }
 
-    std::cout << "    created attr ";
-    log_ptr("ptr", a);
-    std::cout << std::endl;
+    log << "\n    created attr=" << a;
+    log_output(log);
 
     return a;
 }
 
 ACL_FUNC_VISIBILITY void aclopDestroyAttr(const aclopAttr *attr) {
-    std::cout << "[aclopDestroyAttr] ";
-    log_ptr("attr", attr);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclopDestroyAttr] attr=" << attr;
+    log_output(log);
 
     delete attr;
 }
 
 ACL_FUNC_VISIBILITY aclError aclopSetAttrBool(aclopAttr *attr, const char *attrName, uint8_t attrValue) {
-    std::cout << "[aclopSetAttrBool] ";
-    log_ptr("attr", attr);
-    log_ptr("attrName", attrName);
-    std::cout << " attrValue=" << (int)attrValue << std::endl;
+    std::ostringstream log;
+    log << "[aclopSetAttrBool] attr=" << attr
+        << " attrName=" << attrName
+        << " attrValue=" << (int)attrValue;
 
     if (!attr || !attrName) {
-        std::cout << "    invalid argument → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     attr->bools[attrName] = attrValue;
 
-    std::cout << "    stored bool: " << attrName << "=" << (int)attrValue << std::endl;
+    log << "\n    stored bool: " << attrName << "=" << (int)attrValue;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclopSetAttrDataType(aclopAttr *attr, const char *attrName, aclDataType attrValue) {
-    std::cout << "[aclopSetAttrDataType] ";
-    log_ptr("attr", attr);
-    log_ptr("attrName", attrName);
-    std::cout << " dtype=" << static_cast<int>(attrValue) << std::endl;
+    std::ostringstream log;
+    log << "[aclopSetAttrDataType] attr=" << attr
+        << " attrName=" << attrName
+        << " dtype=" << static_cast<int>(attrValue);
 
     if (!attr || !attrName) {
-        std::cout << "    invalid argument → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     attr->dtypes[attrName] = attrValue;
 
-    std::cout << "    stored dtype: " << attrName << "=" << static_cast<int>(attrValue) << std::endl;
+    log << "\n    stored dtype: " << attrName << "=" << static_cast<int>(attrValue);
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclopSetAttrFloat(aclopAttr *attr, const char *attrName, float attrValue) {
-    std::cout << "[aclopSetAttrFloat] ";
-    log_ptr("attr", attr);
-    log_ptr("attrName", attrName);
-    std::cout << " value=" << attrValue << std::endl;
+    std::ostringstream log;
+    log << "[aclopSetAttrFloat] attr=" << attr
+        << " attrName=" << attrName
+        << " value=" << attrValue;
 
     if (!attr || !attrName) {
-        std::cout << "    invalid argument → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     attr->floats[attrName] = attrValue;
 
-    std::cout << "    stored float: " << attrName << "=" << attrValue << std::endl;
+    log << "\n    stored float: " << attrName << "=" << attrValue;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclopSetAttrInt(aclopAttr *attr, const char *attrName, int64_t attrValue) {
-    std::cout << "[aclopSetAttrInt] ";
-    log_ptr("attr", attr);
-    log_ptr("attrName", attrName);
-    std::cout << " value=" << attrValue << std::endl;
+    std::ostringstream log;
+    log << "[aclopSetAttrInt] attr=" << attr
+        << " attrName=" << attrName
+        << " value=" << attrValue;
 
     if (!attr || !attrName) {
-        std::cout << "    invalid argument → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     attr->ints[attrName] = attrValue;
 
-    std::cout << "    stored int: " << attrName << "=" << attrValue << std::endl;
+    log << "\n    stored int: " << attrName << "=" << attrValue;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclopSetAttrListBool(aclopAttr *attr, const char *attrName, int numValues,
                                                   const uint8_t *values) {
-    std::cout << "[aclopSetAttrListBool] ";
-    log_ptr("attr", attr);
-    log_ptr("attrName", attrName);
-    log_ptr("values", values);
-    std::cout << " numValues=" << numValues << std::endl;
+    std::ostringstream log;
+    log << "[aclopSetAttrListBool] attr=" << attr
+        << " attrName=" << attrName
+        << " values=" << values
+        << " numValues=" << numValues;
 
     if (!attr || !attrName || !values || numValues < 0) {
-        std::cout << "    invalid argument → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1579,22 +1653,24 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListBool(aclopAttr *attr, const char *a
 
     attr->list_bools[attrName] = std::move(out);
 
-    std::cout << "    stored list<uint8_t>: " << attrName
-              << " size=" << numValues << std::endl;
+    log << "\n    stored list<uint8_t>: " << attrName
+        << " size=" << numValues;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclopSetAttrListFloat(aclopAttr *attr, const char *attrName, int numValues,
                                                    const float *values) {
-    std::cout << "[aclopSetAttrListFloat] ";
-    log_ptr("attr", attr);
-    log_ptr("attrName", attrName);
-    log_ptr("values", values);
-    std::cout << " numValues=" << numValues << std::endl;
+    std::ostringstream log;
+    log << "[aclopSetAttrListFloat] attr=" << attr
+        << " attrName=" << attrName
+        << " values=" << values
+        << " numValues=" << numValues;
 
     if (!attr || !attrName || !values || numValues < 0) {
-        std::cout << "    invalid argument → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1606,22 +1682,24 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListFloat(aclopAttr *attr, const char *
 
     attr->list_floats[attrName] = std::move(out);
 
-    std::cout << "    stored list<float>: " << attrName
-              << " size=" << numValues << std::endl;
+    log << "\n    stored list<float>: " << attrName
+        << " size=" << numValues;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclopSetAttrListInt(aclopAttr *attr, const char *attrName, int numValues,
                                                  const int64_t *values) {
-    std::cout << "[aclopSetAttrListInt] ";
-    log_ptr("attr", attr);
-    log_ptr("attrName", attrName);
-    log_ptr("values", values);
-    std::cout << " numValues=" << numValues << std::endl;
+    std::ostringstream log;
+    log << "[aclopSetAttrListInt] attr=" << attr
+        << " attrName=" << attrName
+        << " values=" << values
+        << " numValues=" << numValues;
 
     if (!attr || !attrName || !values || numValues < 0) {
-        std::cout << "    invalid argument → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1633,8 +1711,9 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListInt(aclopAttr *attr, const char *at
 
     attr->list_ints[attrName] = std::move(out);
 
-    std::cout << "    stored list<int64_t>: " << attrName
-              << " size=" << numValues << std::endl;
+    log << "\n    stored list<int64_t>: " << attrName
+        << " size=" << numValues;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -1644,15 +1723,16 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListListInt(aclopAttr *attr,
                                                      int numLists,
                                                      const int *numValues,
                                                      const int64_t *const values[]) {
-    std::cout << "[aclopSetAttrListListInt] ";
-    log_ptr("attr", attr);
-    log_ptr("attrName", attrName);
-    log_ptr("numValues", numValues);
-    log_ptr("values", values);
-    std::cout << " numLists=" << numLists << std::endl;
+    std::ostringstream log;
+    log << "[aclopSetAttrListListInt] attr=" << attr
+        << " attrName=" << attrName
+        << " numValues=" << numValues
+        << " values=" << values
+        << " numLists=" << numLists;
 
     if (!attr || !attrName || !numValues || !values || numLists < 0) {
-        std::cout << "    invalid argument → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1664,7 +1744,8 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListListInt(aclopAttr *attr,
         const int64_t *src = values[i];
 
         if (!src || n < 0) {
-            std::cout << "    invalid inner list → ACL_ERROR_INVALID_PARAM" << std::endl;
+            log << "\n    invalid inner list → ACL_ERROR_INVALID_PARAM";
+            log_output(log);
             return ACL_ERROR_INVALID_PARAM;
         }
 
@@ -1680,28 +1761,30 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListListInt(aclopAttr *attr,
 
     attr->list_list_ints[attrName] = std::move(out);
 
-    std::cout << "    stored list<list<int64_t>>: " << attrName
-              << " lists=" << numLists << std::endl;
+    log << "\n    stored list<list<int64_t>>: " << attrName
+        << " lists=" << numLists;
+    log_output(log);
 
     return ACL_SUCCESS;
 }
 
 ACL_FUNC_VISIBILITY aclError aclopSetAttrString(aclopAttr *attr, const char *attrName, const char *attrValue) {
-    std::cout << "[aclopSetAttrString] ";
-    log_ptr("attr", attr);
-    log_ptr("attrName", attrName);
-    log_ptr("attrValue", attrValue);
-    std::cout << std::endl;
+    std::ostringstream log;
+    log << "[aclopSetAttrString] attr=" << attr
+        << " attrName=" << attrName
+        << " attrValue=" << attrValue;
 
     if (!attr || !attrName || !attrValue) {
-        std::cout << "    invalid argument → ACL_ERROR_INVALID_PARAM" << std::endl;
+        log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
+        log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     attr->strings[attrName] = attrValue;
 
-    std::cout << "    stored string: " << attrName
-              << "=\"" << attrValue << "\"" << std::endl;
+    log << "\n    stored string: " << attrName
+        << "=\"" << attrValue << "\"";
+    log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -1835,7 +1918,7 @@ static std::string formatTensorList(const char* label,
                                     int count) {
     std::ostringstream oss;
     for (int i = 0; i < count; ++i) {
-        oss << "  " << label << '[' << i << "]: ";
+        oss << "    " << label << '[' << i << "]: ";
         tensorDescToString(descs[i], oss);
         oss << '\n';
     }

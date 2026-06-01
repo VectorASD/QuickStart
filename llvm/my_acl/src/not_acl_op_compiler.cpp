@@ -58,10 +58,11 @@ static const char* aclCompileOptToString(aclCompileOpt opt) {
 }
 
 ACL_FUNC_VISIBILITY aclError aclSetCompileopt(aclCompileOpt opt, const char *value) {
-    std::cout << "[aclSetCompileopt] opt=" << aclCompileOptToString(opt)
-              << " (" << static_cast<int>(opt) << ")"
-              << " value=" << (value ? value : "(null)")
-              << std::endl;
+    std::ostringstream log;
+    log << "[aclSetCompileopt] opt=" << aclCompileOptToString(opt)
+        << " (" << static_cast<int>(opt) << ")"
+        << " value=" << (value ? value : "(null)");
+    log_output(log);
 
     // not‑NPU: компилятора нет, все compile options игнорируются
     return ACL_SUCCESS;
@@ -191,14 +192,13 @@ ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
     const aclopAttr *attr, aclopEngineType engineType, aclopCompileType compileFlag,
     const char *opPath, aclrtStream stream) {
 
-    // --- построение лога ---
     std::ostringstream log;
     log << "[aclopCompileAndExecute] opType=" << (opType ? opType : "(null)")
-        << " opPath=" << (opPath ? opPath : "(null)") << "\n";
-    log << "  numInputs=" << numInputs << " numOutputs=" << numOutputs << "\n";
-    log << formatTensorList("input", inputDesc, numInputs);
-    log << formatTensorList("output", outputDesc, numOutputs);
-    log << "  stream=" << stream;
+        << " opPath=" << (opPath ? opPath : "(null)")
+        << "\n    numInputs=" << numInputs << " numOutputs=" << numOutputs << '\n'
+        << formatTensorList("input", inputDesc, numInputs)
+        << formatTensorList("output", outputDesc, numOutputs)
+        << "    stream=" << stream;
     log_output(log);
 
     // --- эмуляция операций ---
