@@ -1,0 +1,52 @@
+cd ~/tmp
+cp /mnt/c/Users/VectorASD/Downloads/Ascend-cann_9.0.0-beta.2_linux-x86_64.run .
+./Ascend-cann_9.0.0-beta.2_linux-x86_64.run --noexec --extract=Ascend-cann
+rm Ascend-cann_9.0.0-beta.2_linux-x86_64.run
+
+cd ~/tmp/Ascend-cann/run_package
+for f in *.run; do ./"$f" --noexec --extract="${f%%_*}"; done
+rm *.run
+
+find . -name libhccl.so
+find . -name libhccl*.so
+    ./cann-hcomm/hcomm/lib64/libhccl_v2_native_alg_repo.so
+    ./cann-hcomm/hcomm/lib64/libhccl_v2.so
+    ./cann-hcomm/hcomm/lib64/libhccl_plf.so
+    ./cann-hcomm/hcomm/lib64/libhccl_v2_alg_frame.so
+    ./cann-hcomm/hcomm/lib64/libhccl_alg.so
+    ./cann-hcomm/hcomm/lib64/libhccl_legacy.so
+find . -name libascendcl.so
+    ./cann-npu-runtime/runtime/lib/libascendcl.so
+    ./cann-npu-runtime/runtime/lib/stub/linux/x86_64/libascendcl.so
+    ./cann-npu-runtime/runtime/devlib/linux/aarch64/libascendcl.so
+    ./cann-npu-runtime/runtime/devlib/linux/x86_64/libascendcl.so
+find . -name libacl_op_compiler.so
+    ./cann-ge-compiler/ge-compiler/lib64/libacl_op_compiler.so
+    ./cann-ge-compiler/ge-compiler/lib64/stub/linux/aarch64/libacl_op_compiler.so
+    ./cann-ge-compiler/ge-compiler/lib64/stub/linux/x86_64/libacl_op_compiler.so
+find . -name libge_runner.so
+    ./cann-ge-compiler/ge-compiler/lib64/libge_runner.so
+    ./cann-ge-compiler/ge-compiler/lib64/stub/linux/aarch64/libge_runner.so
+    ./cann-ge-compiler/ge-compiler/lib64/stub/linux/x86_64/libge_runner.so
+find . -name libgraph.so
+    ./cann-ge-executor/ge-executor/lib64/libgraph.so
+    ./cann-ge-executor/ge-executor/lib64/stub/linux/aarch64/libgraph.so
+    ./cann-ge-executor/ge-executor/lib64/stub/linux/x86_64/libgraph.so
+    ./cann-ge-executor/ge-executor/lib64/stub/minios/aarch64/libgraph.so
+find . -name libacl_tdt_channel.so
+    ./cann-npu-runtime/runtime/lib/libacl_tdt_channel.so
+    ./cann-npu-runtime/runtime/devlib/linux/aarch64/libacl_tdt_channel.so
+    ./cann-npu-runtime/runtime/devlib/linux/x86_64/libacl_tdt_channel.so
+
+
+cp /mnt/c/Users/VectorASD/Downloads/Ascend-cann-950-ops_9.0.0-beta.2_linux-x86_64.run .
+./Ascend-cann-950-ops_9.0.0-beta.2_linux-x86_64.run --noexec --extract=Ascend-cann-950
+rm Ascend-cann-950-ops_9.0.0-beta.2_linux-x86_64.run
+
+cd ~/tmp/Ascend-cann-950/run_package
+for f in *.run; do ./"$f" --noexec --extract="${f%%_*}"; done
+rm *.run
+
+find . -name libhccl.so
+    ./cann-hccl/hccl/lib64/libhccl.so
+    Нашлась потеряшка!)
