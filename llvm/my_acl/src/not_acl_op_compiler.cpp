@@ -92,7 +92,7 @@ ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
         << " opPath=" << (opPath ? opPath : "(null)")
         << "\n    numInputs=" << numInputs << " numOutputs=" << numOutputs << '\n'
         << formatTensorList("input", inputDesc, inputs, numInputs);
-    log_output(log);
+ // log_output(log);
 
     // --- эмуляция операций ---
     if (!opType) {
@@ -141,6 +141,62 @@ ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
                 }
             }
         }
+    } else if (strcmp(opType, "ZerosLike") == 0 && numInputs == 1 && numOutputs == 1) {
+        aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+        if (outputs[0] && outputs[0]->data) {
+            switch (inDt) {
+                DISPATCH_ZEROS_LIKE(ACL_FLOAT)
+                DISPATCH_ZEROS_LIKE(ACL_DOUBLE)
+                DISPATCH_ZEROS_LIKE(ACL_INT8)
+                DISPATCH_ZEROS_LIKE(ACL_UINT8)
+                DISPATCH_ZEROS_LIKE(ACL_INT16)
+                DISPATCH_ZEROS_LIKE(ACL_UINT16)
+                DISPATCH_ZEROS_LIKE(ACL_INT32)
+                DISPATCH_ZEROS_LIKE(ACL_UINT32)
+                DISPATCH_ZEROS_LIKE(ACL_INT64)
+                DISPATCH_ZEROS_LIKE(ACL_UINT64)
+                DISPATCH_ZEROS_LIKE(ACL_FLOAT16)
+                DISPATCH_ZEROS_LIKE(ACL_BF16)
+                DISPATCH_ZEROS_LIKE(ACL_BOOL)
+            default:
+                size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
+                size_t elemSize = aclDataTypeBytes(inDt);
+                if (count > 0 && elemSize > 0) {
+                    memset(outputs[0]->data, 0, count * elemSize);
+                }
+                break;
+            }
+        }
+    } else if (strcmp(opType, "Fill") == 0 && numInputs == 2 && numOutputs == 1) {
+        aclDataType outDt = aclGetTensorDescType(outputDesc[0], false);
+        if (outputs[0] && outputs[0]->data && inputs[1] && inputs[1]->data) {
+            switch (outDt) {
+                DISPATCH_FILL(ACL_FLOAT)
+                DISPATCH_FILL(ACL_DOUBLE)
+                DISPATCH_FILL(ACL_INT8)
+                DISPATCH_FILL(ACL_UINT8)
+                DISPATCH_FILL(ACL_INT16)
+                DISPATCH_FILL(ACL_UINT16)
+                DISPATCH_FILL(ACL_INT32)
+                DISPATCH_FILL(ACL_UINT32)
+                DISPATCH_FILL(ACL_INT64)
+                DISPATCH_FILL(ACL_UINT64)
+                DISPATCH_FILL(ACL_FLOAT16)
+                DISPATCH_FILL(ACL_BF16)
+                DISPATCH_FILL(ACL_BOOL)
+            default:
+                // fallback: копируем первый байт из значения во весь выход (если размеры совпадают)
+                size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
+                size_t elemSize = aclDataTypeBytes(outDt);
+                if (count > 0 && elemSize > 0) {
+                    // предполагаем, что inputs[1]->size >= elemSize
+                    for (size_t i = 0; i < count; ++i) {
+                        memcpy(static_cast<char*>(outputs[0]->data) + i * elemSize, inputs[1]->data, elemSize);
+                    }
+                }
+                break;
+            }
+        }
     } else if (strcmp(opType, "Mul") == 0 && numInputs == 2 && numOutputs == 1) {
         // Поэлементное умножение с broadcasting
         aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
@@ -185,6 +241,31 @@ ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
                 DISPATCH_ADD(ACL_UINT64)
                 DISPATCH_ADD(ACL_FLOAT16)
                 DISPATCH_ADD(ACL_BF16)
+            default:
+                size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
+                size_t elemSize = aclDataTypeBytes(dt);
+                if (count > 0 && elemSize > 0) {
+                    memcpy(outputs[0]->data, inputs[0]->data, std::min(count * elemSize, outputs[0]->size));
+                }
+                break;
+            }
+        }
+    } else if (strcmp(opType, "RealDiv") == 0 && numInputs == 2 && numOutputs == 1) {
+        aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
+        if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data && inputs[1] && inputs[1]->data) {
+            switch (dt) {
+                DISPATCH_DIV(ACL_FLOAT)
+                DISPATCH_DIV(ACL_DOUBLE)
+                DISPATCH_DIV(ACL_INT8)    // деление целых — осторожно!
+                DISPATCH_DIV(ACL_UINT8)
+                DISPATCH_DIV(ACL_INT16)
+                DISPATCH_DIV(ACL_UINT16)
+                DISPATCH_DIV(ACL_INT32)
+                DISPATCH_DIV(ACL_UINT32)
+                DISPATCH_DIV(ACL_INT64)
+                DISPATCH_DIV(ACL_UINT64)
+                DISPATCH_DIV(ACL_FLOAT16)
+                DISPATCH_DIV(ACL_BF16)
             default:
                 size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
                 size_t elemSize = aclDataTypeBytes(dt);
@@ -366,31 +447,6 @@ ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
                 // Для целых типов ceil не меняет значение, просто копируем вход
                 size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
                 size_t elemSize = aclDataTypeBytes(inDt);
-                if (count > 0 && elemSize > 0) {
-                    memcpy(outputs[0]->data, inputs[0]->data, std::min(count * elemSize, outputs[0]->size));
-                }
-                break;
-            }
-        }
-    } else if (strcmp(opType, "RealDiv") == 0 && numInputs == 2 && numOutputs == 1) {
-        aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
-        if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data && inputs[1] && inputs[1]->data) {
-            switch (dt) {
-                DISPATCH_DIV(ACL_FLOAT)
-                DISPATCH_DIV(ACL_DOUBLE)
-                DISPATCH_DIV(ACL_INT8)    // деление целых — осторожно!
-                DISPATCH_DIV(ACL_UINT8)
-                DISPATCH_DIV(ACL_INT16)
-                DISPATCH_DIV(ACL_UINT16)
-                DISPATCH_DIV(ACL_INT32)
-                DISPATCH_DIV(ACL_UINT32)
-                DISPATCH_DIV(ACL_INT64)
-                DISPATCH_DIV(ACL_UINT64)
-                DISPATCH_DIV(ACL_FLOAT16)
-                DISPATCH_DIV(ACL_BF16)
-            default:
-                size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
-                size_t elemSize = aclDataTypeBytes(dt);
                 if (count > 0 && elemSize > 0) {
                     memcpy(outputs[0]->data, inputs[0]->data, std::min(count * elemSize, outputs[0]->size));
                 }

@@ -519,6 +519,30 @@ void fillRandomNormal(TensorAccessor<typename aclDataTypeTraits<DT>::type>& out,
         break; \
     }
 
+#define DISPATCH_ZEROS_LIKE(DT) \
+    case DT: { \
+        using T = aclDataTypeTraits<DT>::type; \
+        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
+        size_t count = out.numElements(); \
+        if constexpr (DT == ACL_BOOL) { \
+            for (size_t i = 0; i < count; ++i) out[i] = false; \
+        } else { \
+            for (size_t i = 0; i < count; ++i) out[i] = static_cast<T>(0); \
+        } \
+        break; \
+    }
+
+#define DISPATCH_FILL(DT) \
+    case DT: { \
+        using T = aclDataTypeTraits<DT>::type; \
+        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
+        TensorAccessor<T> value(inputs[1]->data, inputDesc[1]->dims); \
+        T fillValue = value[0]; /* второй вход – скаляр */ \
+        size_t count = out.numElements(); \
+        for (size_t i = 0; i < count; ++i) out[i] = fillValue; \
+        break; \
+    }
+
 
 #define DISPATCH_MUL(DT) \
     case DT: { \
