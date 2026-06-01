@@ -277,7 +277,7 @@ ACL_FUNC_VISIBILITY aclError aclrtMallocAlign32(void **devPtr,
 
 ACL_FUNC_VISIBILITY aclError aclrtGetDevice(int32_t *deviceId) {
     std::ostringstream log;
-    log << "[aclrtGetDevice] deviceId_ptr=" << deviceId;
+    log << "[aclrtGetDevice]";
 
     if (!deviceId) {
         log << "\n    deviceId is null → ACL_ERROR_INVALID_PARAM";
@@ -639,7 +639,7 @@ ACL_FUNC_VISIBILITY aclError aclrtSynchronizeEvent(aclrtEvent event) {
 
 ACL_FUNC_VISIBILITY aclError aclrtCreateStream(aclrtStream *stream) {
     std::ostringstream log;
-    log << "[aclrtCreateStream] stream_ptr=" << stream;
+    log << "[aclrtCreateStream]";
 
     if (!stream) {
         log << "\n    stream_ptr is null → ACL_ERROR_INVALID_PARAM";
@@ -1913,14 +1913,136 @@ static std::string tensorDescToString(const aclTensorDesc* desc) {
     return oss.str();
 }
 
+// Преобразует один элемент тензора в строку по его типу
+static std::string aclElementToString(aclDataType dtype, const void* elemPtr) {
+    if (!elemPtr) return "?";
+    switch (dtype) {
+        case ACL_FLOAT:
+            return std::to_string(*static_cast<const float*>(elemPtr));
+        case ACL_DOUBLE:
+            return std::to_string(*static_cast<const double*>(elemPtr));
+        case ACL_FLOAT16:
+        case ACL_BF16: {
+            uint16_t v = *static_cast<const uint16_t*>(elemPtr);
+            uint32_t bits = static_cast<uint32_t>(v) << 16;
+            float f;
+            std::memcpy(&f, &bits, sizeof(f));
+            return std::to_string(f);
+        }
+        case ACL_INT8:
+            return std::to_string(static_cast<int>(*static_cast<const int8_t*>(elemPtr)));
+        case ACL_UINT8:
+            return std::to_string(static_cast<unsigned>(*static_cast<const uint8_t*>(elemPtr)));
+        case ACL_INT16:
+            return std::to_string(*static_cast<const int16_t*>(elemPtr));
+        case ACL_UINT16:
+            return std::to_string(*static_cast<const uint16_t*>(elemPtr));
+        case ACL_INT32:
+            return std::to_string(*static_cast<const int32_t*>(elemPtr));
+        case ACL_UINT32:
+            return std::to_string(*static_cast<const uint32_t*>(elemPtr));
+        case ACL_INT64:
+            return std::to_string(*static_cast<const int64_t*>(elemPtr));
+        case ACL_UINT64:
+            return std::to_string(*static_cast<const uint64_t*>(elemPtr));
+        case ACL_BOOL:
+            return *static_cast<const bool*>(elemPtr) ? "true" : "false";
+        default:
+            return "?";
+    }
+}
+
+static void printTensorRecursive(std::ostream& os,
+                                 const aclTensorDesc* desc,
+                                 const void* data,
+                                 const std::vector<int64_t>& dims,
+                                 size_t depth,
+                                 size_t& offset,
+                                 size_t maxShow,
+                                 bool& truncated,
+                                 int baseIndent) {
+    if (truncated) return;
+    if (depth == dims.size() - 1) {
+        // Последнее измерение – выводим строку элементов
+        os << "[";
+        size_t dimLen = dims[depth];
+        size_t showCount = std::min(dimLen, maxShow - offset);
+        if (showCount == 0) { os << "..."; return; }
+        for (size_t i = 0; i < showCount; ++i) {
+            if (i > 0) os << ", ";
+            size_t idx = offset + i;
+            const void* elemPtr = static_cast<const char*>(data) + idx * aclDataTypeBytes(desc->dtype);
+            os << aclElementToString(desc->dtype, elemPtr);
+        }
+        offset += showCount;
+        if (showCount < dimLen) {
+            os << ", ...";
+            truncated = true;
+        }
+        os << "]";
+    } else {
+        os << "[";
+        size_t dimLen = dims[depth];
+        size_t showCount = std::min(dimLen, maxShow - offset);
+        if (showCount == 0) { os << "..."; return; }
+        for (size_t i = 0; i < showCount; ++i) {
+            if (i > 0) {
+                os << ",\n" << std::string(baseIndent + depth + 1, ' ');
+            }
+            printTensorRecursive(os, desc, data, dims, depth + 1, offset, maxShow, truncated, baseIndent);
+        }
+        if (showCount < dimLen) {
+            os << ",\n" << std::string(baseIndent + depth + 1, ' ') << "...";
+            truncated = true;
+        }
+        os << "]";
+    }
+}
+
+static std::string tensorDataToString(const aclTensorDesc* desc, const aclDataBuffer* buf) {
+    if (!desc || !buf || !buf->data || buf->size == 0)
+        return "(no data)";
+
+    size_t numElements = calc_num_elements(desc, buf->size);
+    if (numElements == 0) return "(no elements)";
+
+    const std::vector<int64_t>& dims = desc->dims;
+    const int baseIndent = 4;
+
+    if (dims.empty()) {
+        // Скаляр
+        std::ostringstream oss;
+        oss << std::string(baseIndent, ' ');
+        oss << aclElementToString(desc->dtype, buf->data);
+        return oss.str();
+    }
+
+    std::ostringstream oss;
+    oss << std::string(baseIndent, ' ');
+    size_t offset = 0;
+    bool truncated = false;
+    const size_t maxShow = 100;
+    printTensorRecursive(oss, desc, buf->data, dims, 0, offset, maxShow, truncated, baseIndent);
+    return oss.str();
+}
+
 static std::string formatTensorList(const char* label,
                                     const aclTensorDesc* const descs[],
+                                    const aclDataBuffer* const bufs[],
                                     int count) {
     std::ostringstream oss;
     for (int i = 0; i < count; ++i) {
-        oss << "    " << label << '[' << i << "]: ";
-        tensorDescToString(descs[i], oss);
-        oss << '\n';
+        oss << "  " << label << "[" << i << "]: ";
+        if (descs[i]) {
+            oss << tensorDescToString(descs[i]) << "\n";
+            if (bufs[i] && bufs[i]->data && bufs[i]->size > 0) {
+                oss << tensorDataToString(descs[i], bufs[i]) << "\n";
+            } else {
+                oss << "    (no buffer)\n";
+            }
+        } else {
+            oss << "null\n";
+        }
     }
     return oss.str();
 }
