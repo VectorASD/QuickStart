@@ -254,6 +254,39 @@ static std::string formatTensorList(const char* label,
 }
 
 
+// ~~~ реестр операций ~~~
+
+using OpHandler = void (*)(int numInputs, const aclTensorDesc* const inputDesc[],
+                           const aclDataBuffer* const inputs[],
+                           int numOutputs, const aclTensorDesc* const outputDesc[],
+                           aclDataBuffer* const outputs[]);
+
+struct OpRegistry {
+    static std::unordered_map<std::string, OpHandler>& map() {
+        static std::unordered_map<std::string, OpHandler> m;
+        return m;
+    }
+    static void add(const std::string& name, OpHandler handler) {
+        map()[name] = handler;
+    }
+    static OpHandler find(const std::string& name) {
+        auto it = map().find(name);
+        return it != map().end() ? it->second : nullptr;
+    }
+};
+
+#define REGISTER_OP(NAME, BODY) \
+    static void _op_##NAME(int numInputs, const aclTensorDesc* const inputDesc[], \
+                           const aclDataBuffer* const inputs[], \
+                           int numOutputs, const aclTensorDesc* const outputDesc[], \
+                           aclDataBuffer* const outputs[]) { \
+        BODY \
+    } \
+    static bool _reg_##NAME = (OpRegistry::add(#NAME, _op_##NAME), true)
+
+
+// ~~~ traits типов данных ~~~
+
 // Прямое отображение aclDataType -> C++ тип
 template <aclDataType DT> struct aclDataTypeTraits;
 
