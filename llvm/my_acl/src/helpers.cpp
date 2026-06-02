@@ -256,10 +256,17 @@ static std::string formatTensorList(const char* label,
 
 // ~~~ реестр операций ~~~
 
-using OpHandler = void (*)(int numInputs, const aclTensorDesc* const inputDesc[],
-                           const aclDataBuffer* const inputs[],
-                           int numOutputs, const aclTensorDesc* const outputDesc[],
-                           aclDataBuffer* const outputs[]);
+typedef enum {
+    H_UNKNOWN_OP    = -1,
+    H_OK             = 0,
+    H_UNASSERTED     = 1,
+    H_UNIMPLEMENTED  = 2,
+} exitCode;
+
+using OpHandler = exitCode (*)(int numInputs, const aclTensorDesc* const inputDesc[],
+                               const aclDataBuffer* const inputs[],
+                               int numOutputs, const aclTensorDesc* const outputDesc[],
+                               aclDataBuffer* const outputs[]);
 
 struct OpRegistry {
     static std::unordered_map<std::string, OpHandler>& map() {
@@ -269,17 +276,20 @@ struct OpRegistry {
     static void add(const std::string& name, OpHandler handler) {
         map()[name] = handler;
     }
-    static OpHandler find(const std::string& name) {
+    static bool try_find(const std::string& name, OpHandler &result) {
         auto it = map().find(name);
-        return it != map().end() ? it->second : nullptr;
+        bool found = it != map().end();
+        if (found)
+            result = it->second;
+        return found;
     }
 };
 
 #define REGISTER_OP(NAME, BODY) \
-    static void _op_##NAME(int numInputs, const aclTensorDesc* const inputDesc[], \
-                           const aclDataBuffer* const inputs[], \
-                           int numOutputs, const aclTensorDesc* const outputDesc[], \
-                           aclDataBuffer* const outputs[]) { \
+    static exitCode _op_##NAME(int numInputs, const aclTensorDesc* const inputDesc[], \
+                               const aclDataBuffer* const inputs[], \
+                               int numOutputs, const aclTensorDesc* const outputDesc[], \
+                               aclDataBuffer* const outputs[]) { \
         BODY \
     } \
     static bool _reg_##NAME = (OpRegistry::add(#NAME, _op_##NAME), true)

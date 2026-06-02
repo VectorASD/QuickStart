@@ -126,6 +126,7 @@ REGISTER_OP(StatelessRandomNormalV2, {
             }
         }
     }
+    return H_OK;
 });
 
 REGISTER_OP(ZerosLike, {
@@ -155,6 +156,7 @@ REGISTER_OP(ZerosLike, {
             break;
         }
     }
+    return H_OK;
 });
 
 REGISTER_OP(Fill, {
@@ -188,6 +190,7 @@ REGISTER_OP(Fill, {
             break;
         }
     }
+    return H_OK;
 });
 
 REGISTER_OP(Mul, {
@@ -218,6 +221,7 @@ REGISTER_OP(Mul, {
             break;
         }
     }
+    return H_OK;
 });
 
 REGISTER_OP(Add, {
@@ -247,6 +251,7 @@ REGISTER_OP(Add, {
             break;
         }
     }
+    return H_OK;
 });
 
 REGISTER_OP(RealDiv, {
@@ -275,6 +280,7 @@ REGISTER_OP(RealDiv, {
             break;
         }
     }
+    return H_OK;
 });
 
 REGISTER_OP(IsFinite, {
@@ -304,6 +310,7 @@ REGISTER_OP(IsFinite, {
             break;
         }
     }
+    return H_OK;
 });
 
 REGISTER_OP(NotEqual, {
@@ -333,6 +340,7 @@ REGISTER_OP(NotEqual, {
             break;
         }
     }
+    return H_OK;
 });
 
 REGISTER_OP(LogicalAnd, {
@@ -349,6 +357,7 @@ REGISTER_OP(LogicalAnd, {
             break;
         }
     }
+    return H_OK;
 });
 
 REGISTER_OP(MaskedSelect, {
@@ -373,6 +382,7 @@ REGISTER_OP(MaskedSelect, {
             break; // оставляем выходной буфер как есть
         }
     }
+    return H_OK;
 });
 
 REGISTER_OP(Abs, {
@@ -398,6 +408,7 @@ REGISTER_OP(Abs, {
             break;
         }
     }
+    return H_OK;
 });
 
 REGISTER_OP(ReduceMin, {
@@ -427,6 +438,7 @@ REGISTER_OP(ReduceMin, {
             break;
         }
     }
+    return H_OK;
 });
 
 REGISTER_OP(ReduceMax, {
@@ -456,6 +468,7 @@ REGISTER_OP(ReduceMax, {
             break;
         }
     }
+    return H_OK;
 });
 
 REGISTER_OP(Ceil, {
@@ -477,6 +490,7 @@ REGISTER_OP(Ceil, {
             break;
         }
     }
+    return H_OK;
 });
 
 REGISTER_OP(Greater, {
@@ -505,10 +519,40 @@ REGISTER_OP(Greater, {
             break;
         }
     }
+    return H_OK;
+});
+
+REGISTER_OP(Less, {
+    // strcmp(opType, "Less") == 0 && numInputs == 2 && numOutputs == 1
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    if (outputs[0] && outputs[0]->data && inputs[0] && inputs[0]->data && inputs[1] && inputs[1]->data) {
+        switch (inDt) {
+            DISPATCH_COMPARE(ACL_FLOAT,    std::less<float>{})
+            DISPATCH_COMPARE(ACL_DOUBLE,   std::less<double>{})
+            DISPATCH_COMPARE(ACL_INT8,     std::less<int8_t>{})
+            DISPATCH_COMPARE(ACL_UINT8,    std::less<uint8_t>{})
+            DISPATCH_COMPARE(ACL_INT16,    std::less<int16_t>{})
+            DISPATCH_COMPARE(ACL_UINT16,   std::less<uint16_t>{})
+            DISPATCH_COMPARE(ACL_INT32,    std::less<int32_t>{})
+            DISPATCH_COMPARE(ACL_UINT32,   std::less<uint32_t>{})
+            DISPATCH_COMPARE(ACL_INT64,    std::less<int64_t>{})
+            DISPATCH_COMPARE(ACL_UINT64,   std::less<uint64_t>{})
+            DISPATCH_COMPARE(ACL_FLOAT16,  [](uint16_t a, uint16_t b) { return half_to_float(a) < half_to_float(b); })
+            DISPATCH_COMPARE(ACL_BF16,     [](uint16_t a, uint16_t b) { return bf16_to_float(a) < bf16_to_float(b); })
+            DISPATCH_COMPARE(ACL_BOOL,     std::less<bool>{})
+        default:
+            size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
+            if (count > 0 && outputs[0]->data) {
+                memset(outputs[0]->data, 0, count * sizeof(bool));
+            }
+            break;
+        }
+    }
+    return H_OK;
 });
 
 REGISTER_OP(Dummy, {
-
+    return H_OK;
 });
 
 
@@ -528,11 +572,26 @@ ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
 
     // --- эмуляция операций ---
 
-    if (opType) {
-        OpHandler handler = OpRegistry::find(opType);
-        if (handler) {
-            handler(numInputs, inputDesc, inputs, numOutputs, outputDesc, outputs);
-        }
+    OpHandler handler;
+    exitCode code = H_UNKNOWN_OP;
+    if (opType && OpRegistry::try_find(opType, handler))
+        code = handler(numInputs, inputDesc, inputs, numOutputs, outputDesc, outputs);
+
+    switch (code) {
+        case H_UNKNOWN_OP:
+            log << "Error: unknown operation: " << (opType ? opType : "(null)") << '\n';
+            log_output(log);
+            return ACL_ERROR_OP_NOT_FOUND;
+        case H_OK:
+            break;
+        case H_UNASSERTED:
+            log << "Error: assertion failed for operation " << opType << '\n';
+            log_output(log);
+            return ACL_ERROR_INVALID_PARAM;
+        case H_UNIMPLEMENTED:
+            log << "Error: unsupported dtype for operation " << opType << '\n';
+            log_output(log);
+            return ACL_ERROR_UNSUPPORTED_DATA_TYPE;
     }
 
     log << formatTensorList("output", outputDesc, outputs, numOutputs)
