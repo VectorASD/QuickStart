@@ -112,6 +112,15 @@ typedef enum {
     ACL_MEMTYPE_HOST_COMPILE_INDEPENDENT = 2
 } aclMemType;
 
+static const char* aclMemTypeToString(aclMemType memType) {
+    switch (memType) {
+        case ACL_MEMTYPE_DEVICE: return "device";
+        case ACL_MEMTYPE_HOST:   return "host";
+        case ACL_MEMTYPE_HOST_COMPILE_INDEPENDENT: return "host_compile_indep";
+        default:                 return "unknown";
+    }
+}
+
 typedef enum {
     ACL_FORMAT_UNDEFINED = -1,
     ACL_FORMAT_NCHW = 0,

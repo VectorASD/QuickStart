@@ -94,15 +94,6 @@ static const char* aclFormatToString(aclFormat fmt) {
     }
 }
 
-static const char* aclMemTypeToString(aclMemType memType) {
-    switch (memType) {
-        case ACL_MEMTYPE_DEVICE: return "device";
-        case ACL_MEMTYPE_HOST:   return "host";
-        case ACL_MEMTYPE_HOST_COMPILE_INDEPENDENT: return "host_compile_indep";
-        default:                 return "unknown";
-    }
-}
-
 static void tensorDescToString(const aclTensorDesc* desc, std::ostringstream &oss) {
     if (!desc) {
         oss << "null";
@@ -222,7 +213,7 @@ static std::string tensorDataToString(const aclTensorDesc* desc, const aclDataBu
     if (numElements == 0) return "(no elements)";
 
     const std::vector<int64_t>& dims = desc->dims;
-    const int baseIndent = 4;
+    const int baseIndent = 8;
 
     if (dims.empty()) {
         // Скаляр
@@ -247,13 +238,13 @@ static std::string formatTensorList(const char* label,
                                     int count) {
     std::ostringstream oss;
     for (int i = 0; i < count; ++i) {
-        oss << "  " << label << "[" << i << "]: ";
+        oss << "    " << label << "[" << i << "]: ";
         if (descs[i]) {
             oss << tensorDescToString(descs[i]) << "\n";
             if (bufs[i] && bufs[i]->data && bufs[i]->size > 0) {
                 oss << tensorDataToString(descs[i], bufs[i]) << "\n";
             } else {
-                oss << "    (no buffer)\n";
+                oss << "        (no buffer)\n";
             }
         } else {
             oss << "null\n";

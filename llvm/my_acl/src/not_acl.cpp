@@ -79,6 +79,7 @@ ACL_FUNC_VISIBILITY aclError aclGetDeviceCapability(uint32_t deviceId, aclDevice
 }
 
 ACL_FUNC_VISIBILITY aclDataBuffer *aclCreateDataBuffer(void *data, size_t size) {
+    // Всегда работает в паре с aclCreateTensorDesc, т.к. есть сырой буфер, но нет данных о нём
     std::ostringstream log;
     log << "[aclCreateDataBuffer] data=" << data
         << " size=" << size;
@@ -93,8 +94,8 @@ ACL_FUNC_VISIBILITY aclDataBuffer *aclCreateDataBuffer(void *data, size_t size) 
     buf->data = data;
     buf->size = size;
 
-    log << "\n    created aclDataBuffer ptr=" << buf;
-    log_output(log);
+ // log << "\n    created aclDataBuffer ptr=" << buf;
+ // log_output(log);
     return buf;
 }
 
@@ -154,9 +155,9 @@ ACL_FUNC_VISIBILITY aclError aclrtSynchronizeStreamWithTimeout(aclrtStream strea
     log << "[aclrtSynchronizeStreamWithTimeout] stream=" << stream
         << " timeout=" << timeout
         << " ms";
-    log_output(log);
+ // log_output(log);
 
-    // not‑NPU: стрим не хранит реальных задач, синхронизация не требуется
+    // в рамках only-RAM машины нечего синхронизировать, вся память - это обычный malloc
     return ACL_SUCCESS;
 }
 
@@ -333,7 +334,7 @@ ACL_FUNC_VISIBILITY aclError aclrtMemcpy(void *dst,
         log_output(log);
         return ACL_ERROR_INVALID_PARAM;
     }
-    log_output(log);
+ // log_output(log);
 
     memcpy(dst, src, count);
 
@@ -906,6 +907,7 @@ ACL_FUNC_VISIBILITY aclTensorDesc *aclCreateTensorDesc(aclDataType dataType,
                                                        int numDims,
                                                        const int64_t *dims,
                                                        aclFormat format) {
+    // Всегда работает в паре с aclCreateDataBuffer, т.к. это даёт описание данных, но нет самого сырого буфера
     std::ostringstream log;
     log << "[aclCreateTensorDesc] dtype=" << static_cast<int>(dataType)
         << " numDims=" << numDims
@@ -933,9 +935,9 @@ ACL_FUNC_VISIBILITY aclTensorDesc *aclCreateTensorDesc(aclDataType dataType,
     for (int i = 0; i < numDims; i++)
         desc->dims.push_back(dims[i]);
 
-    log << "\n    created tensor desc=" << desc
-        << " dims=" << numDims;
-    log_output(log);
+ // log << "\n    created tensor desc=" << desc
+ //     << " dims=" << numDims;
+ // log_output(log);
 
     return desc;
 }
@@ -1101,8 +1103,8 @@ ACL_FUNC_VISIBILITY aclError aclSetTensorFormat(aclTensorDesc *desc, aclFormat f
 
     desc->format = format;
 
-    log << "\n    stored format=" << format;
-    log_output(log);
+ // log << "\n    stored format=" << format;
+ // log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -1110,7 +1112,7 @@ ACL_FUNC_VISIBILITY aclError aclSetTensorFormat(aclTensorDesc *desc, aclFormat f
 ACL_FUNC_VISIBILITY aclError aclSetTensorPlaceMent(aclTensorDesc *desc, aclMemType memType) {
     std::ostringstream log;
     log << "[aclSetTensorPlaceMent] desc=" << desc
-        << " memType=" << memType;
+        << " memType=" << aclMemTypeToString(memType);
 
     if (!desc) {
         log << "\n    desc is null → ACL_ERROR_INVALID_PARAM";
@@ -1118,10 +1120,14 @@ ACL_FUNC_VISIBILITY aclError aclSetTensorPlaceMent(aclTensorDesc *desc, aclMemTy
         return ACL_ERROR_INVALID_PARAM;
     }
 
+    aclMemType oldMemType = desc->memType;
+    // лениво перемещает данные тензора (aclDataBuffer) в нужную память
+    // под lazy подразумевается, что это произойдёт только в будущем и только для выходов при вызове
+    // aclopCompileAndExecute или подобных операций манипуляции с данными
     desc->memType = memType;
 
-    log << "\n    stored memType=" << memType;
-    log_output(log);
+ // log << "\n    " << aclMemTypeToString(oldMemType) << " -> " << aclMemTypeToString(memType);
+ // log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -1144,8 +1150,8 @@ ACL_FUNC_VISIBILITY aclError aclSetTensorShape(aclTensorDesc *desc, int numDims,
     for (int i = 0; i < numDims; i++)
         desc->dims.push_back(dims[i]);
 
-    log << "\n    stored shape: dims=" << numDims;
-    log_output(log);
+ // log << "\n    stored shape: dims=" << numDims;
+ // log_output(log);
 
     return ACL_SUCCESS;
 }
