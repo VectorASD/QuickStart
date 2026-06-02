@@ -82,7 +82,17 @@ typedef enum {
 
 
 REGISTER_OP(StatelessRandomNormalV2, {
-    // Извлечение seed (остаётся без изменений)
+    if (numInputs != 4 || numOutputs != 1)
+        return H_UNASSERTED;
+    // Проверка типов входов
+    if (!inputDesc[1] || aclGetTensorDescType(inputDesc[1], false) != ACL_UINT64)
+        return H_UNASSERTED;
+    if (!inputDesc[2] || aclGetTensorDescType(inputDesc[2], false) != ACL_UINT64)
+        return H_UNASSERTED;
+    if (!inputDesc[3] || aclGetTensorDescType(inputDesc[3], false) != ACL_INT32)
+        return H_UNASSERTED;
+
+    // Извлечение seed
     uint64_t seed_value = 0;
     bool has_seed = false;
     if (numInputs >= 2 && inputs[1] && inputDesc[1] && inputs[1]->data) {
@@ -97,9 +107,9 @@ REGISTER_OP(StatelessRandomNormalV2, {
     }
 
     std::mt19937 local_rng;
-    if (has_seed) {
+    if (has_seed)
         local_rng.seed(static_cast<std::mt19937::result_type>(seed_value));
-    } else {
+    else {
         std::random_device rd;
         local_rng.seed(rd());
     }
@@ -108,23 +118,24 @@ REGISTER_OP(StatelessRandomNormalV2, {
         if (outputs[i] && outputDesc[i] && outputs[i]->data) {
             aclDataType dt = aclGetTensorDescType(outputDesc[i], false);
             switch (dt) {
-                DISPATCH_RANDOM(ACL_FLOAT)
-                DISPATCH_RANDOM(ACL_DOUBLE)
-                DISPATCH_RANDOM(ACL_FLOAT16)
-                DISPATCH_RANDOM(ACL_BF16)
-                DISPATCH_RANDOM(ACL_INT8)
-                DISPATCH_RANDOM(ACL_UINT8)
-                DISPATCH_RANDOM(ACL_INT16)
-                DISPATCH_RANDOM(ACL_UINT16)
-                DISPATCH_RANDOM(ACL_INT32)
-                DISPATCH_RANDOM(ACL_UINT32)
-                DISPATCH_RANDOM(ACL_INT64)
-                DISPATCH_RANDOM(ACL_UINT64)
-                DISPATCH_RANDOM(ACL_BOOL)
-            // Остальные типы не поддерживаются, fallback — оставляем буфер без изменений
-            default: break;
+            DISPATCH_RANDOM(ACL_FLOAT)
+            DISPATCH_RANDOM(ACL_DOUBLE)
+            DISPATCH_RANDOM(ACL_FLOAT16)
+            DISPATCH_RANDOM(ACL_BF16)
+            DISPATCH_RANDOM(ACL_INT8)
+            DISPATCH_RANDOM(ACL_UINT8)
+            DISPATCH_RANDOM(ACL_INT16)
+            DISPATCH_RANDOM(ACL_UINT16)
+            DISPATCH_RANDOM(ACL_INT32)
+            DISPATCH_RANDOM(ACL_UINT32)
+            DISPATCH_RANDOM(ACL_INT64)
+            DISPATCH_RANDOM(ACL_UINT64)
+            DISPATCH_RANDOM(ACL_BOOL)
+            default:
+                return H_UNIMPLEMENTED; // тип не поддерживается
             }
-        }
+        } else
+            return H_UNASSERTED; // Нет данных в выходе — тоже ошибка
     }
     return H_OK;
 });

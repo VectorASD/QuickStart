@@ -25,7 +25,7 @@ fi
 
 # grep "aclrtSetStreamOverflowSwitch" ~/tmp/pytorch/ -rn
 
-# git -C ~/tmp/pytorch/ submodule update --init third_party/op-plugin
+# git -C ~/tmp/pytorch/ submodule update --init --progress third_party/op-plugin
 # grep "cmd.Name" ~/tmp/pytorch/ -rn
 
 
