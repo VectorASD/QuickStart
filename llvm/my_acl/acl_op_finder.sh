@@ -313,9 +313,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EmbeddingBagKernelNpu.cpp:73:        cmd.Name("EmbeddingBag").Input(weight).Input(indices).Input(offsets);
     EmbeddingDenseGrad
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EmbeddingDenseBackwardKernelNpu.cpp:37:    cmd.Name("EmbeddingDenseGrad")
-    Equal
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EqKernelNpu.cpp:31:    cmd.Name("Equal")
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EqKernelNpu.cpp:46:    cmd.Name("Equal")
     Erf
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ErfKernelNpu.cpp:26:  cmd.Name("Erf")
     Erfc
@@ -365,9 +362,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/GeluKernelNpu.cpp:23:    cmd.Name("Gelu")
     GeluGrad
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/GeluBackwardKernelNpu.cpp:23:    cmd.Name("GeluGrad")
-    GreaterEqual
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/GeKernelNpu.cpp:28:  cmd.Name("GreaterEqual")
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/GeKernelNpu.cpp:39:  cmd.Name("GreaterEqual")
     GridAssignPositive
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/GridAssignPositiveKernelNpu.cpp:64:    cmd.Name("GridAssignPositive")
     GridSampler2D
@@ -447,9 +441,6 @@ done
     Lerp
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LerpKernelNpu.cpp:42:    cmd.Name("Lerp")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LerpKernelNpu.cpp:58:    cmd.Name("Lerp")
-    LessEqual
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LeKernelNpu.cpp:27:  cmd.Name("LessEqual")
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LeKernelNpu.cpp:39:  cmd.Name("LessEqual")
     LinSpace
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LinspaceKernelNpu.cpp:37:            cmd.Name("LinSpace")
     Log
@@ -837,8 +828,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/TanhKernelNpu.cpp:27:    cmd.Name("Tanh")
     TanhGrad
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/TanhBackwardKernelNpu.cpp:30:    cmd.Name("TanhGrad")
-    TensorEqual
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EqualKernelNpu.cpp:43:    cmd.Name("TensorEqual")
     ThresholdGradV2D
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ThresholdBackwardKernelNpu.cpp:33:        cmd.Name("ThresholdGradV2D")
     ThresholdV2D
@@ -893,6 +882,9 @@ C
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/CeilKernelNpu.cpp:26:    cmd.Name("Ceil").Input(self).Output(result).Run();
 D
 E
+    Equal
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EqKernelNpu.cpp:31:    cmd.Name("Equal")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EqKernelNpu.cpp:46:    cmd.Name("Equal")
 F
     Fill
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FillKernelNpu.cpp:27:    cmd.Name("Fill");
@@ -901,6 +893,9 @@ G
     Greater
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/GtKernelNpu.cpp:29:  cmd.Name("Greater")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/GtKernelNpu.cpp:41:  cmd.Name("Greater")
+    GreaterEqual
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/GeKernelNpu.cpp:28:  cmd.Name("GreaterEqual")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/GeKernelNpu.cpp:39:  cmd.Name("GreaterEqual")
 H
 I
     IsFinite
@@ -911,6 +906,9 @@ L
     Less
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LtKernelNpu.cpp:29:  cmd.Name("Less")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LtKernelNpu.cpp:40:  cmd.Name("Less")
+    LessEqual
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LeKernelNpu.cpp:27:  cmd.Name("LessEqual")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LeKernelNpu.cpp:39:  cmd.Name("LessEqual")
     LogicalAnd
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BitwiseAndKernelNpu.cpp:26:    string real_op_name = (self.dtype() == at::kBool) ? "LogicalAnd" : "BitwiseAnd";
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BitwiseAndKernelNpu.cpp:40:        string real_op_name = (self.dtype() == at::kBool) ? "LogicalAnd" : "BitwiseAnd";
@@ -944,6 +942,8 @@ S
     StatelessRandomNormalV2
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NormalKernelNpu.cpp:41:    cmd.Name("StatelessRandomNormalV2")
 T
+    TensorEqual
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EqualKernelNpu.cpp:43:    cmd.Name("TensorEqual")
 U
 V
 W

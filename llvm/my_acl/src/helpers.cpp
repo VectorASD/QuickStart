@@ -656,6 +656,26 @@ void fillRandomNormal(TensorAccessor<typename aclDataTypeTraits<DT>::type>& out,
         break; \
     }
 
+#define DISPATCH_TENSOR_EQUAL(DT) \
+    case DT: { \
+        using T = aclDataTypeTraits<DT>::type; \
+        const T* p0 = static_cast<const T*>(inputs[0]->data); \
+        const T* p1 = static_cast<const T*>(inputs[1]->data); \
+        bool all_equal = true; \
+        size_t count = calc_num_elements(inputDesc[0], inputs[0]->size); \
+        for (size_t i = 0; i < count; ++i) { \
+            if constexpr (DT == ACL_FLOAT16) { \
+                if (half_to_float(p0[i]) != half_to_float(p1[i])) { all_equal = false; break; } \
+            } else if constexpr (DT == ACL_BF16) { \
+                if (bf16_to_float(p0[i]) != bf16_to_float(p1[i])) { all_equal = false; break; } \
+            } else { \
+                if (p0[i] != p1[i]) { all_equal = false; break; } \
+            } \
+        } \
+        *static_cast<bool*>(outputs[0]->data) = all_equal; \
+        break; \
+    }
+
 #define DISPATCH_MASKED_SELECT(DT) \
     case DT: { \
         using T = aclDataTypeTraits<DT>::type; \

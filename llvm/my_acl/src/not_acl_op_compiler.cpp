@@ -318,6 +318,37 @@ REGISTER_OP(IsFinite, {
     return H_OK;
 });
 
+REGISTER_OP(Equal, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
+        return H_UNASSERTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    switch (inDt) {
+        DISPATCH_COMPARE(ACL_FLOAT,    std::equal_to<float>{})
+        DISPATCH_COMPARE(ACL_DOUBLE,   std::equal_to<double>{})
+        DISPATCH_COMPARE(ACL_INT8,     std::equal_to<int8_t>{})
+        DISPATCH_COMPARE(ACL_UINT8,    std::equal_to<uint8_t>{})
+        DISPATCH_COMPARE(ACL_INT16,    std::equal_to<int16_t>{})
+        DISPATCH_COMPARE(ACL_UINT16,   std::equal_to<uint16_t>{})
+        DISPATCH_COMPARE(ACL_INT32,    std::equal_to<int32_t>{})
+        DISPATCH_COMPARE(ACL_UINT32,   std::equal_to<uint32_t>{})
+        DISPATCH_COMPARE(ACL_INT64,    std::equal_to<int64_t>{})
+        DISPATCH_COMPARE(ACL_UINT64,   std::equal_to<uint64_t>{})
+        DISPATCH_COMPARE(ACL_FLOAT16,  [](uint16_t a, uint16_t b) { return half_to_float(a) == half_to_float(b); })
+        DISPATCH_COMPARE(ACL_BF16,     [](uint16_t a, uint16_t b) { return bf16_to_float(a) == bf16_to_float(b); })
+        DISPATCH_COMPARE(ACL_BOOL,     std::equal_to<bool>{})
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
 REGISTER_OP(NotEqual, {
     if (numInputs != 2 || numOutputs != 1)
         return H_UNASSERTED;
@@ -345,6 +376,267 @@ REGISTER_OP(NotEqual, {
         DISPATCH_COMPARE(ACL_BOOL,     std::not_equal_to<bool>{})
         default:
             return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(TensorEqual, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
+        return H_UNASSERTED;
+
+    int64_t dim;
+    if (aclGetTensorDescType(outputDesc[0], false) != ACL_BOOL ||
+        aclGetTensorDescNumDims(outputDesc[0], false) != 1 ||
+        aclGetTensorDescDimV2(outputDesc[0], 0, &dim, false) != ACL_SUCCESS || dim != 1)
+        return H_UNASSERTED;
+
+    aclDataType dt = aclGetTensorDescType(inputDesc[0], false);
+    if (dt != aclGetTensorDescType(inputDesc[1], false))
+        return H_UNASSERTED;
+
+    switch (dt) {
+        DISPATCH_TENSOR_EQUAL(ACL_FLOAT)
+        DISPATCH_TENSOR_EQUAL(ACL_DOUBLE)
+        DISPATCH_TENSOR_EQUAL(ACL_INT8)
+        DISPATCH_TENSOR_EQUAL(ACL_UINT8)
+        DISPATCH_TENSOR_EQUAL(ACL_INT16)
+        DISPATCH_TENSOR_EQUAL(ACL_UINT16)
+        DISPATCH_TENSOR_EQUAL(ACL_INT32)
+        DISPATCH_TENSOR_EQUAL(ACL_UINT32)
+        DISPATCH_TENSOR_EQUAL(ACL_INT64)
+        DISPATCH_TENSOR_EQUAL(ACL_UINT64)
+        DISPATCH_TENSOR_EQUAL(ACL_BOOL)
+        DISPATCH_TENSOR_EQUAL(ACL_FLOAT16)
+        DISPATCH_TENSOR_EQUAL(ACL_BF16)
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(Greater, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
+        return H_UNASSERTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    switch (inDt) {
+        DISPATCH_COMPARE(ACL_FLOAT,    std::greater<float>{})
+        DISPATCH_COMPARE(ACL_DOUBLE,   std::greater<double>{})
+        DISPATCH_COMPARE(ACL_INT8,     std::greater<int8_t>{})
+        DISPATCH_COMPARE(ACL_UINT8,    std::greater<uint8_t>{})
+        DISPATCH_COMPARE(ACL_INT16,    std::greater<int16_t>{})
+        DISPATCH_COMPARE(ACL_UINT16,   std::greater<uint16_t>{})
+        DISPATCH_COMPARE(ACL_INT32,    std::greater<int32_t>{})
+        DISPATCH_COMPARE(ACL_UINT32,   std::greater<uint32_t>{})
+        DISPATCH_COMPARE(ACL_INT64,    std::greater<int64_t>{})
+        DISPATCH_COMPARE(ACL_UINT64,   std::greater<uint64_t>{})
+        DISPATCH_COMPARE(ACL_FLOAT16,  [](uint16_t a, uint16_t b) { return half_to_float(a) > half_to_float(b); })
+        DISPATCH_COMPARE(ACL_BF16,     [](uint16_t a, uint16_t b) { return bf16_to_float(a) > bf16_to_float(b); })
+        DISPATCH_COMPARE(ACL_BOOL,     std::greater<bool>{})
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(GreaterEqual, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
+        return H_UNASSERTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    switch (inDt) {
+        DISPATCH_COMPARE(ACL_FLOAT,    std::greater_equal<float>{})
+        DISPATCH_COMPARE(ACL_DOUBLE,   std::greater_equal<double>{})
+        DISPATCH_COMPARE(ACL_INT8,     std::greater_equal<int8_t>{})
+        DISPATCH_COMPARE(ACL_UINT8,    std::greater_equal<uint8_t>{})
+        DISPATCH_COMPARE(ACL_INT16,    std::greater_equal<int16_t>{})
+        DISPATCH_COMPARE(ACL_UINT16,   std::greater_equal<uint16_t>{})
+        DISPATCH_COMPARE(ACL_INT32,    std::greater_equal<int32_t>{})
+        DISPATCH_COMPARE(ACL_UINT32,   std::greater_equal<uint32_t>{})
+        DISPATCH_COMPARE(ACL_INT64,    std::greater_equal<int64_t>{})
+        DISPATCH_COMPARE(ACL_UINT64,   std::greater_equal<uint64_t>{})
+        DISPATCH_COMPARE(ACL_FLOAT16,  [](uint16_t a, uint16_t b) { return half_to_float(a) >= half_to_float(b); })
+        DISPATCH_COMPARE(ACL_BF16,     [](uint16_t a, uint16_t b) { return bf16_to_float(a) >= bf16_to_float(b); })
+        DISPATCH_COMPARE(ACL_BOOL,     std::greater_equal<bool>{})
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(Less, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
+        return H_UNASSERTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    switch (inDt) {
+        DISPATCH_COMPARE(ACL_FLOAT,    std::less<float>{})
+        DISPATCH_COMPARE(ACL_DOUBLE,   std::less<double>{})
+        DISPATCH_COMPARE(ACL_INT8,     std::less<int8_t>{})
+        DISPATCH_COMPARE(ACL_UINT8,    std::less<uint8_t>{})
+        DISPATCH_COMPARE(ACL_INT16,    std::less<int16_t>{})
+        DISPATCH_COMPARE(ACL_UINT16,   std::less<uint16_t>{})
+        DISPATCH_COMPARE(ACL_INT32,    std::less<int32_t>{})
+        DISPATCH_COMPARE(ACL_UINT32,   std::less<uint32_t>{})
+        DISPATCH_COMPARE(ACL_INT64,    std::less<int64_t>{})
+        DISPATCH_COMPARE(ACL_UINT64,   std::less<uint64_t>{})
+        DISPATCH_COMPARE(ACL_FLOAT16,  [](uint16_t a, uint16_t b) { return half_to_float(a) < half_to_float(b); })
+        DISPATCH_COMPARE(ACL_BF16,     [](uint16_t a, uint16_t b) { return bf16_to_float(a) < bf16_to_float(b); })
+        DISPATCH_COMPARE(ACL_BOOL,     std::less<bool>{})
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(LessEqual, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
+        return H_UNASSERTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    switch (inDt) {
+        DISPATCH_COMPARE(ACL_FLOAT,    std::less_equal<float>{})
+        DISPATCH_COMPARE(ACL_DOUBLE,   std::less_equal<double>{})
+        DISPATCH_COMPARE(ACL_INT8,     std::less_equal<int8_t>{})
+        DISPATCH_COMPARE(ACL_UINT8,    std::less_equal<uint8_t>{})
+        DISPATCH_COMPARE(ACL_INT16,    std::less_equal<int16_t>{})
+        DISPATCH_COMPARE(ACL_UINT16,   std::less_equal<uint16_t>{})
+        DISPATCH_COMPARE(ACL_INT32,    std::less_equal<int32_t>{})
+        DISPATCH_COMPARE(ACL_UINT32,   std::less_equal<uint32_t>{})
+        DISPATCH_COMPARE(ACL_INT64,    std::less_equal<int64_t>{})
+        DISPATCH_COMPARE(ACL_UINT64,   std::less_equal<uint64_t>{})
+        DISPATCH_COMPARE(ACL_FLOAT16,  [](uint16_t a, uint16_t b) { return half_to_float(a) <= half_to_float(b); })
+        DISPATCH_COMPARE(ACL_BF16,     [](uint16_t a, uint16_t b) { return bf16_to_float(a) <= bf16_to_float(b); })
+        DISPATCH_COMPARE(ACL_BOOL,     std::less_equal<bool>{})
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(Cast, {
+    if (numInputs != 1 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+
+    aclDataType inDt  = aclGetTensorDescType(inputDesc[0], false);
+    aclDataType outDt = aclGetTensorDescType(outputDesc[0], false);
+    size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
+    if (count == 0) return H_OK;
+
+    // Одинаковые типы – просто копируем память
+    if (inDt == outDt) {
+        size_t elemSize = aclDataTypeBytes(inDt);
+        memcpy(outputs[0]->data, inputs[0]->data, count * elemSize);
+        return H_OK;
+    }
+
+    // Проверка на поддерживаемые типы (без экзотики)
+    auto isSupported = [](aclDataType dt) {
+        switch (dt) {
+            case ACL_FLOAT: case ACL_DOUBLE: case ACL_FLOAT16: case ACL_BF16:
+            case ACL_INT8: case ACL_UINT8: case ACL_INT16: case ACL_UINT16:
+            case ACL_INT32: case ACL_UINT32: case ACL_INT64: case ACL_UINT64:
+            case ACL_BOOL:
+                return true;
+            default:
+                return false;
+        }
+    };
+    if (!isSupported(inDt) || !isSupported(outDt))
+        return H_UNIMPLEMENTED;
+
+    // Функция чтения элемента как double (для 64-битных) или float (для остальных)
+    auto readAsDouble = [&](size_t i) -> double {
+        switch (inDt) {
+            // 64-битные целые и double читаем сразу как double (без потерь)
+            case ACL_INT64:   return static_cast<double>(static_cast<const int64_t*>(inputs[0]->data)[i]);
+            case ACL_UINT64:  return static_cast<double>(static_cast<const uint64_t*>(inputs[0]->data)[i]);
+            case ACL_DOUBLE:  return static_cast<const double*>(inputs[0]->data)[i];
+            // Остальные преобразуем через float – потерь точности для них нет
+            default: {
+                float val = 0.0f;
+                switch (inDt) {
+                    case ACL_FLOAT:   val = aclDataTypeTraits<ACL_FLOAT>::to_float(static_cast<const float*>(inputs[0]->data)[i]); break;
+                    case ACL_FLOAT16: val = aclDataTypeTraits<ACL_FLOAT16>::to_float(static_cast<const uint16_t*>(inputs[0]->data)[i]); break;
+                    case ACL_BF16:    val = aclDataTypeTraits<ACL_BF16>::to_float(static_cast<const uint16_t*>(inputs[0]->data)[i]); break;
+                    case ACL_INT8:    val = aclDataTypeTraits<ACL_INT8>::to_float(static_cast<const int8_t*>(inputs[0]->data)[i]); break;
+                    case ACL_UINT8:   val = aclDataTypeTraits<ACL_UINT8>::to_float(static_cast<const uint8_t*>(inputs[0]->data)[i]); break;
+                    case ACL_INT16:   val = aclDataTypeTraits<ACL_INT16>::to_float(static_cast<const int16_t*>(inputs[0]->data)[i]); break;
+                    case ACL_UINT16:  val = aclDataTypeTraits<ACL_UINT16>::to_float(static_cast<const uint16_t*>(inputs[0]->data)[i]); break;
+                    case ACL_INT32:   val = aclDataTypeTraits<ACL_INT32>::to_float(static_cast<const int32_t*>(inputs[0]->data)[i]); break;
+                    case ACL_UINT32:  val = aclDataTypeTraits<ACL_UINT32>::to_float(static_cast<const uint32_t*>(inputs[0]->data)[i]); break;
+                    case ACL_BOOL:    val = aclDataTypeTraits<ACL_BOOL>::to_float(static_cast<const bool*>(inputs[0]->data)[i]); break;
+                    default: break;
+                }
+                return static_cast<double>(val);
+            }
+        }
+    };
+
+    // Функция записи double в выходной тип
+    auto writeFromDouble = [&](size_t i, double d) {
+        switch (outDt) {
+            case ACL_INT64:   static_cast<int64_t*>(outputs[0]->data)[i]   = static_cast<int64_t>(d); break;
+            case ACL_UINT64:  static_cast<uint64_t*>(outputs[0]->data)[i]  = static_cast<uint64_t>(d); break;
+            case ACL_DOUBLE:  static_cast<double*>(outputs[0]->data)[i]    = d; break;
+            default: {
+                // для всех остальных типов сужаем до float и вызываем from_float
+                float val = static_cast<float>(d);
+                switch (outDt) {
+                    case ACL_FLOAT:   static_cast<float*>(outputs[0]->data)[i] = aclDataTypeTraits<ACL_FLOAT>::from_float(val); break;
+                    case ACL_FLOAT16: static_cast<uint16_t*>(outputs[0]->data)[i] = aclDataTypeTraits<ACL_FLOAT16>::from_float(val); break;
+                    case ACL_BF16:    static_cast<uint16_t*>(outputs[0]->data)[i] = aclDataTypeTraits<ACL_BF16>::from_float(val); break;
+                    case ACL_INT8:    static_cast<int8_t*>(outputs[0]->data)[i]   = aclDataTypeTraits<ACL_INT8>::from_float(val); break;
+                    case ACL_UINT8:   static_cast<uint8_t*>(outputs[0]->data)[i]  = aclDataTypeTraits<ACL_UINT8>::from_float(val); break;
+                    case ACL_INT16:   static_cast<int16_t*>(outputs[0]->data)[i]  = aclDataTypeTraits<ACL_INT16>::from_float(val); break;
+                    case ACL_UINT16:  static_cast<uint16_t*>(outputs[0]->data)[i] = aclDataTypeTraits<ACL_UINT16>::from_float(val); break;
+                    case ACL_INT32:   static_cast<int32_t*>(outputs[0]->data)[i]  = aclDataTypeTraits<ACL_INT32>::from_float(val); break;
+                    case ACL_UINT32:  static_cast<uint32_t*>(outputs[0]->data)[i] = aclDataTypeTraits<ACL_UINT32>::from_float(val); break;
+                    case ACL_BOOL:    static_cast<bool*>(outputs[0]->data)[i]     = aclDataTypeTraits<ACL_BOOL>::from_float(val); break;
+                    default: break;
+                }
+                break;
+            }
+        }
+    };
+
+    for (size_t i = 0; i < count; ++i) {
+        double d = readAsDouble(i);
+        writeFromDouble(i, d);
     }
     return H_OK;
 });
@@ -515,68 +807,6 @@ REGISTER_OP(Ceil, {
         DISPATCH_UNARY(ACL_BF16,    [](uint16_t v) { return float_to_bf16(std::ceil(bf16_to_float(v))); })
         // Целые типы не должны попадать в Ceil на NPU (torch_npu делает проверку ceil_integral_identity)
         // Если всё же попали — возвращаем H_UNIMPLEMENTED
-        default:
-            return H_UNIMPLEMENTED;
-    }
-    return H_OK;
-});
-
-REGISTER_OP(Greater, {
-    if (numInputs != 2 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
-        return H_UNASSERTED;
-
-    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
-    switch (inDt) {
-        DISPATCH_COMPARE(ACL_FLOAT,    std::greater<float>{})
-        DISPATCH_COMPARE(ACL_DOUBLE,   std::greater<double>{})
-        DISPATCH_COMPARE(ACL_INT8,     std::greater<int8_t>{})
-        DISPATCH_COMPARE(ACL_UINT8,    std::greater<uint8_t>{})
-        DISPATCH_COMPARE(ACL_INT16,    std::greater<int16_t>{})
-        DISPATCH_COMPARE(ACL_UINT16,   std::greater<uint16_t>{})
-        DISPATCH_COMPARE(ACL_INT32,    std::greater<int32_t>{})
-        DISPATCH_COMPARE(ACL_UINT32,   std::greater<uint32_t>{})
-        DISPATCH_COMPARE(ACL_INT64,    std::greater<int64_t>{})
-        DISPATCH_COMPARE(ACL_UINT64,   std::greater<uint64_t>{})
-        DISPATCH_COMPARE(ACL_FLOAT16,  [](uint16_t a, uint16_t b) { return half_to_float(a) > half_to_float(b); })
-        DISPATCH_COMPARE(ACL_BF16,     [](uint16_t a, uint16_t b) { return bf16_to_float(a) > bf16_to_float(b); })
-        DISPATCH_COMPARE(ACL_BOOL,     std::greater<bool>{})
-        default:
-            return H_UNIMPLEMENTED;
-    }
-    return H_OK;
-});
-
-REGISTER_OP(Less, {
-    if (numInputs != 2 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
-        return H_UNASSERTED;
-
-    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
-    switch (inDt) {
-        DISPATCH_COMPARE(ACL_FLOAT,    std::less<float>{})
-        DISPATCH_COMPARE(ACL_DOUBLE,   std::less<double>{})
-        DISPATCH_COMPARE(ACL_INT8,     std::less<int8_t>{})
-        DISPATCH_COMPARE(ACL_UINT8,    std::less<uint8_t>{})
-        DISPATCH_COMPARE(ACL_INT16,    std::less<int16_t>{})
-        DISPATCH_COMPARE(ACL_UINT16,   std::less<uint16_t>{})
-        DISPATCH_COMPARE(ACL_INT32,    std::less<int32_t>{})
-        DISPATCH_COMPARE(ACL_UINT32,   std::less<uint32_t>{})
-        DISPATCH_COMPARE(ACL_INT64,    std::less<int64_t>{})
-        DISPATCH_COMPARE(ACL_UINT64,   std::less<uint64_t>{})
-        DISPATCH_COMPARE(ACL_FLOAT16,  [](uint16_t a, uint16_t b) { return half_to_float(a) < half_to_float(b); })
-        DISPATCH_COMPARE(ACL_BF16,     [](uint16_t a, uint16_t b) { return bf16_to_float(a) < bf16_to_float(b); })
-        DISPATCH_COMPARE(ACL_BOOL,     std::less<bool>{})
         default:
             return H_UNIMPLEMENTED;
     }
