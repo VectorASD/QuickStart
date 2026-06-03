@@ -548,7 +548,7 @@ void fillRandomNormal(TensorAccessor<typename aclDataTypeTraits<DT>::type>& out,
 #define DISPATCH_RANDOM(DT) \
     case DT: { \
         using T = aclDataTypeTraits<DT>::type; \
-        TensorAccessor<T> out(outputs[i]->data, outputDesc[i]->dims); \
+        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
         fillRandomNormal<DT>(out, local_rng); \
         break; \
     }
@@ -646,17 +646,6 @@ void fillRandomNormal(TensorAccessor<typename aclDataTypeTraits<DT>::type>& out,
     }
 
 #define DISPATCH_COMPARE(DT, PRED) \
-    case DT: { \
-        using T = aclDataTypeTraits<DT>::type; \
-        TensorAccessor<T> inA(inputs[0]->data, inputDesc[0]->dims); \
-        TensorAccessor<T> inB(inputs[1]->data, inputDesc[1]->dims); \
-        TensorAccessor<bool> out(outputs[0]->data, outputDesc[0]->dims); \
-        broadcastCompareOp<DT>(out, inA, inputDesc[0]->dims, \
-                               inB, inputDesc[1]->dims, PRED); \
-        break; \
-    }
-
-#define DISPATCH_LOGICAL(DT, PRED) \
     case DT: { \
         using T = aclDataTypeTraits<DT>::type; \
         TensorAccessor<T> inA(inputs[0]->data, inputDesc[0]->dims); \
