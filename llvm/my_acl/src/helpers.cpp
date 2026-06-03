@@ -1,5 +1,6 @@
 #include "not_acl.cpp"  // aclGetTensorDescDimV2, aclGetTensorDescNumDims, aclGetTensorDescType
 #include <random>       // bernoulli_distribution, mt19937, normal_distribution, random_device, uniform_int_distribution
+#include <algorithm>    // copy, min, sort
 
 #ifndef HELPERS
 #define HELPERS
@@ -121,7 +122,8 @@ static std::string tensorDescToString(const aclTensorDesc* desc) {
 
 // Преобразует один элемент тензора в строку по его типу
 static std::string aclElementToString(aclDataType dtype, const void* elemPtr) {
-    if (!elemPtr) return "?";
+    if (!elemPtr)
+        return "?";
     switch (dtype) {
         case ACL_FLOAT:
             return std::to_string(*static_cast<const float*>(elemPtr));
@@ -232,23 +234,31 @@ static std::string tensorDataToString(const aclTensorDesc* desc, const aclDataBu
     return oss.str();
 }
 
+enum TensorPrintFlags {
+    PRINT_DESC = 1 << 0,
+    PRINT_DATA = 1 << 1,
+    PRINT_ALL  = PRINT_DESC | PRINT_DATA
+};
+
 static std::string formatTensorList(const char* label,
                                     const aclTensorDesc* const descs[],
                                     const aclDataBuffer* const bufs[],
-                                    int count) {
+                                    int count,
+                                    int flags = PRINT_ALL) {
     std::ostringstream oss;
     for (int i = 0; i < count; ++i) {
-        oss << "    " << label << "[" << i << "]: ";
         if (descs[i]) {
-            oss << tensorDescToString(descs[i]) << "\n";
-            if (bufs[i] && bufs[i]->data && bufs[i]->size > 0) {
-                oss << tensorDataToString(descs[i], bufs[i]) << "\n";
-            } else {
-                oss << "        (no buffer)\n";
+            if (flags & PRINT_DESC)
+                oss << "\n    " << label << "[" << i << "]: "
+                    << tensorDescToString(descs[i]);
+            if (flags & PRINT_DATA) {
+                if (bufs[i] && bufs[i]->data)
+                    oss << '\n' << tensorDataToString(descs[i], bufs[i]);
+                else
+                    oss << "\n    (no buffer)";
             }
-        } else {
-            oss << "null\n";
-        }
+        } else
+            oss << "\nnull";
     }
     return oss.str();
 }
@@ -266,7 +276,8 @@ typedef enum {
 using OpHandler = exitCode (*)(int numInputs, const aclTensorDesc* const inputDesc[],
                                const aclDataBuffer* const inputs[],
                                int numOutputs, const aclTensorDesc* const outputDesc[],
-                               aclDataBuffer* const outputs[]);
+                               aclDataBuffer* const outputs[],
+                               const aclopAttr* attr);
 
 struct OpRegistry {
     static std::unordered_map<std::string, OpHandler>& map() {
@@ -289,7 +300,8 @@ struct OpRegistry {
     static exitCode _op_##NAME(int numInputs, const aclTensorDesc* const inputDesc[], \
                                const aclDataBuffer* const inputs[], \
                                int numOutputs, const aclTensorDesc* const outputDesc[], \
-                               aclDataBuffer* const outputs[]) { \
+                               aclDataBuffer* const outputs[], \
+                               const aclopAttr* attr) { \
         BODY \
     } \
     static bool _reg_##NAME = (OpRegistry::add(#NAME, _op_##NAME), true)
@@ -602,6 +614,18 @@ void fillRandomNormal(TensorAccessor<typename aclDataTypeTraits<DT>::type>& out,
         break; \
     }
 
+#define DISPATCH_SUB(DT) \
+    case DT: { \
+        using T = aclDataTypeTraits<DT>::type; \
+        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
+        TensorAccessor<T> inA(inputs[0]->data, inputDesc[0]->dims); \
+        TensorAccessor<T> inB(inputs[1]->data, inputDesc[1]->dims); \
+        broadcastBinaryOp(out, inA, inputDesc[0]->dims, \
+                            inB, inputDesc[1]->dims, \
+                            std::minus<T>{}); \
+        break; \
+    }
+
 #define DISPATCH_DIV(DT) \
     case DT: { \
         using T = aclDataTypeTraits<DT>::type; \
@@ -676,6 +700,27 @@ void fillRandomNormal(TensorAccessor<typename aclDataTypeTraits<DT>::type>& out,
         break; \
     }
 
+#define DISPATCH_MASKED_FILL(DT) \
+    case DT: { \
+        using T = aclDataTypeTraits<DT>::type; \
+        TensorAccessor<T> in(inputs[0]->data, inputDesc[0]->dims); \
+        TensorAccessor<bool> mask(inputs[1]->data, inputDesc[1]->dims); \
+        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
+        /* value может быть либо скалярным тензором, либо тензором той же формы */ \
+        T fillValue; \
+        if (inputDesc[2]->dims.empty() || calc_num_elements(inputDesc[2], inputs[2]->size) == 1) { \
+            fillValue = static_cast<const T*>(inputs[2]->data)[0]; \
+        } else { \
+            /* Тензор значений – будем брать из value по индексу (broadcast не делаем, обычно совпадает по форме с self) */ \
+            fillValue = static_cast<const T*>(inputs[2]->data)[0]; /* временное упрощение */ \
+        } \
+        size_t total = in.numElements(); \
+        for (size_t i = 0; i < total; ++i) { \
+            out[i] = mask[i] ? fillValue : in[i]; \
+        } \
+        break; \
+    }
+
 #define DISPATCH_MASKED_SELECT(DT) \
     case DT: { \
         using T = aclDataTypeTraits<DT>::type; \
@@ -712,16 +757,304 @@ void fillRandomNormal(TensorAccessor<typename aclDataTypeTraits<DT>::type>& out,
         using T = aclDataTypeTraits<DT>::type; \
         TensorAccessor<T> in(inputs[0]->data, inputDesc[0]->dims); \
         TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
-        const int64_t* axes_ptr = static_cast<const int64_t*>(inputs[1]->data); \
-        size_t num_axes = calc_num_elements(inputDesc[1], inputs[1]->size); \
         if (num_axes == 0) { \
             T acc = INIT; \
-            for (size_t i = 0; i < in.numElements(); ++i) \
-                acc = OP(acc, in[i]); \
+            for (size_t i = 0; i < in.numElements(); ++i) acc = OP(acc, in[i]); \
             out[0] = acc; \
+            break; \
+        } \
+        const int64_t* axes = static_cast<const int64_t*>(inputs[1]->data); \
+        size_t ndim = in.dims().size(); \
+        /* Строим маску редуцируемых осей и список осей для обхода */ \
+        std::vector<bool> reduce_mask(ndim, false); \
+        for (size_t i = 0; i < num_axes; ++i) { \
+            int64_t ax = axes[i]; \
+            if (ax < 0) ax += ndim; \
+            reduce_mask[ax] = true; \
+        } \
+        /* Вычисляем strides для входного тензора */ \
+        std::vector<int64_t> in_strides(ndim, 1); \
+        for (int i = ndim - 2; i >= 0; --i) \
+            in_strides[i] = in_strides[i+1] * in.dims()[i+1]; \
+        /* Формируем выходные размеры (сохраняя нередуцируемые оси) */ \
+        std::vector<int64_t> out_dims; \
+        for (size_t d = 0; d < ndim; ++d) \
+            if (!reduce_mask[d]) out_dims.push_back(in.dims()[d]); \
+        if (out_dims.empty()) out_dims.push_back(1); \
+        size_t out_total = 1; \
+        for (auto d : out_dims) out_total *= d; \
+        /* Для каждого выходного элемента */ \
+        for (size_t out_idx = 0; out_idx < out_total; ++out_idx) { \
+            /* Восстанавливаем координаты в выходном пространстве */ \
+            std::vector<int64_t> out_coord(out_dims.size(), 0); \
+            size_t tmp = out_idx; \
+            for (int i = out_dims.size()-1; i >= 0; --i) { \
+                out_coord[i] = tmp % out_dims[i]; \
+                tmp /= out_dims[i]; \
+            } \
+            /* Строим базовые координаты входа (нередуцируемые оси фиксированы) */ \
+            std::vector<int64_t> base_coord(ndim, 0); \
+            size_t out_dim_pos = 0; \
+            for (size_t d = 0; d < ndim; ++d) { \
+                if (!reduce_mask[d]) base_coord[d] = out_coord[out_dim_pos++]; \
+            } \
+            /* Вычисляем линейный индекс базового элемента */ \
+            size_t base_idx = 0; \
+            for (size_t d = 0; d < ndim; ++d) \
+                base_idx += base_coord[d] * in_strides[d]; \
+            T acc = INIT; \
+            /* Теперь итеративно перебираем все комбинации редуцируемых осей */ \
+            /* Используем массив текущих координат вдоль редуцируемых осей и их strides */ \
+            std::vector<int64_t> red_axes, red_sizes, red_strides; \
+            for (size_t d = 0; d < ndim; ++d) { \
+                if (reduce_mask[d]) { \
+                    red_axes.push_back(d); \
+                    red_sizes.push_back(in.dims()[d]); \
+                    red_strides.push_back(in_strides[d]); \
+                } \
+            } \
+            size_t num_red = red_axes.size(); \
+            if (num_red == 0) { \
+                /* Нет редуцируемых осей – просто копируем значение */ \
+                acc = in[base_idx]; \
+            } else { \
+                /* Перебираем все комбинации через линейный счётчик */ \
+                size_t total_red = 1; \
+                for (auto sz : red_sizes) total_red *= sz; \
+                for (size_t combo = 0; combo < total_red; ++combo) { \
+                    size_t idx = base_idx; \
+                    size_t rem = combo; \
+                    for (size_t r = 0; r < num_red; ++r) { \
+                        int64_t coord = rem % red_sizes[r]; \
+                        rem /= red_sizes[r]; \
+                        idx += coord * red_strides[r]; \
+                    } \
+                    acc = OP(acc, in[idx]); \
+                } \
+            } \
+            out[out_idx] = acc; \
+        } \
+        break; \
+    }
+
+#define DISPATCH_REDUCE_MAX(DT)  DISPATCH_REDUCE(DT, std::numeric_limits<T>::lowest(), [](T a, T b) { return a > b ? a : b; })
+#define DISPATCH_REDUCE_MIN(DT)  DISPATCH_REDUCE(DT, std::numeric_limits<T>::max(),    [](T a, T b) { return a < b ? a : b; })
+#define DISPATCH_REDUCE_ALL(DT)  DISPATCH_REDUCE(DT, true,  [](T a, T b) { return (a != static_cast<T>(0)) && (b != static_cast<T>(0)); })
+#define DISPATCH_REDUCE_ANY(DT)  DISPATCH_REDUCE(DT, false, [](T a, T b) { return (a != static_cast<T>(0)) || (b != static_cast<T>(0)); })
+#define DISPATCH_REDUCE_SUM(DT)  DISPATCH_REDUCE(DT, static_cast<T>(0),                [](T a, T b) { return a + b; })
+#define DISPATCH_REDUCE_PROD(DT) DISPATCH_REDUCE(DT, static_cast<T>(1),                [](T a, T b) { return a * b; })
+
+#define DISPATCH_ARG_MAX_WITH_VALUE(DT) \
+    case DT: { \
+        using T = aclDataTypeTraits<DT>::type; \
+        TensorAccessor<T> in(inputs[0]->data, inputDesc[0]->dims); \
+        /* ВНИМАНИЕ: outputs[0] — ИНДЕКСЫ (int32), outputs[1] — ЗНАЧЕНИЯ (T) */ \
+        TensorAccessor<int32_t> out_idx(outputs[0]->data, outputDesc[0]->dims); \
+        TensorAccessor<T> out_vals(outputs[1]->data, outputDesc[1]->dims); \
+        \
+        const auto& dim_attr = attr->ints.find("dimension"); \
+        if (dim_attr == attr->ints.end()) return H_UNASSERTED; \
+        int64_t axis = dim_attr->second; \
+        if (axis < 0) axis += in.dims().size(); \
+        \
+        bool keepdim = false; \
+        auto keep_attr = attr->bools.find("keep_dims"); \
+        if (keep_attr != attr->bools.end()) keepdim = keep_attr->second; \
+        \
+        std::vector<int64_t> outDims = in.dims(); \
+        outDims.erase(outDims.begin() + axis); \
+        size_t outSize = out_vals.numElements(); \
+        \
+        for (size_t outIdx = 0; outIdx < outSize; ++outIdx) { \
+            size_t remaining = outIdx; \
+            std::vector<int64_t> coord(outDims.size(), 0); \
+            for (int i = outDims.size()-1; i >= 0; --i) { \
+                coord[i] = remaining % outDims[i]; \
+                remaining /= outDims[i]; \
+            } \
+            std::vector<int64_t> fullCoord = coord; \
+            fullCoord.insert(fullCoord.begin() + axis, 0); \
+            T max_val = std::numeric_limits<T>::lowest(); \
+            int32_t max_idx = 0; \
+            for (fullCoord[axis] = 0; fullCoord[axis] < in.dims()[axis]; ++fullCoord[axis]) { \
+                size_t inIdx = 0; \
+                size_t stride = 1; \
+                for (int i = in.dims().size()-1; i >= 0; --i) { \
+                    inIdx += fullCoord[i] * stride; \
+                    stride *= in.dims()[i]; \
+                } \
+                T val = in[inIdx]; \
+                if (val > max_val) { \
+                    max_val = val; \
+                    max_idx = static_cast<int32_t>(fullCoord[axis]); \
+                } \
+            } \
+            out_vals[outIdx] = max_val; \
+            out_idx[outIdx] = max_idx; \
+        } \
+        break; \
+    }
+
+#define DISPATCH_ARG_MIN_WITH_VALUE(DT) \
+    case DT: { \
+        using T = aclDataTypeTraits<DT>::type; \
+        TensorAccessor<T> in(inputs[0]->data, inputDesc[0]->dims); \
+        /* outputs[0] — ИНДЕКСЫ (int32), outputs[1] — ЗНАЧЕНИЯ (T) */ \
+        TensorAccessor<int32_t> out_idx(outputs[0]->data, outputDesc[0]->dims); \
+        TensorAccessor<T> out_vals(outputs[1]->data, outputDesc[1]->dims); \
+        \
+        const auto& dim_attr = attr->ints.find("dimension"); \
+        if (dim_attr == attr->ints.end()) return H_UNASSERTED; \
+        int64_t axis = dim_attr->second; \
+        if (axis < 0) axis += in.dims().size(); \
+        \
+        bool keepdim = false; \
+        auto keep_attr = attr->bools.find("keep_dims"); \
+        if (keep_attr != attr->bools.end()) keepdim = keep_attr->second; \
+        \
+        std::vector<int64_t> outDims = in.dims(); \
+        outDims.erase(outDims.begin() + axis); \
+        size_t outSize = out_vals.numElements(); \
+        \
+        for (size_t outIdx = 0; outIdx < outSize; ++outIdx) { \
+            size_t remaining = outIdx; \
+            std::vector<int64_t> coord(outDims.size(), 0); \
+            for (int i = outDims.size()-1; i >= 0; --i) { \
+                coord[i] = remaining % outDims[i]; \
+                remaining /= outDims[i]; \
+            } \
+            std::vector<int64_t> fullCoord = coord; \
+            fullCoord.insert(fullCoord.begin() + axis, 0); \
+            T min_val = std::numeric_limits<T>::max(); \
+            int32_t min_idx = 0; \
+            for (fullCoord[axis] = 0; fullCoord[axis] < in.dims()[axis]; ++fullCoord[axis]) { \
+                size_t inIdx = 0; \
+                size_t stride = 1; \
+                for (int i = in.dims().size()-1; i >= 0; --i) { \
+                    inIdx += fullCoord[i] * stride; \
+                    stride *= in.dims()[i]; \
+                } \
+                T val = in[inIdx]; \
+                if (val < min_val) { \
+                    min_val = val; \
+                    min_idx = static_cast<int32_t>(fullCoord[axis]); \
+                } \
+            } \
+            out_vals[outIdx] = min_val; \
+            out_idx[outIdx] = min_idx; \
+        } \
+        break; \
+    }
+
+#define DISPATCH_REDUCE_MEAN(DT) \
+    case DT: { \
+        using T = aclDataTypeTraits<DT>::type; \
+        TensorAccessor<T> in(inputs[0]->data, inputDesc[0]->dims); \
+        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
+        if (num_axes == 0) { \
+            T sum = 0; \
+            for (size_t i = 0; i < in.numElements(); ++i) sum += in[i]; \
+            out[0] = (in.numElements() > 0) ? sum / static_cast<T>(in.numElements()) : 0; \
+            break; \
+        } \
+        const int64_t* axes = static_cast<const int64_t*>(inputs[1]->data); \
+        size_t ndim = in.dims().size(); \
+        std::vector<bool> reduce_mask(ndim, false); \
+        size_t reduce_count = 1; \
+        for (size_t i = 0; i < num_axes; ++i) { \
+            int64_t ax = axes[i]; \
+            if (ax < 0) ax += ndim; \
+            reduce_mask[ax] = true; \
+            reduce_count *= in.dims()[ax]; \
+        } \
+        std::vector<int64_t> in_strides(ndim, 1); \
+        for (int i = ndim - 2; i >= 0; --i) \
+            in_strides[i] = in_strides[i+1] * in.dims()[i+1]; \
+        std::vector<int64_t> keep_dims; \
+        for (size_t d = 0; d < ndim; ++d) \
+            if (!reduce_mask[d]) keep_dims.push_back(in.dims()[d]); \
+        if (keep_dims.empty()) keep_dims.push_back(1); \
+        size_t out_total = 1; \
+        for (auto d : keep_dims) out_total *= d; \
+        for (size_t out_idx = 0; out_idx < out_total; ++out_idx) { \
+            std::vector<int64_t> keep_coord(keep_dims.size(), 0); \
+            size_t temp = out_idx; \
+            for (int i = keep_dims.size()-1; i >= 0; --i) { \
+                keep_coord[i] = temp % keep_dims[i]; \
+                temp /= keep_dims[i]; \
+            } \
+            std::vector<int64_t> cur_coord(ndim, 0); \
+            size_t keep_idx = 0; \
+            for (size_t d = 0; d < ndim; ++d) { \
+                if (!reduce_mask[d]) cur_coord[d] = keep_coord[keep_idx++]; \
+            } \
+            T sum = 0; \
+            while (true) { \
+                size_t in_idx = 0; \
+                for (size_t d = 0; d < ndim; ++d) in_idx += cur_coord[d] * in_strides[d]; \
+                sum += in[in_idx]; \
+                int inc_dim = ndim - 1; \
+                while (inc_dim >= 0 && !reduce_mask[inc_dim]) --inc_dim; \
+                if (inc_dim < 0) break; \
+                while (inc_dim >= 0) { \
+                    if (reduce_mask[inc_dim]) { \
+                        cur_coord[inc_dim]++; \
+                        if (cur_coord[inc_dim] >= in.dims()[inc_dim]) { \
+                            cur_coord[inc_dim] = 0; \
+                            --inc_dim; \
+                        } else break; \
+                    } else --inc_dim; \
+                } \
+                if (inc_dim < 0) break; \
+            } \
+            out[out_idx] = sum / static_cast<T>(reduce_count); \
+        } \
+        break; \
+    }
+
+// ReduceMeanD: оси передаются через атрибут "axes" (list_int), keep_dims через "keep_dims" (bool)
+#define DISPATCH_REDUCE_MEAN_FROM_AXES(DT) \
+    case DT: { \
+        using T = aclDataTypeTraits<DT>::type; \
+        TensorAccessor<T> in(inputs[0]->data, inputDesc[0]->dims); \
+        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
+        \
+        /* Извлекаем оси из атрибутов */ \
+        const auto& axes_attr = attr->list_ints.find("axes"); \
+        if (axes_attr == attr->list_ints.end()) return H_UNASSERTED; \
+        const std::vector<int64_t>& axes = axes_attr->second; \
+        \
+        /* keep_dims (опционально) */ \
+        bool keep_dims = false; \
+        auto keep_attr = attr->bools.find("keep_dims"); \
+        if (keep_attr != attr->bools.end()) keep_dims = keep_attr->second; \
+        \
+        /* Нормализуем оси */ \
+        std::vector<int64_t> norm_axes; \
+        int64_t ndim = static_cast<int64_t>(in.dims().size()); \
+        for (int64_t ax : axes) { \
+            if (ax < 0) ax += ndim; \
+            norm_axes.push_back(ax); \
+        } \
+        if (norm_axes.empty()) { \
+            /* все оси */ \
+            for (int64_t i = 0; i < ndim; ++i) norm_axes.push_back(i); \
+        } \
+        \
+        /* Считаем количество сворачиваемых элементов для каждой выходной ячейки */ \
+        size_t count = 1; \
+        for (int64_t ax : norm_axes) count *= in.dims()[ax]; \
+        \
+        if (norm_axes.size() == static_cast<size_t>(ndim)) { \
+            /* Редукция до скаляра */ \
+            T sum = 0; \
+            for (size_t i = 0; i < in.numElements(); ++i) sum += in[i]; \
+            out[0] = static_cast<T>(sum / static_cast<T>(count)); \
         } else { \
-            int64_t axis = axes_ptr[0]; \
-            if (axis < 0) axis += in.dims().size(); \
+            /* Частичная редукция – используем универсальную логику, как в DISPATCH_REDUCE, но с делением на count */ \
+            /* Здесь можно скопировать код из DISPATCH_REDUCE_MEAN с небольшой модификацией: */ \
+            /* Для простоты обработки возьмём первую ось (обычно одна ось) */ \
+            int64_t axis = norm_axes[0]; \
             std::vector<int64_t> outDims = in.dims(); \
             outDims.erase(outDims.begin() + axis); \
             size_t outSize = out.numElements(); \
@@ -734,7 +1067,7 @@ void fillRandomNormal(TensorAccessor<typename aclDataTypeTraits<DT>::type>& out,
                 } \
                 std::vector<int64_t> fullCoord = coord; \
                 fullCoord.insert(fullCoord.begin() + axis, 0); \
-                T acc = INIT; \
+                T sum = 0; \
                 for (fullCoord[axis] = 0; fullCoord[axis] < in.dims()[axis]; ++fullCoord[axis]) { \
                     size_t inIdx = 0; \
                     size_t stride = 1; \
@@ -742,19 +1075,180 @@ void fillRandomNormal(TensorAccessor<typename aclDataTypeTraits<DT>::type>& out,
                         inIdx += fullCoord[i] * stride; \
                         stride *= in.dims()[i]; \
                     } \
-                    acc = OP(acc, in[inIdx]); \
+                    sum += in[inIdx]; \
                 } \
-                out[outIdx] = acc; \
+                out[outIdx] = static_cast<T>(sum / static_cast<T>(count)); \
             } \
         } \
         break; \
     }
 
-#define DISPATCH_REDUCE_MIN(DT) \
-    DISPATCH_REDUCE(DT, std::numeric_limits<T>::max(), [](T a, T b) { return a < b ? a : b; })
+// Макрос для ReduceLogSumExp – log(sum(exp(x))) вдоль заданных осей.
+// Вход уже должен быть сдвинут на максимум (x - max), поэтому exp(x) <= 1,
+// и накопление суммы exp в double безопасно.
+#define DISPATCH_REDUCE_LOG_SUM_EXP(DT) \
+    case DT: { \
+        using T = aclDataTypeTraits<DT>::type; \
+        TensorAccessor<T> in(inputs[0]->data, inputDesc[0]->dims); \
+        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
+        if (num_axes == 0) { \
+            /* глобальная редукция */ \
+            T max_val = in[0]; \
+            for (size_t i = 1; i < in.numElements(); ++i) \
+                if (in[i] > max_val) max_val = in[i]; \
+            double sum = 0.0; \
+            for (size_t i = 0; i < in.numElements(); ++i) \
+                sum += std::exp(static_cast<double>(in[i]) - static_cast<double>(max_val)); \
+            out[0] = static_cast<T>(std::log(sum) + static_cast<double>(max_val)); \
+            break; \
+        } \
+        const int64_t* axes = static_cast<const int64_t*>(inputs[1]->data); \
+        int64_t axis = axes[0]; \
+        if (axis < 0) axis += in.dims().size(); \
+        size_t ndim = in.dims().size(); \
+        std::vector<int64_t> inStrides(ndim, 1); \
+        for (int i = ndim - 2; i >= 0; --i) \
+            inStrides[i] = inStrides[i+1] * in.dims()[i+1]; \
+        std::vector<int64_t> outDims; \
+        for (size_t d = 0; d < ndim; ++d) \
+            if (d != axis) outDims.push_back(in.dims()[d]); \
+        if (outDims.empty()) outDims.push_back(1); \
+        size_t outSize = 1; \
+        for (size_t d = 0; d < outDims.size(); ++d) outSize *= outDims[d]; \
+        for (size_t outIdx = 0; outIdx < outSize; ++outIdx) { \
+            std::vector<int64_t> outCoord(outDims.size(), 0); \
+            size_t temp = outIdx; \
+            for (int i = outDims.size()-1; i >= 0; --i) { \
+                outCoord[i] = temp % outDims[i]; \
+                temp /= outDims[i]; \
+            } \
+            std::vector<int64_t> inCoord(ndim, 0); \
+            size_t outDimIdx = 0; \
+            for (size_t d = 0; d < ndim; ++d) { \
+                if (d == axis) inCoord[d] = 0; \
+                else inCoord[d] = outCoord[outDimIdx++]; \
+            } \
+            /* находим максимум вдоль оси */ \
+            T max_val = in[0]; /* временно, ниже пересчитаем */ \
+            { \
+                size_t first_idx = 0; \
+                for (size_t d = 0; d < ndim; ++d) first_idx += inCoord[d] * inStrides[d]; \
+                max_val = in[first_idx]; \
+                for (inCoord[axis] = 1; inCoord[axis] < in.dims()[axis]; ++inCoord[axis]) { \
+                    size_t inIdx = 0; \
+                    for (size_t d = 0; d < ndim; ++d) inIdx += inCoord[d] * inStrides[d]; \
+                    if (in[inIdx] > max_val) max_val = in[inIdx]; \
+                } \
+            } \
+            double sum = 0.0; \
+            for (inCoord[axis] = 0; inCoord[axis] < in.dims()[axis]; ++inCoord[axis]) { \
+                size_t inIdx = 0; \
+                for (size_t d = 0; d < ndim; ++d) inIdx += inCoord[d] * inStrides[d]; \
+                sum += std::exp(static_cast<double>(in[inIdx]) - static_cast<double>(max_val)); \
+            } \
+            out[outIdx] = static_cast<T>(std::log(sum) + static_cast<double>(max_val)); \
+        } \
+        break; \
+    }
 
-#define DISPATCH_REDUCE_MAX(DT) \
-    DISPATCH_REDUCE(DT, std::numeric_limits<T>::lowest(), [](T a, T b) { return a > b ? a : b; })
+// torch.var
+#define REDUCE_STD_DT(DT) \
+    case DT: { \
+        using T = aclDataTypeTraits<DT>::type; \
+        TensorAccessor<T> in(inputs[0]->data, inputDesc[0]->dims); \
+        TensorAccessor<T> mean_val(inputs[1]->data, inputDesc[1]->dims); \
+        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
+        if (norm_dims.empty()) { \
+            double sum_sq = 0.0; \
+            for (size_t i = 0; i < total_elements; ++i) { \
+                double diff = static_cast<double>(in[i]) - static_cast<double>(mean_val[i]); \
+                sum_sq += diff * diff; \
+            } \
+            out[0] = static_cast<T>(denom > 0 ? sum_sq / denom : 0); \
+        } else { \
+            size_t ndim = in.dims().size(); \
+            std::vector<bool> reduce_mask(ndim, false); \
+            for (int64_t ax : norm_dims) { \
+                if (ax < 0) ax += ndim; \
+                reduce_mask[ax] = true; \
+            } \
+            std::vector<int64_t> in_strides(ndim, 1); \
+            for (int i = ndim - 2; i >= 0; --i) \
+                in_strides[i] = in_strides[i+1] * in.dims()[i+1]; \
+            std::vector<int64_t> keep_dims; \
+            for (size_t d = 0; d < ndim; ++d) \
+                if (!reduce_mask[d]) keep_dims.push_back(in.dims()[d]); \
+            if (keep_dims.empty()) keep_dims.push_back(1); \
+            size_t out_total = 1; \
+            for (auto d : keep_dims) out_total *= d; \
+            for (size_t out_idx = 0; out_idx < out_total; ++out_idx) { \
+                std::vector<int64_t> keep_coord(keep_dims.size(), 0); \
+                size_t temp = out_idx; \
+                for (int i = keep_dims.size()-1; i >= 0; --i) { \
+                    keep_coord[i] = temp % keep_dims[i]; \
+                    temp /= keep_dims[i]; \
+                } \
+                std::vector<int64_t> cur_coord(ndim, 0); \
+                size_t keep_idx = 0; \
+                for (size_t d = 0; d < ndim; ++d) { \
+                    if (!reduce_mask[d]) cur_coord[d] = keep_coord[keep_idx++]; \
+                } \
+                double sum_sq = 0.0; \
+                while (true) { \
+                    size_t in_idx = 0; \
+                    for (size_t d = 0; d < ndim; ++d) in_idx += cur_coord[d] * in_strides[d]; \
+                    double diff = static_cast<double>(in[in_idx]) - static_cast<double>(mean_val[in_idx]); \
+                    sum_sq += diff * diff; \
+                    int inc_dim = ndim - 1; \
+                    while (inc_dim >= 0 && !reduce_mask[inc_dim]) --inc_dim; \
+                    if (inc_dim < 0) break; \
+                    while (inc_dim >= 0) { \
+                        if (reduce_mask[inc_dim]) { \
+                            cur_coord[inc_dim]++; \
+                            if (cur_coord[inc_dim] >= in.dims()[inc_dim]) { \
+                                cur_coord[inc_dim] = 0; \
+                                --inc_dim; \
+                            } else break; \
+                        } else --inc_dim; \
+                    } \
+                    if (inc_dim < 0) break; \
+                } \
+                out[out_idx] = static_cast<T>(denom > 0 ? sum_sq / denom : 0); \
+            } \
+        } \
+        break; \
+    }
+
+#define DISPATCH_BROADCAST_TO(DT) \
+    case DT: { \
+        using T = aclDataTypeTraits<DT>::type; \
+        TensorAccessor<T> in(inputs[0]->data, inputDesc[0]->dims); \
+        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
+        \
+        if (in.numElements() == 0 || out.numElements() == 0) break; \
+        \
+        std::vector<int64_t> inStrides(in.dims().size(), 1); \
+        for (int i = in.dims().size()-2; i >= 0; --i) \
+            inStrides[i] = inStrides[i+1] * in.dims()[i+1]; \
+        \
+        std::vector<int64_t> outStrides(out.dims().size(), 1); \
+        for (int i = out.dims().size()-2; i >= 0; --i) \
+            outStrides[i] = outStrides[i+1] * out.dims()[i+1]; \
+        \
+        size_t outSize = out.numElements(); \
+        for (size_t outIdx = 0; outIdx < outSize; ++outIdx) { \
+            size_t inIdx = 0; \
+            size_t temp = outIdx; \
+            for (int d = out.dims().size()-1; d >= 0; --d) { \
+                int64_t coord = temp % out.dims()[d]; \
+                temp /= out.dims()[d]; \
+                if (d < in.dims().size() && in.dims()[d] > 1) \
+                    inIdx += coord * inStrides[d]; \
+            } \
+            out[outIdx] = in[inIdx]; \
+        } \
+        break; \
+    }
 
 
 #endif // HELPERS

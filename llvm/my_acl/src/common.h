@@ -247,11 +247,24 @@ struct aclopAttr {
 
 static std::mutex g_log_mutex;
 
-static void log_output(const std::ostringstream& oss) {
+static bool log_is_quiet() {
+    static int quiet = -1;
+    if (quiet < 0) {
+        const char* env = std::getenv("NOT_NPU_QUIET");
+        quiet = (env && env[0] == '1') ? 1 : 0;
+    }
+    return quiet == 1;
+}
+
+static void log_output(const std::ostringstream& oss, bool is_error = false) {
+    if (!is_error && log_is_quiet())
+        return;
     std::lock_guard<std::mutex> lock(g_log_mutex);
     std::cout << oss.str() << std::endl;
 }
-static void log_output(const std::string& msg) {
+static void log_output(const std::string& msg, bool is_error = false) {
+    if (!is_error && log_is_quiet())
+        return;
     std::lock_guard<std::mutex> lock(g_log_mutex);
     std::cout << msg << std::endl;
 }

@@ -2,54 +2,54 @@
 Все "опасные" случаи, т.е. непонятные для обычного grep-анализа
 
 ~/tmp/pytorch/torch_npu/_inductor/npu_device.py:177:                cmd.Name(kernel_name.c_str())
-    это кастомный вызыватель функций, загруженных через *.npubin... нужен для triton, а не самого torch_npu
+-   это кастомный вызыватель функций, загруженных через *.npubin... нужен для triton, а не самого torch_npu
 ~/tmp/pytorch/torch_npu/csrc/inductor/mlir/cpp_common.cpp:168:    cmd.Name(name).SetCustomHandler(launch_call).Run();
-    ~/tmp/pytorch/torch_npu/_inductor/ascend_npu_ir/ascend_npu_ir/npu/codegen/cpp_wrapper.py:122:    opcommand_call("{kernel_name}", launch_call);
-    ~/tmp/pytorch/torch_npu/_inductor/ascend_npu_ir/ascend_npu_ir/npu/codegen/cpp_wrapper.py:150:    opcommand_call("{kernel_name}", launch_call);
-    ~/tmp/pytorch/torch_npu/_inductor/ascend_npu_ir/ascend_npu_ir/npu/codegen/cpp_wrapper.py:334:  opcommand_call("{kernel_name}", launch_call);
-    вообще что-то чисто для python
+-   ~/tmp/pytorch/torch_npu/_inductor/ascend_npu_ir/ascend_npu_ir/npu/codegen/cpp_wrapper.py:122:    opcommand_call("{kernel_name}", launch_call);
+-   ~/tmp/pytorch/torch_npu/_inductor/ascend_npu_ir/ascend_npu_ir/npu/codegen/cpp_wrapper.py:150:    opcommand_call("{kernel_name}", launch_call);
+-   ~/tmp/pytorch/torch_npu/_inductor/ascend_npu_ir/ascend_npu_ir/npu/codegen/cpp_wrapper.py:334:  opcommand_call("{kernel_name}", launch_call);
+-   вообще что-то чисто для python
 
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BitwiseNotKernelNpu.cpp:28:    cmd.Name(real_op_name)
-    string real_op_name = (self.dtype() == at::kBool) ? "LogicalNot" : "Invert";
+-   string real_op_name = (self.dtype() == at::kBool) ? "LogicalNot" : "Invert";
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__Ior__KernelNpu.cpp:28:    cmd.Name(real_op_name).Input(self).Input(other).Output(result).Run();
-    string real_op_name = (self.dtype() == at::ScalarType::Bool) ? "LogicalOr" : "BitwiseOr";
+-   string real_op_name = (self.dtype() == at::ScalarType::Bool) ? "LogicalOr" : "BitwiseOr";
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__Ior__KernelNpu.cpp:36:    cmd.Name(real_op_name).Input(self).Input(other, self.scalar_type()).Output(result).Run();
-    string real_op_name = (self.dtype() == at::kBool) ? "LogicalOr" : "BitwiseOr";
+-   string real_op_name = (self.dtype() == at::kBool) ? "LogicalOr" : "BitwiseOr";
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BitwiseAndKernelNpu.cpp:28:    cmd.Name(real_op_name).Input(self).Input(other, self.scalar_type()).Output(result).Run();
-    string real_op_name = (self.dtype() == at::kBool) ? "LogicalAnd" : "BitwiseAnd";
+-   string real_op_name = (self.dtype() == at::kBool) ? "LogicalAnd" : "BitwiseAnd";
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BitwiseAndKernelNpu.cpp:42:        cmd.Name(real_op_name).Expect(unified_result).Input(self).Input(other).Output(result).Run();
-    string real_op_name = (self.dtype() == at::kBool) ? "LogicalAnd" : "BitwiseAnd";
+-   string real_op_name = (self.dtype() == at::kBool) ? "LogicalAnd" : "BitwiseAnd";
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormBackwardKernelNpu.cpp:43:    cmd.Name(name)
-    string name = (self.dim() == 5) ? "BN3DTrainingUpdateGrad" : "BNTrainingUpdateGrad";
+-   string name = (self.dim() == 5) ? "BN3DTrainingUpdateGrad" : "BNTrainingUpdateGrad";
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormBackwardKernelNpu.cpp:81:    cmd.Name(name)
-    string name = (self.dim() == 5) ? "BN3DTrainingReduceGrad" : "BNTrainingReduceGrad";
+-   string name = (self.dim() == 5) ? "BN3DTrainingReduceGrad" : "BNTrainingReduceGrad";
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormKernelNpu.cpp:66:    cmd.Name(name)
-    string name = (self.dim() == 5) ? "BN3DTrainingReduce" : "BNTrainingReduce";
+-   string name = (self.dim() == 5) ? "BN3DTrainingReduce" : "BNTrainingReduce";
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormKernelNpu.cpp:93:    cmd.Name(name)
-    string name = (self.dim() == 5) ? "BN3DTrainingUpdate" : "BNTrainingUpdate";
+-   string name = (self.dim() == 5) ? "BN3DTrainingUpdate" : "BNTrainingUpdate";
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BitwiseOrKernelNpu.cpp:28:    cmd.Name(real_op_name).Input(self).Input(other, self.scalar_type()).Output(result).Run();
-    string real_op_name = (self.dtype() == at::kBool) ? "LogicalOr" : "BitwiseOr";
+-   string real_op_name = (self.dtype() == at::kBool) ? "LogicalOr" : "BitwiseOr";
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BitwiseOrKernelNpu.cpp:42:        cmd.Name(real_op_name).Expect(unified_result).Input(self).Input(other).Output(result).Run();
-    string real_op_name = (self.dtype() == at::kBool) ? "LogicalOr" : "BitwiseOr";
+-   string real_op_name = (self.dtype() == at::kBool) ? "LogicalOr" : "BitwiseOr";
 COMMENT
 MISC="LogicalNot Invert LogicalOr BitwiseOr LogicalAnd BitwiseAnd BN3DTrainingUpdateGrad BNTrainingUpdateGrad BN3DTrainingUpdate BNTrainingUpdate BN3DTrainingReduceGrad BNTrainingReduceGrad BN3DTrainingReduce BNTrainingReduce"
 
-ops=$(grep 'cmd.Name' ~/tmp/pytorch -rn \
-    | grep -o 'cmd.Name("[^"]*")' \
-    | sed -E 's/cmd.Name\("([^"]*)"\)/\1/' \
-    | sort -u)
+ops=$(grep '.Name' ~/tmp/pytorch -rn \
+   | grep -o '.Name("[^"]*")' \
+   | sed -E 's/.Name\("([^"]*)"\)/\1/' \
+   | sort -u)
 ops=$(printf "%s\n%s\n" "$ops" "$MISC" | tr ' ' '\n' | sort -u)
 
 for op in $ops; do
-    echo "    $op"
-    src1=$(grep "cmd.Name(\"$op\")" ~/tmp/pytorch -rn)
-    src2=$(grep -E "\? \"$op\" : \"[^\"]*\"|\? \"[^\"]*\" : \"$op\"" ~/tmp/pytorch -rn)
-    src=$(printf "%s\n%s\n" "$src1" "$src2" | grep -v '^[[:space:]]*$' | sort -u | sed "s|$HOME|~|")
-    echo "$src"
+   echo "    $op"
+   src1=$(grep ".Name(\"$op\")" ~/tmp/pytorch -rn)
+   src2=$(grep -E "\? \"$op\" : \"[^\"]*\"|\? \"[^\"]*\" : \"$op\"" ~/tmp/pytorch -rn)
+   src=$(printf "%s\n%s\n" "$src1" "$src2" | grep -v '^[[:space:]]*$' | sort -u | sed "s|$HOME|~|")
+   echo "$src"
 done
 
 : << 'COMMENT'
-финальный результат поисков (всего 369 операций):
+финальный результат поисков (всего 384 операций):
 
     Acos
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AcosKernelNpu.cpp:27:    cmd.Name("Acos")
@@ -83,14 +83,8 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ScatterV1KernelNpu.cpp:26:    cmd.Name("ArgMaxGrad")
     ArgMaxV2
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ArgmaxKernelNpu.cpp:28:    cmd.Name("ArgMaxV2")
-    ArgMaxWithValue
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MaxKernelNpu.cpp:31:    cmd.Name("ArgMaxWithValue")
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MaxV1KernelNpu.cpp:30:  cmd.Name("ArgMaxWithValue")
     ArgMin
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ArgminKernelNpu.cpp:30:    cmd.Name("ArgMin")
-    ArgMinWithValue
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MinKernelNpu.cpp:35:    cmd.Name("ArgMinWithValue")
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MinV1KernelNpu.cpp:31:    cmd.Name("ArgMinWithValue")
     AsStrided
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AsStridedKernelNpu.cpp:70:        cmd.Name("AsStrided")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AsStridedKernelNpu.cpp:86:        cmd.Name("AsStrided")
@@ -108,6 +102,10 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AtanhKernelNpu.cpp:26:  cmd.Name("Atanh")
     AttentionLnQKV
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FusedAttentionLnQKV.cpp:51:    cmd.Name("AttentionLnQKV")
+    AttentionQKVGradW
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FusedAttentionQKVGradKernelNpu.cpp:64:    cmd2.Name("AttentionQKVGradW")
+    AttentionQKVGradX
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FusedAttentionQKVGradKernelNpu.cpp:50:    cmd1.Name("AttentionQKVGradX")
     AttentionScore
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FusedAttentionScoreKernelNpu.cpp:72:  cmd.Name("AttentionScore")
     AttentionScoreGrad
@@ -177,8 +175,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BoundingBoxDecodeKernelNpu.cpp:49:    cmd.Name("BoundingBoxDecode")
     BoundingBoxEncode
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BoundingBoxEncodeKernelNpu.cpp:45:  cmd.Name("BoundingBoxEncode")
-    BroadcastTo
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BroadcastKernelNpu.cpp:31:    cmd.Name("BroadcastTo")
     CIoU
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/CiouKernelNpu.cpp:55:  cmd.Name("CIoU")
     CIoUGrad
@@ -323,8 +319,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ExpKernelNpu.cpp:27:    cmd.Name("Exp")
     Expm1
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/Expm1KernelNpu.cpp:27:    cmd.Name("Expm1")
-    Eye
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EyeKernelNpu.cpp:28:    cmd.Name("Eye")
     FastGelu
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FastGeluKernelNpu.cpp:45:    cmd.Name("FastGelu")
     FastGeluGrad
@@ -476,9 +470,12 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__Ior__KernelNpu.cpp:34:    string real_op_name = (self.dtype() == at::kBool) ? "LogicalOr" : "BitwiseOr";
     LpLoss
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/L1LossKernelNpu.cpp:33:    cmd.Name("LpLoss")
-    MaskedFill
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MaskedFillKernelNpu.cpp:43:    cmd.Name("MaskedFill")
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MaskedFillKernelNpu.cpp:70:    cmd.Name("MaskedFill")
+    LpNormReduceV2
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LinalgNormKernelNpu.cpp:113:    cmd1.Name("LpNormReduceV2")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NormKernelNpu.cpp:56:  cmd1.Name("LpNormReduceV2")
+    LpNormUpdateV2
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LinalgNormKernelNpu.cpp:123:    cmd2.Name("LpNormUpdateV2")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NormKernelNpu.cpp:66:  cmd2.Name("LpNormUpdateV2")
     MaskedFillRange
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MaskedFillRangeKernelNpu.cpp:58:    cmd.Name("MaskedFillRange")
     MaskedScatter
@@ -564,7 +561,9 @@ done
     NonMaxSuppressionV4
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NmsV4KernelNpu.cpp:38:    cmd.Name("NonMaxSuppressionV4")
     NonZero
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NonzeroKernelNpu.cpp:29:      .Name("NonZero")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/WhereKernelNpu.cpp:51:  cmd.Name("NonZero")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/AdvancedIndex.cpp:64:    cmd.Sync(output_sync_idx).Name("NonZero").Input(self).Output(result).Attr("transpose", true).Run();
     NormalizeBatch
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NormalizeBatchKernelNpu.cpp:50:  cmd.Name("NormalizeBatch")
     NormalizeV2
@@ -624,20 +623,11 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RangeKernelNpu.cpp:41:    cmd.Name("RangeD")
     Reciprocal
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ReciprocalKernelNpu.cpp:29:    cmd.Name("Reciprocal")
-    ReduceAll
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AllKernelNpu.cpp:31:    cmd.Name("ReduceAll")
-    ReduceAny
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AnyKernelNpu.cpp:30:  cmd.Name("ReduceAny")
-    ReduceLogSumExp
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LogSumExpKernelNpu.cpp:53:        cmd.Name("ReduceLogSumExp").Input(self.sub(maxes)).Input(dims).Output(result).Attr("keep_dims", keepdim).Run();
-    ReduceMean
-~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/MeanKernelNpu.cpp:44:    cmd.Name("ReduceMean")
-    ReduceProd
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ProdKernelNpu.cpp:39:    cmd.Name("ReduceProd").Input(self).Input(dim_list).Output(result).Attr("keep_dims", keepdim).Run();
-    ReduceStdV2Update
-~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/VarKernelNpu.cpp:63:    cmd.Name("ReduceStdV2Update")
-    ReduceSum
-~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/SumKernelNpu.cpp:36:    cmd.Name("ReduceSum")
+    ReduceMeanWithCount
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormGatherStatsWithCountsKernelNpu.cpp:60:    cmd_mean.Name("ReduceMeanWithCount")
+    ReduceStdWithMean
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormStatsKernelNpu.cpp:64:    cmd_invstd.Name("ReduceStdWithMean")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/StdKernelNpu.cpp:64:    cmd2.Name("ReduceStdWithMean")
     Relu
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AddReluKernelNpu.cpp:32:    cmd.Name("Relu")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ReluKernelNpu.cpp:29:    cmd.Name("Relu")
@@ -694,6 +684,8 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RotatedBoxEncodeKernelNpu.cpp:34:    cmd.Name("RotatedBoxEncode")
     RotatedIou
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RotatedIouKernelNpu.cpp:36:    cmd.Name("RotatedIou")
+    RotatedNMS
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NmsRotatedKernelNpu.cpp:47:        .Name("RotatedNMS")
     RotatedOverlaps
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RotatedOverlapsKernelNpu.cpp:30:    cmd.Name("RotatedOverlaps")
     Round
@@ -792,6 +784,8 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/DropoutKernelNpu.cpp:90:  cmd.Name("StatelessDropOutGenMask")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/opapi/FlashAttentionKernelNpuOpApi.cpp:97:    cmd.Name("StatelessDropOutGenMask")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/opapi/FlashAttentionV2KernelNpuOpApi.cpp:87:    cmd.Name("StatelessDropOutGenMask")
+    StatelessRandomNormalV2
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NormalKernelNpu.cpp:41:    cmd.Name("StatelessRandomNormalV2")
     StatelessRandomUniformV2
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RandomKernelNpu.cpp:48:  cmd.Name("StatelessRandomUniformV2")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/UniformKernelNpu.cpp:43:    cmd.Name("StatelessRandomUniformV2")
@@ -801,13 +795,7 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/StrideAddKernelNpu.cpp:32:    cmd.Name("StrideAdd")
     StridedSlice
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/IndexingKernelNpu.cpp:31:    cmd.Name("StridedSlice")
-    Sub
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RsubKernelNpu.cpp:40:        cmd.Name("Sub").Input(other).Input(other_mul_result).Output(result).Run();
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RsubKernelNpu.cpp:42:        cmd.Name("Sub").Input(other).Input(self).Output(result).Run();
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RsubKernelNpu.cpp:54:    cmd.Name("Sub").Input(other, self.scalar_type()).Input(scalar_value).Output(result).Run();
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SubKernelNpu.cpp:32:    cmd.Name("Sub").Input(self).Input(scalarValue, self.scalar_type()).Output(result).Run();
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SubKernelNpu.cpp:42:    cmd.Name("Sub").Input(self, other_mul_alpha.scalar_type()).Input(other_mul_alpha).Output(result).Run();
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SubKernelNpu.cpp:61:        cmd.Name("Sub").Expect(unified_result).Input(self).Input(other_mul_result).Output(result).Run();
+
     SubSample
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SubSampleKernelNpu.cpp:29:    cmd.Name("SubSample")
     Svd
@@ -816,12 +804,16 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SiluKernelNpu.cpp:32:    cmd.Name("Swish")
     SwishGrad
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SiluKernelNpu.cpp:74:    cmd.Name("SwishGrad")
+    SyncBNTrainingUpdate
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormGatherStatsWithCountsKernelNpu.cpp:86:        cmd_sync.Name("SyncBNTrainingUpdate")
     SyncBatchNormBackwardElemt
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormBackwardElemtKernelNpu.cpp:80:    cmd.Name("SyncBatchNormBackwardElemt")
     SyncBatchNormBackwardReduce
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormBackwardReduceKernelNpu.cpp:63:    cmd.Name("SyncBatchNormBackwardReduce")
     SyncBatchNormGatherStats
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormGatherStatsUpdateKernelNpu.cpp:44:    cmd.Name("SyncBatchNormGatherStats")
+    SyncBatchNormGatherStatsWithCounts
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormGatherStatsWithCountsKernelNpu.cpp:71:    cmd_batch.Name("SyncBatchNormGatherStatsWithCounts")
     Tan
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/TanKernelNpu.cpp:26:  cmd.Name("Tan")
     Tanh
@@ -847,6 +839,14 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/TriuKernelNpu.cpp:27:    cmd.Name("Triu")
     Trunc
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/TruncKernelNpu.cpp:26:    cmd.Name("Trunc").Input(self).Output(result).Run();
+    UniqueConsecutive
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/UniqueConsecutiveKernelNpu.cpp:41:        .Name("UniqueConsecutive")
+    UniqueWithCountsAndSorting
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/_Unique2KernelNpu.cpp:35:        .Name("UniqueWithCountsAndSorting")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/_UniqueKernelNpu.cpp:35:        .Name("UniqueWithCountsAndSorting")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/_UniqueKernelNpu.cpp:61:        .Name("UniqueWithCountsAndSorting")
+    UniqueWithCountsExt2
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/UniqueDimKernelNpu.cpp:38:                .Name("UniqueWithCountsExt2")
     UpsampleNearest3d
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/UpSampleNearest3dKernelNpu.cpp:51:    cmd.Name("UpsampleNearest3d").Input(input).Output(result).Attr("output_size", output_size).Run();
     UpsampleNearest3dGrad
@@ -864,6 +864,12 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/XlogyKernelNpu.cpp:41:    cmd.Name("Xlogy").Input(self, other.scalar_type()).Input(other).Output(result).Run();
     YoloBoxesEncode
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/YoloBoxesEncodeKernelNpu.cpp:70:    cmd.Name("YoloBoxesEncode")
+-   __name__
+~/tmp/pytorch/tools/linter/adapters/test_has_main_linter.py:39:        name = m.Name("__name__")
+-   run_rank
+~/tmp/pytorch/tools/linter/adapters/test_has_main_linter.py:47:            func=m.Name("run_rank") | m.Attribute(attr=m.Name("run_rank"))
+-   run_tests
+~/tmp/pytorch/tools/linter/adapters/test_has_main_linter.py:42:            func=m.Name("run_tests") | m.Attribute(attr=m.Name("run_tests"))
 
 
 
@@ -876,7 +882,15 @@ A
     Add
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AddKernelNpu.cpp:59:    cmd.Name("Add")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AddKernelNpu.cpp:94:            cmd.Name("Add").Input(self).Input(other).Output(result, "", c10::nullopt, real_type).Run();
+    ArgMaxWithValue
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MaxKernelNpu.cpp:31:    cmd.Name("ArgMaxWithValue")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MaxV1KernelNpu.cpp:30:  cmd.Name("ArgMaxWithValue")
+    ArgMinWithValue
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MinKernelNpu.cpp:35:    cmd.Name("ArgMinWithValue")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MinV1KernelNpu.cpp:31:    cmd.Name("ArgMinWithValue")
 B
+    BroadcastTo
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BroadcastKernelNpu.cpp:31:    cmd.Name("BroadcastTo")
 C
     Ceil
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/CeilKernelNpu.cpp:26:    cmd.Name("Ceil").Input(self).Output(result).Run();
@@ -885,6 +899,8 @@ E
     Equal
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EqKernelNpu.cpp:31:    cmd.Name("Equal")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EqKernelNpu.cpp:46:    cmd.Name("Equal")
+    Eye
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EyeKernelNpu.cpp:28:    cmd.Name("Eye")
 F
     Fill
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FillKernelNpu.cpp:27:    cmd.Name("Fill");
@@ -915,8 +931,11 @@ L
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LogicalAndKernelNpu.cpp:29:    cmd.Name("LogicalAnd").Input(self_copy).Input(other, self_copy.scalar_type()).Output(result).Run();
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LogicalAndKernelNpu.cpp:46:        cmd.Name("LogicalAnd").Input(self_copy).Input(other_copy).Output(result).Run();
 M
+    MaskedFill
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MaskedFillKernelNpu.cpp:43:    cmd.Name("MaskedFill")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MaskedFillKernelNpu.cpp:70:    cmd.Name("MaskedFill")
     MaskedSelect
-./third_party/op-plugin/op_plugin/ops/aclops/MaskedSelectKernelNpu.cpp:50:        .Name("MaskedSelect")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MaskedSelectKernelNpu.cpp:50:        .Name("MaskedSelect")
     Mul
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MulKernelNpu.cpp:29:  cmd.Name("Mul")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MulKernelNpu.cpp:44:    cmd.Name("Mul")
@@ -934,13 +953,38 @@ R
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/DivKernelNpu.cpp:28:    cmd.Name("RealDiv").Input(self).Input(other, self.scalar_type()).Output(result).Run();
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/DivKernelNpu.cpp:36:    cmd.Name("RealDiv").Input(self, other.scalar_type()).Input(other).Output(result).Run();
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/DivKernelNpu.cpp:49:        cmd.Name("RealDiv").Input(self).Input(other).Output(result).Run();
+    ReduceAll
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AllKernelNpu.cpp:31:    cmd.Name("ReduceAll")
+    ReduceAny
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AnyKernelNpu.cpp:30:  cmd.Name("ReduceAny")
+    ReduceLogSumExp
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LogSumExpKernelNpu.cpp:53:        cmd.Name("ReduceLogSumExp").Input(self.sub(maxes)).Input(dims).Output(result).Attr("keep_dims", keepdim).Run();
     ReduceMax
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MaxKernelNpu.cpp:51:    cmd.Name("ReduceMax").Input(self).Input(dims).Output(result).Attr("keep_dims", keepdim).Run();
+    ReduceMean
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormStatsKernelNpu.cpp:48:    cmd_mean.Name("ReduceMean")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/MeanKernelNpu.cpp:44:    cmd.Name("ReduceMean")
+    ReduceMeanD
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/StdKernelNpu.cpp:37:    cmd1.Name("ReduceMeanD")
     ReduceMin
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MinKernelNpu.cpp:66:    cmd.Name("ReduceMin")
+    ReduceProd
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ProdKernelNpu.cpp:39:    cmd.Name("ReduceProd").Input(self).Input(dim_list).Output(result).Attr("keep_dims", keepdim).Run();
+    ReduceStdV2Update
+~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/VarKernelNpu.cpp:63:    cmd.Name("ReduceStdV2Update")
+    ReduceSum
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormGatherStatsWithCountsKernelNpu.cpp:51:    cmd_reduce.Name("ReduceSum")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/SumKernelNpu.cpp:36:    cmd.Name("ReduceSum")
 S
     StatelessRandomNormalV2
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NormalKernelNpu.cpp:41:    cmd.Name("StatelessRandomNormalV2")
+    Sub
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RsubKernelNpu.cpp:40:        cmd.Name("Sub").Input(other).Input(other_mul_result).Output(result).Run();
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RsubKernelNpu.cpp:42:        cmd.Name("Sub").Input(other).Input(self).Output(result).Run();
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RsubKernelNpu.cpp:54:    cmd.Name("Sub").Input(other, self.scalar_type()).Input(scalar_value).Output(result).Run();
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SubKernelNpu.cpp:32:    cmd.Name("Sub").Input(self).Input(scalarValue, self.scalar_type()).Output(result).Run();
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SubKernelNpu.cpp:42:    cmd.Name("Sub").Input(self, other_mul_alpha.scalar_type()).Input(other_mul_alpha).Output(result).Run();
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SubKernelNpu.cpp:61:        cmd.Name("Sub").Expect(unified_result).Input(self).Input(other_mul_result).Output(result).Run();
 T
     TensorEqual
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EqualKernelNpu.cpp:43:    cmd.Name("TensorEqual")

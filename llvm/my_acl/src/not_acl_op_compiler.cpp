@@ -1,7 +1,6 @@
 #include "common.h"
 #include "not_acl.cpp"  // aclGetTensorDescType
 #include "helpers.cpp"  // calc_num_elements, formatTensorList
-
 #include <cstring>      // memcpy, memset, size_t, strstr
 
 void __not_acl_op_compiler_placeholder() {}
@@ -251,6 +250,37 @@ REGISTER_OP(Add, {
         DISPATCH_ADD(ACL_UINT64)
         // ACL_BOOL для Add не поддерживается в torch_npu (для bool используется LogicalOr),
         // поэтому если он сюда попадёт, уйдём в H_UNIMPLEMENTED
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(Sub, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
+        return H_UNASSERTED;
+
+    aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
+    switch (dt) {
+        DISPATCH_SUB(ACL_FLOAT)
+        DISPATCH_SUB(ACL_DOUBLE)
+        DISPATCH_SUB(ACL_FLOAT16)
+        DISPATCH_SUB(ACL_BF16)
+        DISPATCH_SUB(ACL_INT8)
+        DISPATCH_SUB(ACL_UINT8)
+        DISPATCH_SUB(ACL_INT16)
+        DISPATCH_SUB(ACL_UINT16)
+        DISPATCH_SUB(ACL_INT32)
+        DISPATCH_SUB(ACL_UINT32)
+        DISPATCH_SUB(ACL_INT64)
+        DISPATCH_SUB(ACL_UINT64)
+        // ACL_BOOL не используется для Sub
         default:
             return H_UNIMPLEMENTED;
     }
@@ -665,6 +695,40 @@ REGISTER_OP(LogicalAnd, {
     return H_OK;
 });
 
+REGISTER_OP(MaskedFill, {
+    if (numInputs != 3 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data ||
+        aclGetTensorDescType(inputDesc[1], false) != ACL_BOOL)
+        return H_UNASSERTED;
+    if (!inputs[2] || !inputDesc[2] || !inputs[2]->data)
+        return H_UNASSERTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    switch (inDt) {
+        DISPATCH_MASKED_FILL(ACL_FLOAT)
+        DISPATCH_MASKED_FILL(ACL_DOUBLE)
+        DISPATCH_MASKED_FILL(ACL_FLOAT16)
+        DISPATCH_MASKED_FILL(ACL_BF16)
+        DISPATCH_MASKED_FILL(ACL_INT8)
+        DISPATCH_MASKED_FILL(ACL_UINT8)
+        DISPATCH_MASKED_FILL(ACL_INT16)
+        DISPATCH_MASKED_FILL(ACL_UINT16)
+        DISPATCH_MASKED_FILL(ACL_INT32)
+        DISPATCH_MASKED_FILL(ACL_UINT32)
+        DISPATCH_MASKED_FILL(ACL_INT64)
+        DISPATCH_MASKED_FILL(ACL_UINT64)
+        DISPATCH_MASKED_FILL(ACL_BOOL)
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
 REGISTER_OP(MaskedSelect, {
     if (numInputs != 2 || numOutputs != 1)
         return H_UNASSERTED;
@@ -729,6 +793,72 @@ REGISTER_OP(Abs, {
     return H_OK;
 });
 
+REGISTER_OP(ReduceAll, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    size_t num_axes = calc_num_elements(inputDesc[1], inputs[1]->size);
+    if (!inputs[1] || !inputDesc[1] || (num_axes > 0 && !inputs[1]->data) ||
+        aclGetTensorDescType(inputDesc[1], false) != ACL_INT64)
+        return H_UNASSERTED;
+
+    aclDataType dt = aclGetTensorDescType(inputDesc[0], false);
+    switch (dt) {
+        DISPATCH_REDUCE_ALL(ACL_FLOAT)
+        DISPATCH_REDUCE_ALL(ACL_DOUBLE)
+        DISPATCH_REDUCE_ALL(ACL_FLOAT16)
+        DISPATCH_REDUCE_ALL(ACL_BF16)
+        DISPATCH_REDUCE_ALL(ACL_INT8)
+        DISPATCH_REDUCE_ALL(ACL_UINT8)
+        DISPATCH_REDUCE_ALL(ACL_INT16)
+        DISPATCH_REDUCE_ALL(ACL_UINT16)
+        DISPATCH_REDUCE_ALL(ACL_INT32)
+        DISPATCH_REDUCE_ALL(ACL_UINT32)
+        DISPATCH_REDUCE_ALL(ACL_INT64)
+        DISPATCH_REDUCE_ALL(ACL_UINT64)
+        DISPATCH_REDUCE_ALL(ACL_BOOL)
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(ReduceAny, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    size_t num_axes = calc_num_elements(inputDesc[1], inputs[1]->size);
+    if (!inputs[1] || !inputDesc[1] || (num_axes > 0 && !inputs[1]->data) ||
+        aclGetTensorDescType(inputDesc[1], false) != ACL_INT64)
+        return H_UNASSERTED;
+
+    aclDataType dt = aclGetTensorDescType(inputDesc[0], false);
+    switch (dt) {
+        DISPATCH_REDUCE_ANY(ACL_FLOAT)
+        DISPATCH_REDUCE_ANY(ACL_DOUBLE)
+        DISPATCH_REDUCE_ANY(ACL_FLOAT16)
+        DISPATCH_REDUCE_ANY(ACL_BF16)
+        DISPATCH_REDUCE_ANY(ACL_INT8)
+        DISPATCH_REDUCE_ANY(ACL_UINT8)
+        DISPATCH_REDUCE_ANY(ACL_INT16)
+        DISPATCH_REDUCE_ANY(ACL_UINT16)
+        DISPATCH_REDUCE_ANY(ACL_INT32)
+        DISPATCH_REDUCE_ANY(ACL_UINT32)
+        DISPATCH_REDUCE_ANY(ACL_INT64)
+        DISPATCH_REDUCE_ANY(ACL_UINT64)
+        DISPATCH_REDUCE_ANY(ACL_BOOL)
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
 REGISTER_OP(ReduceMin, {
     if (numInputs != 2 || numOutputs != 1)
         return H_UNASSERTED;
@@ -736,7 +866,8 @@ REGISTER_OP(ReduceMin, {
         return H_UNASSERTED;
     if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
         return H_UNASSERTED;
-    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data ||
+    size_t num_axes = calc_num_elements(inputDesc[1], inputs[1]->size);
+    if (!inputs[1] || !inputDesc[1] || (num_axes > 0 && !inputs[1]->data) ||
         aclGetTensorDescType(inputDesc[1], false) != ACL_INT64)
         return H_UNASSERTED;
 
@@ -767,7 +898,10 @@ REGISTER_OP(ReduceMax, {
         return H_UNASSERTED;
     if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
         return H_UNASSERTED;
-    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data ||
+    if (!inputs[1] || !inputDesc[1])
+        return H_UNASSERTED;
+    size_t num_axes = calc_num_elements(inputDesc[1], inputs[1]->size);
+    if (!inputs[1] || !inputDesc[1] || (num_axes > 0 && !inputs[1]->data) ||
         aclGetTensorDescType(inputDesc[1], false) != ACL_INT64)
         return H_UNASSERTED;
 
@@ -788,6 +922,309 @@ REGISTER_OP(ReduceMax, {
         default:
             return H_UNIMPLEMENTED;
     }
+    return H_OK;
+});
+
+REGISTER_OP(ArgMaxWithValue, {
+    if (numInputs != 1 || numOutputs != 2)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!outputs[1] || !outputDesc[1] || !outputs[1]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!attr)
+        return H_UNASSERTED;
+
+    // Проверяем, что атрибут dimension присутствует
+    if (attr->ints.find("dimension") == attr->ints.end())
+        return H_UNASSERTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    switch (inDt) {
+        DISPATCH_ARG_MAX_WITH_VALUE(ACL_FLOAT)
+        DISPATCH_ARG_MAX_WITH_VALUE(ACL_DOUBLE)
+        DISPATCH_ARG_MAX_WITH_VALUE(ACL_FLOAT16)
+        DISPATCH_ARG_MAX_WITH_VALUE(ACL_BF16)
+        DISPATCH_ARG_MAX_WITH_VALUE(ACL_INT8)
+        DISPATCH_ARG_MAX_WITH_VALUE(ACL_UINT8)
+        DISPATCH_ARG_MAX_WITH_VALUE(ACL_INT16)
+        DISPATCH_ARG_MAX_WITH_VALUE(ACL_UINT16)
+        DISPATCH_ARG_MAX_WITH_VALUE(ACL_INT32)
+        DISPATCH_ARG_MAX_WITH_VALUE(ACL_UINT32)
+        DISPATCH_ARG_MAX_WITH_VALUE(ACL_INT64)
+        DISPATCH_ARG_MAX_WITH_VALUE(ACL_UINT64)
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(ArgMinWithValue, {
+    if (numInputs != 1 || numOutputs != 2)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!outputs[1] || !outputDesc[1] || !outputs[1]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!attr)
+        return H_UNASSERTED;
+    if (attr->ints.find("dimension") == attr->ints.end())
+        return H_UNASSERTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    switch (inDt) {
+        DISPATCH_ARG_MIN_WITH_VALUE(ACL_FLOAT)
+        DISPATCH_ARG_MIN_WITH_VALUE(ACL_DOUBLE)
+        DISPATCH_ARG_MIN_WITH_VALUE(ACL_FLOAT16)
+        DISPATCH_ARG_MIN_WITH_VALUE(ACL_BF16)
+        DISPATCH_ARG_MIN_WITH_VALUE(ACL_INT8)
+        DISPATCH_ARG_MIN_WITH_VALUE(ACL_UINT8)
+        DISPATCH_ARG_MIN_WITH_VALUE(ACL_INT16)
+        DISPATCH_ARG_MIN_WITH_VALUE(ACL_UINT16)
+        DISPATCH_ARG_MIN_WITH_VALUE(ACL_INT32)
+        DISPATCH_ARG_MIN_WITH_VALUE(ACL_UINT32)
+        DISPATCH_ARG_MIN_WITH_VALUE(ACL_INT64)
+        DISPATCH_ARG_MIN_WITH_VALUE(ACL_UINT64)
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(ReduceSum, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    size_t num_axes = calc_num_elements(inputDesc[1], inputs[1]->size);
+    if (!inputs[1] || !inputDesc[1] || (num_axes > 0 && !inputs[1]->data) ||
+        aclGetTensorDescType(inputDesc[1], false) != ACL_INT64)
+        return H_UNASSERTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    // Для ReduceSum обычно выходной тип совпадает с входным (или приводится к float для целых?),
+    // но пока поддерживаем основные числовые типы как есть.
+    switch (inDt) {
+        DISPATCH_REDUCE(ACL_FLOAT,   (float)0,   [](float a,   float b)   { return a + b; })
+        DISPATCH_REDUCE(ACL_DOUBLE,  (double)0,  [](double a,  double b)  { return a + b; })
+        DISPATCH_REDUCE(ACL_FLOAT16, (uint16_t)0, [](uint16_t a, uint16_t b) {
+            return float_to_half(half_to_float(a) + half_to_float(b));
+        })
+        DISPATCH_REDUCE(ACL_BF16,    (uint16_t)0, [](uint16_t a, uint16_t b) {
+            return float_to_bf16(bf16_to_float(a) + bf16_to_float(b));
+        })
+        DISPATCH_REDUCE(ACL_INT8,    (int8_t)0,   std::plus<int8_t>{})
+        DISPATCH_REDUCE(ACL_UINT8,   (uint8_t)0,  std::plus<uint8_t>{})
+        DISPATCH_REDUCE(ACL_INT16,   (int16_t)0,  std::plus<int16_t>{})
+        DISPATCH_REDUCE(ACL_UINT16,  (uint16_t)0, std::plus<uint16_t>{})
+        DISPATCH_REDUCE(ACL_INT32,   (int32_t)0,  std::plus<int32_t>{})
+        DISPATCH_REDUCE(ACL_UINT32,  (uint32_t)0, std::plus<uint32_t>{})
+        DISPATCH_REDUCE(ACL_INT64,   (int64_t)0,  std::plus<int64_t>{})
+        DISPATCH_REDUCE(ACL_UINT64,  (uint64_t)0, std::plus<uint64_t>{})
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(ReduceProd, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    size_t num_axes = calc_num_elements(inputDesc[1], inputs[1]->size);
+    if (!inputs[1] || !inputDesc[1] || (num_axes > 0 && !inputs[1]->data) ||
+        aclGetTensorDescType(inputDesc[1], false) != ACL_INT64)
+        return H_UNASSERTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    switch (inDt) {
+        DISPATCH_REDUCE(ACL_FLOAT,   1.0f,              std::multiplies<float>{})
+        DISPATCH_REDUCE(ACL_DOUBLE,  1.0,               std::multiplies<double>{})
+        DISPATCH_REDUCE(ACL_FLOAT16, float_to_half(1.0f), [](uint16_t a, uint16_t b) {
+            return float_to_half(half_to_float(a) * half_to_float(b));
+        })
+        DISPATCH_REDUCE(ACL_BF16,    float_to_bf16(1.0f), [](uint16_t a, uint16_t b) {
+            return float_to_bf16(bf16_to_float(a) * bf16_to_float(b));
+        })
+        DISPATCH_REDUCE(ACL_INT8,    static_cast<int8_t>(1),    std::multiplies<int8_t>{})
+        DISPATCH_REDUCE(ACL_UINT8,   static_cast<uint8_t>(1),   std::multiplies<uint8_t>{})
+        DISPATCH_REDUCE(ACL_INT16,   static_cast<int16_t>(1),   std::multiplies<int16_t>{})
+        DISPATCH_REDUCE(ACL_UINT16,  static_cast<uint16_t>(1),  std::multiplies<uint16_t>{})
+        DISPATCH_REDUCE(ACL_INT32,   static_cast<int32_t>(1),   std::multiplies<int32_t>{})
+        DISPATCH_REDUCE(ACL_UINT32,  static_cast<uint32_t>(1),  std::multiplies<uint32_t>{})
+        DISPATCH_REDUCE(ACL_INT64,   static_cast<int64_t>(1),   std::multiplies<int64_t>{})
+        DISPATCH_REDUCE(ACL_UINT64,  static_cast<uint64_t>(1),  std::multiplies<uint64_t>{})
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(ReduceMean, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    size_t num_axes = calc_num_elements(inputDesc[1], inputs[1]->size);
+    if (!inputs[1] || !inputDesc[1] || (num_axes > 0 && !inputs[1]->data) ||
+        aclGetTensorDescType(inputDesc[1], false) != ACL_INT64)
+        return H_UNASSERTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    switch (inDt) {
+        DISPATCH_REDUCE_MEAN(ACL_FLOAT)
+        DISPATCH_REDUCE_MEAN(ACL_DOUBLE)
+        DISPATCH_REDUCE_MEAN(ACL_FLOAT16)
+        DISPATCH_REDUCE_MEAN(ACL_BF16)
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(ReduceMeanD, {
+    if (numInputs != 1 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!attr)
+        return H_UNASSERTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    switch (inDt) {
+        DISPATCH_REDUCE_MEAN_FROM_AXES(ACL_FLOAT)
+        DISPATCH_REDUCE_MEAN_FROM_AXES(ACL_DOUBLE)
+        DISPATCH_REDUCE_MEAN_FROM_AXES(ACL_FLOAT16)
+        DISPATCH_REDUCE_MEAN_FROM_AXES(ACL_BF16)
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(ReduceLogSumExp, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    size_t num_axes = calc_num_elements(inputDesc[1], inputs[1]->size);
+    if (!inputs[1] || !inputDesc[1] || (num_axes > 0 && !inputs[1]->data) ||
+        aclGetTensorDescType(inputDesc[1], false) != ACL_INT64)
+        return H_UNASSERTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    switch (inDt) {
+        DISPATCH_REDUCE_LOG_SUM_EXP(ACL_FLOAT)
+        DISPATCH_REDUCE_LOG_SUM_EXP(ACL_DOUBLE)
+        DISPATCH_REDUCE_LOG_SUM_EXP(ACL_FLOAT16)
+        DISPATCH_REDUCE_LOG_SUM_EXP(ACL_BF16)
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+REGISTER_OP(ReduceStdV2Update, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
+        return H_UNASSERTED;
+    if (!attr)
+        return H_UNASSERTED;  // атрибуты обязательны
+
+    // Извлекаем атрибуты
+    // dim – список осей (int64_t)
+    const auto& dims_attr = attr->list_ints.find("dim");
+    if (dims_attr == attr->list_ints.end() || dims_attr->second.empty())
+        return H_UNASSERTED;  // оси не заданы
+    const std::vector<int64_t>& dims = dims_attr->second;
+
+    // unbiased – bool
+    bool unbiased = true;
+    auto unbiased_it = attr->bools.find("unbiased");
+    if (unbiased_it != attr->bools.end())
+        unbiased = unbiased_it->second;
+
+    // correction – int64_t
+    int64_t correction = 1;
+    auto correction_it = attr->ints.find("correction");
+    if (correction_it != attr->ints.end())
+        correction = correction_it->second;
+
+    // keepdim – bool (но выход уже имеет размерность без учёта keepdim или с ней? в эмуляции можно игнорировать, т.к. форма выхода уже задана)
+    // if_std – bool (0 – дисперсия, 1 – станд.отклонение, но мы пока делаем дисперсию)
+
+    // Входные тензоры: self и mean_broadcast
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    aclDataType meanDt = aclGetTensorDescType(inputDesc[1], false);
+    if (inDt != meanDt)
+        return H_UNASSERTED;
+
+    // Поддерживаем только float/double/float16/bf16 для дисперсии
+    switch (inDt) {
+        case ACL_FLOAT:
+        case ACL_DOUBLE:
+        case ACL_FLOAT16:
+        case ACL_BF16:
+            break;
+        default:
+            return H_UNIMPLEMENTED;
+    }
+
+    size_t total_elements = calc_num_elements(inputDesc[0], inputs[0]->size);
+    size_t out_elements = calc_num_elements(outputDesc[0], outputs[0]->size);
+    if (total_elements == 0 || out_elements == 0)
+        return H_OK; // пустой тензор
+
+    // Нормализуем оси (могут быть отрицательными)
+    std::vector<int64_t> norm_dims = dims;
+    int64_t ndim = static_cast<int64_t>(inputDesc[0]->dims.size());
+    for (auto& d : norm_dims) {
+        if (d < 0) d += ndim;
+    }
+
+    // Определяем количество элементов, сворачиваемых в один выход
+    int64_t N = 1;
+    for (auto d : norm_dims) {
+        if (d >= 0 && d < ndim)
+            N *= inputDesc[0]->dims[d];
+    }
+    // Если оси не заданы (редукция по всем осям), N = total_elements
+    if (norm_dims.empty())
+        N = total_elements;
+
+    // Вычисляем знаменатель
+    double denom = static_cast<double>(N - correction);
+    if (denom <= 0)
+        denom = 0; // или NAN, но пока так
+
+    switch (inDt) {
+        REDUCE_STD_DT(ACL_FLOAT)
+        REDUCE_STD_DT(ACL_DOUBLE)
+        REDUCE_STD_DT(ACL_FLOAT16)
+        REDUCE_STD_DT(ACL_BF16)
+        default: break;
+    }
+
     return H_OK;
 });
 
@@ -813,6 +1250,85 @@ REGISTER_OP(Ceil, {
     return H_OK;
 });
 
+REGISTER_OP(Eye, {
+    // Eye не имеет входных тензоров, только выход
+    if (numInputs != 0 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    // attr не обязателен, так как размеры и dtype уже есть в выходном дескрипторе
+
+    size_t ndim = aclGetTensorDescNumDims(outputDesc[0], false);
+    if (ndim != 2)
+        return H_UNASSERTED;   // Eye всегда создаёт двумерную матрицу
+
+    int64_t n = 0; int64_t m = 0; // А это забавно: использование запятой РАЗРУШАЕТ МАКРОСЫ!) Оно путает это с межаргументной запятой
+    if (aclGetTensorDescDimV2(outputDesc[0], 0, &n, false) != ACL_SUCCESS ||
+        aclGetTensorDescDimV2(outputDesc[0], 1, &m, false) != ACL_SUCCESS)
+        return H_UNASSERTED;
+
+    aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
+    size_t elemSize = aclDataTypeBytes(dt);
+    char* data = static_cast<char*>(outputs[0]->data);
+
+    // Заполняем всё нулями
+    std::memset(data, 0, n * m * elemSize);
+
+    // Устанавливаем единицы на главной диагонали
+    for (int64_t i = 0; i < std::min(n, m); ++i) {
+        size_t idx = i * m + i;                     // C-order (row-major)
+        char* elemPtr = data + idx * elemSize;
+        switch (dt) {
+            case ACL_FLOAT:   *reinterpret_cast<float*>(elemPtr) = 1.0f; break;
+            case ACL_DOUBLE:  *reinterpret_cast<double*>(elemPtr) = 1.0; break;
+            case ACL_INT8:    *reinterpret_cast<int8_t*>(elemPtr) = 1; break;
+            case ACL_UINT8:   *reinterpret_cast<uint8_t*>(elemPtr) = 1; break;
+            case ACL_INT16:   *reinterpret_cast<int16_t*>(elemPtr) = 1; break;
+            case ACL_UINT16:  *reinterpret_cast<uint16_t*>(elemPtr) = 1; break;
+            case ACL_INT32:   *reinterpret_cast<int32_t*>(elemPtr) = 1; break;
+            case ACL_UINT32:  *reinterpret_cast<uint32_t*>(elemPtr) = 1; break;
+            case ACL_INT64:   *reinterpret_cast<int64_t*>(elemPtr) = 1; break;
+            case ACL_UINT64:  *reinterpret_cast<uint64_t*>(elemPtr) = 1; break;
+            case ACL_BOOL:    *reinterpret_cast<bool*>(elemPtr) = true; break;
+            case ACL_FLOAT16: *reinterpret_cast<uint16_t*>(elemPtr) = float_to_half(1.0f); break;
+            case ACL_BF16:    *reinterpret_cast<uint16_t*>(elemPtr) = float_to_bf16(1.0f); break;
+            default:
+                return H_UNIMPLEMENTED;
+        }
+    }
+    return H_OK;
+});
+
+REGISTER_OP(BroadcastTo, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    // inputs[1] — целевая форма, не используется в эмуляции
+
+    aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
+    switch (dt) {
+        DISPATCH_BROADCAST_TO(ACL_FLOAT)
+        DISPATCH_BROADCAST_TO(ACL_DOUBLE)
+        DISPATCH_BROADCAST_TO(ACL_FLOAT16)
+        DISPATCH_BROADCAST_TO(ACL_BF16)
+        DISPATCH_BROADCAST_TO(ACL_INT8)
+        DISPATCH_BROADCAST_TO(ACL_UINT8)
+        DISPATCH_BROADCAST_TO(ACL_INT16)
+        DISPATCH_BROADCAST_TO(ACL_UINT16)
+        DISPATCH_BROADCAST_TO(ACL_INT32)
+        DISPATCH_BROADCAST_TO(ACL_UINT32)
+        DISPATCH_BROADCAST_TO(ACL_INT64)
+        DISPATCH_BROADCAST_TO(ACL_UINT64)
+        DISPATCH_BROADCAST_TO(ACL_BOOL)
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
 REGISTER_OP(Dummy, {
     return H_OK;
 });
@@ -827,37 +1343,34 @@ ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
 
     std::ostringstream log;
     log << "[aclopCompileAndExecute] opType=" << (opType ? opType : "(null)")
-        << " opPath=" << (opPath ? opPath : "(null)")
-        << "\n    numInputs=" << numInputs << " numOutputs=" << numOutputs << '\n'
-        << formatTensorList("input", inputDesc, inputs, numInputs);
- // log_output(log);
-
-    // --- эмуляция операций ---
+        << " opPath=" << (opPath ? opPath : "(null)") << " stream=" << stream
+        << "\n    numInputs=" << numInputs << " numOutputs=" << numOutputs
+    << formatTensorList("input", inputDesc, inputs, numInputs, PRINT_ALL)
+    << formatTensorList("output", outputDesc, outputs, numOutputs, PRINT_DESC);
 
     OpHandler handler;
     exitCode code = H_UNKNOWN_OP;
     if (opType && OpRegistry::try_find(opType, handler))
-        code = handler(numInputs, inputDesc, inputs, numOutputs, outputDesc, outputs);
+        code = handler(numInputs, inputDesc, inputs, numOutputs, outputDesc, outputs, attr);
 
     switch (code) {
         case H_UNKNOWN_OP:
-            log << "Error: unknown operation: " << (opType ? opType : "(null)") << '\n';
-            log_output(log);
+            log << "\nError: unknown operation: " << (opType ? opType : "(null)");
+            log_output(log, true);
             return ACL_ERROR_OP_NOT_FOUND;
         case H_OK:
             break;
         case H_UNASSERTED:
-            log << "Error: assertion failed for operation " << opType << '\n';
-            log_output(log);
+            log << "\nError: assertion failed for operation " << opType;
+            log_output(log, true);
             return ACL_ERROR_INVALID_PARAM;
         case H_UNIMPLEMENTED:
-            log << "Error: unsupported dtype for operation " << opType << '\n';
-            log_output(log);
+            log << "\nError: unsupported dtype for operation " << opType;
+            log_output(log, true);
             return ACL_ERROR_UNSUPPORTED_DATA_TYPE;
     }
 
-    log << formatTensorList("output", outputDesc, outputs, numOutputs)
-        << "    stream=" << stream;
+    log << formatTensorList("output", outputDesc, outputs, numOutputs, PRINT_DATA);
     log_output(log);
 
     return ACL_SUCCESS;

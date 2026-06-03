@@ -54,7 +54,7 @@ ACL_FUNC_VISIBILITY aclError aclGetDeviceCapability(uint32_t deviceId, aclDevice
 
     if (!value) {
         log << "\n    value is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -70,7 +70,7 @@ ACL_FUNC_VISIBILITY aclError aclGetDeviceCapability(uint32_t deviceId, aclDevice
             break;
         default:
             log << "\n    unknown deviceInfo → ACL_ERROR_INVALID_PARAM";
-            log_output(log);
+            log_output(log, true);
             return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -209,7 +209,7 @@ ACL_FUNC_VISIBILITY aclError aclrtMalloc(void **devPtr,
 
     if (!devPtr) {
         log << "\n    devPtr is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -221,7 +221,7 @@ ACL_FUNC_VISIBILITY aclError aclrtMalloc(void **devPtr,
 
     if (!ptr) {
         log << "\n    allocation failed → ACL_ERROR_BAD_ALLOC";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_BAD_ALLOC;
     }
 
@@ -240,7 +240,7 @@ ACL_FUNC_VISIBILITY aclError aclrtMallocHost(void **hostPtr, size_t size) {
 
     if (!ptr) {
         log << "\n    allocation failed → ACL_ERROR_BAD_ALLOC";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_BAD_ALLOC;
     }
 
@@ -258,7 +258,7 @@ ACL_FUNC_VISIBILITY aclError aclrtMallocAlign32(void **devPtr,
 
     if (!devPtr) {
         log << "\n    devPtr is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -267,7 +267,7 @@ ACL_FUNC_VISIBILITY aclError aclrtMallocAlign32(void **devPtr,
     int ret = posix_memalign(&ptr, 32, size);
     if (ret != 0 || !ptr) {
         log << "\n    aligned_alloc failed → ACL_ERROR_BAD_ALLOC";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_BAD_ALLOC;
     }
 
@@ -285,7 +285,7 @@ ACL_FUNC_VISIBILITY aclError aclrtGetDevice(int32_t *deviceId) {
 
     if (!deviceId) {
         log << "\n    deviceId is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
     log_output(log);
@@ -301,7 +301,7 @@ ACL_FUNC_VISIBILITY aclError aclrtSetDevice(int32_t deviceId) {
 
     if (deviceId < 0 || deviceId >= g_device_count) {
         log << "\n    invalid deviceId → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
     log_output(log);
@@ -325,13 +325,13 @@ ACL_FUNC_VISIBILITY aclError aclrtMemcpy(void *dst,
 
     if (!dst || !src) {
         log << "\n    null pointer → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     if (count > destMax) {
         log << "\n    count > destMax → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
  // log_output(log);
@@ -357,13 +357,13 @@ ACL_FUNC_VISIBILITY aclError aclrtMemcpyAsync(void *dst,
 
     if (!dst || !src) {
         log << "\n    null pointer → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     if (count > destMax) {
         log << "\n    count > destMax → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
     log_output(log);
@@ -411,7 +411,7 @@ ACL_FUNC_VISIBILITY aclError aclrtEventElapsedTime(float *ms, aclrtEvent startEv
 
     if (!ms) {
         log << "\n    ms is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
     log_output(log);
@@ -441,7 +441,7 @@ ACL_FUNC_VISIBILITY aclError aclrtGetDeviceInfo(uint32_t deviceId, aclrtDevAttr 
 
     if (!value) {
         log << "\n    value is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -508,7 +508,7 @@ ACL_FUNC_VISIBILITY aclError aclrtGetDeviceInfo(uint32_t deviceId, aclrtDevAttr 
 
         default:
             log << "\n    unknown attr → ACL_ERROR_INVALID_PARAM";
-            log_output(log);
+            log_output(log, true);
             return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -543,14 +543,14 @@ ACL_FUNC_VISIBILITY aclError aclrtDeviceCanAccessPeer(int32_t *canAccessPeer,
 
     if (!canAccessPeer) {
         log << "\n    canAccessPeer is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     if (deviceId < 0 || deviceId >= (int)g_device_count ||
         peerDeviceId < 0 || peerDeviceId >= (int)g_device_count) {
         log << "\n    invalid deviceId/peerDeviceId → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -574,13 +574,13 @@ ACL_FUNC_VISIBILITY aclError aclrtMemset(void *devPtr,
 
     if (!devPtr) {
         log << "\n    devPtr is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     if (count > maxCount) {
         log << "\n    count > maxCount → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
     log_output(log);
@@ -647,7 +647,7 @@ ACL_FUNC_VISIBILITY aclError aclrtCreateStream(aclrtStream *stream) {
 
     if (!stream) {
         log << "\n    stream_ptr is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -670,7 +670,7 @@ ACL_FUNC_VISIBILITY aclError aclrtSetCurrentContext(aclrtContext context) {
 
     if (!context) {
         log << "\n    context is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
     log_output(log);
@@ -686,7 +686,7 @@ ACL_FUNC_VISIBILITY aclError aclrtGetCurrentContext(aclrtContext *context) {
 
     if (!context) {
         log << "\n    context_ptr is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -712,7 +712,7 @@ ACL_FUNC_VISIBILITY aclError aclrtGetMemInfo(aclrtMemAttr attr, size_t *free, si
 
     if (!free || !total) {
         log << "\n    null pointer → ACL_ERROR_INVALID_PARAM";
-      log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -755,7 +755,7 @@ ACL_FUNC_VISIBILITY aclError aclrtDeviceEnablePeerAccess(int32_t peerDeviceId, u
 
     if (peerDeviceId < 0 || peerDeviceId >= (int)g_device_count) {
         log << "\n    invalid peerDeviceId → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -789,7 +789,7 @@ ACL_FUNC_VISIBILITY aclError aclrtResetDevice(int32_t deviceId) {
 
     if (deviceId < 0 || deviceId >= (int)g_device_count) {
         log << "\n    invalid deviceId → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -827,6 +827,7 @@ ACL_FUNC_VISIBILITY aclError aclrtGetDeviceSatMode(aclrtFloatOverflowMode *mode)
 
     if (!mode) {
         log << "\n    mode_ptr is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -987,13 +988,13 @@ ACL_FUNC_VISIBILITY aclError aclGetTensorDescDimV2(const aclTensorDesc *desc,
 
     if (!desc || !dimSize) {
         log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
     if (index >= desc->dims.size()) {
         log << "\n    index out of range → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1097,7 +1098,7 @@ ACL_FUNC_VISIBILITY aclError aclSetTensorFormat(aclTensorDesc *desc, aclFormat f
 
     if (!desc) {
         log << "\n    desc is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1116,7 +1117,7 @@ ACL_FUNC_VISIBILITY aclError aclSetTensorPlaceMent(aclTensorDesc *desc, aclMemTy
 
     if (!desc) {
         log << "\n    desc is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1140,7 +1141,7 @@ ACL_FUNC_VISIBILITY aclError aclSetTensorShape(aclTensorDesc *desc, int numDims,
 
     if (!desc || !dims || numDims < 0) {
         log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1577,7 +1578,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrBool(aclopAttr *attr, const char *attrN
 
     if (!attr || !attrName) {
         log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1597,7 +1598,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrDataType(aclopAttr *attr, const char *a
 
     if (!attr || !attrName) {
         log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1617,7 +1618,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrFloat(aclopAttr *attr, const char *attr
 
     if (!attr || !attrName) {
         log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1637,7 +1638,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrInt(aclopAttr *attr, const char *attrNa
 
     if (!attr || !attrName) {
         log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1659,7 +1660,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListBool(aclopAttr *attr, const char *a
 
     if (!attr || !attrName || !values || numValues < 0) {
         log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1688,7 +1689,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListFloat(aclopAttr *attr, const char *
 
     if (!attr || !attrName || !values || numValues < 0) {
         log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1717,7 +1718,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListInt(aclopAttr *attr, const char *at
 
     if (!attr || !attrName || !values || numValues < 0) {
         log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1750,7 +1751,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListListInt(aclopAttr *attr,
 
     if (!attr || !attrName || !numValues || !values || numLists < 0) {
         log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
@@ -1763,7 +1764,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListListInt(aclopAttr *attr,
 
         if (!src || n < 0) {
             log << "\n    invalid inner list → ACL_ERROR_INVALID_PARAM";
-            log_output(log);
+            log_output(log, true);
             return ACL_ERROR_INVALID_PARAM;
         }
 
@@ -1794,7 +1795,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrString(aclopAttr *attr, const char *att
 
     if (!attr || !attrName || !attrValue) {
         log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
-        log_output(log);
+        log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
 
