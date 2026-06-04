@@ -2,6 +2,8 @@
 #include <random>       // bernoulli_distribution, mt19937, normal_distribution, random_device, uniform_int_distribution
 #include <algorithm>    // copy, min, sort
 
+#include <ATen/ATen.h>
+
 #ifndef HELPERS
 #define HELPERS
 
@@ -305,6 +307,143 @@ struct OpRegistry {
         BODY \
     } \
     static bool _reg_##NAME = (OpRegistry::add(#NAME, _op_##NAME), true)
+
+#define TRY(expr) \
+    do { \
+        exitCode _code = (expr); \
+        if (_code != H_OK) \
+            return _code; \
+    } while(0);
+
+#define ASSERT_CODE(cond, code) do { if (!(cond)) return (code); } while (0);
+#define ASSERT(cond) ASSERT_CODE(cond, H_UNASSERTED)
+
+
+// базовая помощь в работе операций
+
+static inline at::ScalarType toAtenType(aclDataType dt) {
+    switch (dt) {
+        case ACL_FLOAT:   return at::kFloat;
+        case ACL_DOUBLE:  return at::kDouble;
+        case ACL_FLOAT16: return at::kHalf;
+        case ACL_BF16:    return at::kBFloat16;
+        case ACL_INT8:    return at::kChar;
+        case ACL_UINT8:   return at::kByte;
+        case ACL_INT16:   return at::kShort;
+        case ACL_UINT16:  return at::kUInt16;
+        case ACL_INT32:   return at::kInt;
+        case ACL_UINT32:  return at::kUInt32;
+        case ACL_INT64:   return at::kLong;
+        case ACL_UINT64:  return at::kUInt64;
+        case ACL_BOOL:    return at::kBool;
+        case ACL_COMPLEX64:  return at::kComplexFloat;
+        case ACL_COMPLEX128: return at::kComplexDouble;
+        case ACL_COMPLEX32:  // нет прямого аналога, fallback к complex float
+                             return at::kComplexFloat;
+        default:          return at::ScalarType::Undefined;
+    }
+}
+
+static inline bool try_toAtenType(aclDataType dt, at::ScalarType &type) {
+    at::ScalarType test = toAtenType(dt);
+    bool found = test != at::ScalarType::Undefined;
+    if (found)
+        type = test;
+    return found;
+}
+
+template<typename T>
+static inline bool try_get_attr(const aclopAttr* attr, const std::string& key, T& value) {
+    if (!attr)
+        return false;
+    if constexpr (std::is_same_v<T, int>) {
+        auto it = attr->ints.find(key);
+        if (it == attr->ints.end())
+            return false;
+        value = static_cast<int>(it->second);
+    } else if constexpr (std::is_same_v<T, int64_t>) {
+        auto it = attr->ints.find(key);
+        if (it == attr->ints.end())
+            return false;
+        value = it->second;
+    } else if constexpr (std::is_same_v<T, bool>) {
+        auto it = attr->bools.find(key);
+        if (it == attr->bools.end())
+            return false;
+        value = it->second;
+    } else if constexpr (std::is_same_v<T, float>) {
+        auto it = attr->floats.find(key);
+        if (it == attr->floats.end())
+            return false;
+        value = it->second;
+    } else if constexpr (std::is_same_v<T, std::string>) {
+        auto it = attr->strings.find(key);
+        if (it == attr->strings.end())
+            return false;
+        value = it->second;
+    } else if constexpr (std::is_same_v<T, aclDataType>) {
+        auto it = attr->dtypes.find(key);
+        if (it == attr->dtypes.end())
+            return false;
+        value = it->second;
+    } else if constexpr (std::is_same_v<T, std::vector<int64_t>>) {
+        auto it = attr->list_ints.find(key);
+        if (it == attr->list_ints.end())
+            return false;
+        value = it->second;
+    } else if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {
+        auto it = attr->list_bools.find(key);
+        if (it == attr->list_bools.end())
+            return false;
+        value = it->second;
+    } else if constexpr (std::is_same_v<T, std::vector<float>>) {
+        auto it = attr->list_floats.find(key);
+        if (it == attr->list_floats.end())
+            return false;
+        value = it->second;
+    } else if constexpr (std::is_same_v<T, std::vector<std::vector<int64_t>>>) {
+        auto it = attr->list_list_ints.find(key);
+        if (it == attr->list_list_ints.end())
+            return false;
+        value = it->second;
+    } else
+        static_assert(sizeof(T) == 0, "Unsupported attribute type");
+    return true;
+}
+
+static inline exitCode toAtenTensor(const aclTensorDesc* desc, const aclDataBuffer* buffer, at::Tensor& tensor) {
+    auto tensor_dims = desc->dims;
+    at::ScalarType type;
+    if (try_toAtenType(desc->dtype, type)) {
+        auto opts = at::TensorOptions().dtype(type).device(at::kCPU);
+        tensor = at::from_blob(buffer->data, tensor_dims, opts);
+        return H_OK;
+    } else
+        return H_UNIMPLEMENTED;
+}
+
+template <int N>
+static inline exitCode toAtenTensors(const aclTensorDesc* const inputDesc[], const aclDataBuffer* const inputs[], at::Tensor (&tensors)[N]) {
+    for (int i = 0; i < N; ++i) {
+        if (!inputs[i] || !inputDesc[i] || !inputs[i]->data)
+            return H_UNASSERTED;
+        TRY(toAtenTensor(inputDesc[i], inputs[i], tensors[i]));
+    }
+    return H_OK;
+}
+
+static inline exitCode toAtenTensors(int N, const aclTensorDesc* const inputDesc[], const aclDataBuffer* const inputs[], std::vector<at::Tensor>& tensors) {
+    tensors.clear();
+    tensors.reserve(N);
+    for (int i = 0; i < N; ++i) {
+        if (!inputs[i] || !inputDesc[i] || !inputs[i]->data)
+            return H_UNASSERTED;
+        at::Tensor t;
+        TRY(toAtenTensor(inputDesc[i], inputs[i], t));
+        tensors.push_back(std::move(t));
+    }
+    return H_OK;
+}
 
 
 // ~~~ traits типов данных ~~~
