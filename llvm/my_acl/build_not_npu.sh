@@ -13,6 +13,22 @@ LIB="$SCRIPT_DIR/lib"
 
 mkdir -p "$LIB"
 
+
+: << 'COMMENT'
+TORCH_INCLUDE=$(python -c "import torch; from torch.utils.cpp_extension import include_paths; print(include_paths()[0])")
+TORCH_LIB=$(python -c "import torch; from torch.utils.cpp_extension import library_paths; print(library_paths()[0])")
+echo "TORCH_INCLUDE=$TORCH_INCLUDE"
+echo "TORCH_LIB=$TORCH_LIB"
+COMMENT
+TORCH_INCLUDE=/opt/python311/lib/python3.11/site-packages/torch/include
+TORCH_LIB=/opt/python311/lib/python3.11/site-packages/torch/lib
+TORCH_FLAGS=(
+    -I"$TORCH_INCLUDE"
+    -I"$TORCH_INCLUDE/torch/csrc/api/include"
+    -L"$TORCH_LIB"
+    -ltorch -ltorch_cpu -lc10
+)
+
 # ~/QuickStart/llvm/my_acl/build_not_npu.sh
 if ! grep -qxF "export LD_LIBRARY_PATH=\"$LIB:\$LD_LIBRARY_PATH\"" ~/.bashrc; then
     echo "export LD_LIBRARY_PATH=\"$LIB:\$LD_LIBRARY_PATH\"" >> ~/.bashrc
@@ -44,7 +60,7 @@ LINK_IT=(
     -Wl,--as-needed
     -Wl,-rpath='$ORIGIN'
 )
-g++ -shared -fPIC "$SRC/not_acl_op_compiler.cpp" "${LINK_IT[@]}" -o "$LIB/libacl_op_compiler.so"
+g++ -shared -fPIC "$SRC/not_acl_op_compiler.cpp" "${LINK_IT[@]}" "${TORCH_FLAGS[@]}" -o "$LIB/libacl_op_compiler.so"
 echo "Created lib/libacl_op_compiler.so"
 
 if [ ! -f "$LIB/libge_runner.so" ]; then

@@ -3,7 +3,25 @@
 #include "helpers.cpp"  // calc_num_elements, formatTensorList
 #include <cstring>      // memcpy, memset, size_t, strstr
 
+#include <ATen/ATen.h>
+
 void __not_acl_op_compiler_placeholder() {}
+
+static inline at::ScalarType toAtenType(aclDataType dt) {
+    switch (dt) {
+        case ACL_FLOAT:   return at::kFloat;
+        case ACL_DOUBLE:  return at::kDouble;
+        case ACL_INT8:    return at::kChar;
+        case ACL_UINT8:   return at::kByte;
+        case ACL_INT16:   return at::kShort;
+        case ACL_INT32:   return at::kInt;
+        case ACL_INT64:   return at::kLong;
+        case ACL_BOOL:    return at::kBool;
+        case ACL_FLOAT16: return at::kHalf;
+        case ACL_BF16:    return at::kBFloat16;
+        default:          return at::kFloat;
+    }
+}
 
 
 #ifdef __cplusplus
@@ -135,6 +153,49 @@ REGISTER_OP(StatelessRandomNormalV2, {
         return H_UNASSERTED; // Нет данных в выходе — тоже ошибка
     return H_OK;
 });
+
+REGISTER_OP(StatelessRandomUniformV2, {
+    if (numInputs != 4 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!inputDesc[1] || aclGetTensorDescType(inputDesc[1], false) != ACL_UINT64)
+        return H_UNASSERTED;
+    if (!inputDesc[2] || aclGetTensorDescType(inputDesc[2], false) != ACL_UINT64)
+        return H_UNASSERTED;
+    if (!inputDesc[3] || aclGetTensorDescType(inputDesc[3], false) != ACL_INT32)
+        return H_UNASSERTED;
+
+    uint64_t seed_value = 0;
+    if (inputs[1] && inputs[1]->data) {
+        const auto* seed_ptr = static_cast<const uint64_t*>(inputs[1]->data);
+        seed_value = seed_ptr[0];
+    }
+
+    std::mt19937 local_rng;
+    local_rng.seed(static_cast<std::mt19937::result_type>(seed_value));
+    if (outputs[0] && outputDesc[0] && outputs[0]->data) {
+        aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
+        switch (dt) {
+            DISPATCH_RANDOM_UNIFORM(ACL_FLOAT)
+            DISPATCH_RANDOM_UNIFORM(ACL_DOUBLE)
+            DISPATCH_RANDOM_UNIFORM(ACL_FLOAT16)
+            DISPATCH_RANDOM_UNIFORM(ACL_BF16)
+            DISPATCH_RANDOM_UNIFORM(ACL_INT8)
+            DISPATCH_RANDOM_UNIFORM(ACL_UINT8)
+            DISPATCH_RANDOM_UNIFORM(ACL_INT16)
+            DISPATCH_RANDOM_UNIFORM(ACL_UINT16)
+            DISPATCH_RANDOM_UNIFORM(ACL_INT32)
+            DISPATCH_RANDOM_UNIFORM(ACL_UINT32)
+            DISPATCH_RANDOM_UNIFORM(ACL_INT64)
+            DISPATCH_RANDOM_UNIFORM(ACL_UINT64)
+            DISPATCH_RANDOM_UNIFORM(ACL_BOOL)
+            default:
+                return H_UNIMPLEMENTED;
+        }
+    } else
+        return H_UNIMPLEMENTED;
+    return H_OK;
+});
+
 
 REGISTER_OP(ZerosLike, {
     if (numInputs != 1 || numOutputs != 1)
@@ -1326,6 +1387,41 @@ REGISTER_OP(BroadcastTo, {
         default:
             return H_UNIMPLEMENTED;
     }
+    return H_OK;
+});
+
+REGISTER_OP(ConcatD, {
+    if (numInputs < 1 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!attr)
+        return H_UNASSERTED;
+
+    auto it_N = attr->ints.find("N");
+    if (it_N == attr->ints.end()) return H_UNASSERTED;
+    int N = static_cast<int>(it_N->second);
+    if (N != numInputs) return H_UNASSERTED;
+
+    auto it_dim = attr->ints.find("concat_dim");
+    if (it_dim == attr->ints.end()) return H_UNASSERTED;
+    int64_t concat_dim = it_dim->second;
+
+    std::vector<at::Tensor> tensors;
+    for (int i = 0; i < N; ++i) {
+        if (!inputs[i] || !inputDesc[i] || !inputs[i]->data) return H_UNASSERTED;
+        aclDataType dt = aclGetTensorDescType(inputDesc[i], false);
+        auto tensor_dims = inputDesc[i]->dims;
+        auto opts = at::TensorOptions().dtype(toAtenType(dt)).device(at::kCPU);
+        tensors.push_back(at::from_blob(inputs[i]->data, tensor_dims, opts));
+    }
+
+    auto out_dims = outputDesc[0]->dims;
+    aclDataType out_dt = aclGetTensorDescType(outputDesc[0], false);
+    auto out_opts = at::TensorOptions().dtype(toAtenType(out_dt)).device(at::kCPU);
+    at::Tensor out_tensor = at::from_blob(outputs[0]->data, out_dims, out_opts);
+
+    out_tensor.copy_(at::cat(tensors, concat_dim));
     return H_OK;
 });
 

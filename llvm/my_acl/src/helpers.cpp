@@ -565,6 +565,34 @@ void fillRandomNormal(TensorAccessor<typename aclDataTypeTraits<DT>::type>& out,
         break; \
     }
 
+#define DISPATCH_RANDOM_UNIFORM(DT) \
+    case DT: { \
+        using T = aclDataTypeTraits<DT>::type; \
+        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
+        if constexpr (std::is_floating_point_v<T> || DT == ACL_FLOAT16 || DT == ACL_BF16) { \
+            std::uniform_real_distribution<float> dist(0.0f, 1.0f); \
+            for (size_t j = 0; j < out.numElements(); ++j) \
+                out[j] = aclDataTypeTraits<DT>::from_float(dist(local_rng)); \
+        } else if constexpr (DT == ACL_BOOL) { \
+            std::bernoulli_distribution dist(0.5); \
+            for (size_t j = 0; j < out.numElements(); ++j) \
+                out[j] = dist(local_rng); \
+        } else { \
+            using limits = std::numeric_limits<T>; \
+            if constexpr (std::is_signed_v<T>) { \
+                std::uniform_int_distribution<long long> dist(limits::min(), limits::max()); \
+                for (size_t j = 0; j < out.numElements(); ++j) \
+                    out[j] = static_cast<T>(dist(local_rng)); \
+            } else { \
+                std::uniform_int_distribution<unsigned long long> dist(limits::min(), limits::max()); \
+                for (size_t j = 0; j < out.numElements(); ++j) \
+                    out[j] = static_cast<T>(dist(local_rng)); \
+            } \
+        } \
+        break; \
+    }
+
+
 #define DISPATCH_ZEROS_LIKE(DT) \
     case DT: { \
         using T = aclDataTypeTraits<DT>::type; \

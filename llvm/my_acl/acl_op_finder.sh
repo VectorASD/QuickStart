@@ -198,8 +198,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ClampKernelNpu.cpp:88:    cmd.Name("ClipByValueV2")
     Col2im
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/Col2imKernelNpu.cpp:36:    cmd.Name("Col2im")
-    ConcatD
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/CatKernelNpu.cpp:63:    cmd.Name("ConcatD");
     ConfusionTransposeD
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ConfusionTransposeKernelNpu.cpp:59:    cmd.Name("ConfusionTransposeD")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ConfusionTransposeKernelNpu.cpp:96:    cmd.Name("ConfusionTransposeD")
@@ -784,11 +782,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/DropoutKernelNpu.cpp:90:  cmd.Name("StatelessDropOutGenMask")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/opapi/FlashAttentionKernelNpuOpApi.cpp:97:    cmd.Name("StatelessDropOutGenMask")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/opapi/FlashAttentionV2KernelNpuOpApi.cpp:87:    cmd.Name("StatelessDropOutGenMask")
-    StatelessRandomNormalV2
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NormalKernelNpu.cpp:41:    cmd.Name("StatelessRandomNormalV2")
-    StatelessRandomUniformV2
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RandomKernelNpu.cpp:48:  cmd.Name("StatelessRandomUniformV2")
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/UniformKernelNpu.cpp:43:    cmd.Name("StatelessRandomUniformV2")
     StatelessRandperm
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RandpermKernelNpu.cpp:34:  cmd.Name("StatelessRandperm")
     StrideAdd
@@ -894,6 +887,8 @@ B
 C
     Ceil
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/CeilKernelNpu.cpp:26:    cmd.Name("Ceil").Input(self).Output(result).Run();
+    ConcatD
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/CatKernelNpu.cpp:63:    cmd.Name("ConcatD");
 D
 E
     Equal
@@ -978,6 +973,9 @@ R
 S
     StatelessRandomNormalV2
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NormalKernelNpu.cpp:41:    cmd.Name("StatelessRandomNormalV2")
+    StatelessRandomUniformV2
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RandomKernelNpu.cpp:48:  cmd.Name("StatelessRandomUniformV2")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/UniformKernelNpu.cpp:43:    cmd.Name("StatelessRandomUniformV2")
     Sub
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RsubKernelNpu.cpp:40:        cmd.Name("Sub").Input(other).Input(other_mul_result).Output(result).Run();
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RsubKernelNpu.cpp:42:        cmd.Name("Sub").Input(other).Input(self).Output(result).Run();
