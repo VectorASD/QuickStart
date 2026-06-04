@@ -580,8 +580,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/PsRoiPoolingKernelNpu.cpp:51:    cmd.Name("PSROIPoolingGradV2D")
     PSROIPoolingV2
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/PsRoiPoolingKernelNpu.cpp:34:    cmd.Name("PSROIPoolingV2")
-    Pack
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/StackKernelNpu.cpp:50:    cmd.Name("Pack");
     Pad
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/PadKernelNpu.cpp:31:    cmd.Name("Pad").Input(input).Input(paddings_vector).Output(output).Run();
     PadV3
@@ -942,6 +940,8 @@ N
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NeKernelNpu.cpp:51:    cmd.Name("NotEqual")
 O
 P
+    Pack
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/StackKernelNpu.cpp:50:    cmd.Name("Pack");
 Q
 R
     RealDiv

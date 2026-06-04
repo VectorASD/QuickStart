@@ -1390,6 +1390,25 @@ REGISTER_OP(ConcatD, {
     return H_OK;
 });
 
+REGISTER_OP(Pack, {
+    int N;
+    int64_t axis;
+    std::vector<at::Tensor> tensors;
+    at::Tensor out_tensor;
+
+    ASSERT(numInputs >= 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(attr)
+    ASSERT(try_get_attr<int>(attr, "N", N) && N == numInputs)
+    ASSERT(try_get_attr<int64_t>(attr, "axis", axis))
+
+    TRY(toAtenTensors(N, inputDesc, inputs, tensors));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out_tensor));
+
+    out_tensor.copy_(at::stack(tensors, axis));
+    return H_OK;
+});
+
 REGISTER_OP(Dummy, {
     return H_OK;
 });
