@@ -1,8 +1,10 @@
 #include "common.h"
-#include "not_acl.cpp"  // aclGetTensorDescType
-#include "helpers.cpp"  // calc_num_elements, formatTensorList
-#include <cstring>      // memcpy, memset, size_t, strstr
-#include <string>
+#include "not_acl.cpp"  // aclGetTensorDescDimV2, aclGetTensorDescNumDims, aclGetTensorDescType
+#include "helpers.cpp"
+#include <cstring>      // memset, size_t
+#include <string>       // string
+
+#include <ATen/core/Generator.h>
 
 void __not_acl_op_compiler_placeholder() {}
 
@@ -99,101 +101,79 @@ typedef enum {
 } aclopEngineType;
 
 
+// Конструкторы тензоров
+
 REGISTER_OP(StatelessRandomNormalV2, {
-    if (numInputs != 4 || numOutputs != 1)
-        return H_UNASSERTED;
-    // Проверка типов входов
-    if (!inputDesc[1] || aclGetTensorDescType(inputDesc[1], false) != ACL_UINT64)
-        return H_UNASSERTED;
-    if (!inputDesc[2] || aclGetTensorDescType(inputDesc[2], false) != ACL_UINT64)
-        return H_UNASSERTED;
-    if (!inputDesc[3] || aclGetTensorDescType(inputDesc[3], false) != ACL_INT32)
-        return H_UNASSERTED;
+    // Входы:  shape (int64), seed (uint64), counter (uint64[2]), alg (int32)
+    // Выходы: result (float/double/half/…)
+    at::Tensor shape_tensor, out;
+    ASSERT(numInputs == 4 && numOutputs == 1)                 // ровно 4 входа, 1 выход
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)   // выходной буфер существует и не пуст
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // shape: int64, не пуст
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // seed: uint64, не пуст
+    ASSERT(inputs[2] && inputDesc[2] && inputs[2]->data)      // counter: uint64[2], не пуст
 
-    // Извлечение seed
-    uint64_t seed_value = 0;
-    bool has_seed = false;
-    if (inputs[1] && inputDesc[1] && inputs[1]->data)
-        if (aclGetTensorDescType(inputDesc[1], false) == ACL_UINT64) {
-            size_t seed_count = calc_num_elements(inputDesc[1], inputs[1]->size);
-            if (seed_count >= 1) {
-                const uint64_t* seed_ptr = static_cast<const uint64_t*>(inputs[1]->data);
-                seed_value = seed_ptr[0];
-                has_seed = true;
-            }
-        }
+    TRY(toAtenTensor(inputDesc[0], inputs[0], shape_tensor));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
 
-    std::mt19937 local_rng;
-    if (has_seed)
-        local_rng.seed(static_cast<std::mt19937::result_type>(seed_value));
-    else {
-        std::random_device rd;
-        local_rng.seed(rd());
-    }
+    const uint64_t* seed_ptr   = static_cast<const uint64_t*>(inputs[1]->data);
+    const uint64_t* counter_ptr = static_cast<const uint64_t*>(inputs[2]->data);
+    uint64_t effective_seed = *seed_ptr + counter_ptr[1];     // offset = counter[1]
 
-    if (outputs[0] && outputDesc[0] && outputs[0]->data) {
-        aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
-        switch (dt) {
-        DISPATCH_RANDOM(ACL_FLOAT)
-        DISPATCH_RANDOM(ACL_DOUBLE)
-        DISPATCH_RANDOM(ACL_FLOAT16)
-        DISPATCH_RANDOM(ACL_BF16)
-        DISPATCH_RANDOM(ACL_INT8)
-        DISPATCH_RANDOM(ACL_UINT8)
-        DISPATCH_RANDOM(ACL_INT16)
-        DISPATCH_RANDOM(ACL_UINT16)
-        DISPATCH_RANDOM(ACL_INT32)
-        DISPATCH_RANDOM(ACL_UINT32)
-        DISPATCH_RANDOM(ACL_INT64)
-        DISPATCH_RANDOM(ACL_UINT64)
-        DISPATCH_RANDOM(ACL_BOOL)
-        default:
-            return H_UNIMPLEMENTED; // тип не поддерживается
-        }
-    } else
-        return H_UNASSERTED; // Нет данных в выходе — тоже ошибка
+    auto gen = at::detail::getDefaultCPUGenerator();
+    gen.set_current_seed(effective_seed);
+
+    at::IntArrayRef sizes(shape_tensor.data_ptr<int64_t>(), shape_tensor.numel());
+    at::randn_out(out, sizes, gen);
     return H_OK;
 });
 
 REGISTER_OP(StatelessRandomUniformV2, {
-    if (numInputs != 4 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!inputDesc[1] || aclGetTensorDescType(inputDesc[1], false) != ACL_UINT64)
-        return H_UNASSERTED;
-    if (!inputDesc[2] || aclGetTensorDescType(inputDesc[2], false) != ACL_UINT64)
-        return H_UNASSERTED;
-    if (!inputDesc[3] || aclGetTensorDescType(inputDesc[3], false) != ACL_INT32)
-        return H_UNASSERTED;
+    // Входы:  shape (int64), seed (uint64), counter (uint64[2]), alg (int32)
+    // Выходы: result (float/double/half/…)
+    at::Tensor shape_tensor, out;
+    ASSERT(numInputs == 4 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // shape: int64
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // seed: uint64
+    ASSERT(inputs[2] && inputDesc[2] && inputs[2]->data)      // counter: uint64[2]
 
-    uint64_t seed_value = 0;
-    if (inputs[1] && inputs[1]->data) {
-        const auto* seed_ptr = static_cast<const uint64_t*>(inputs[1]->data);
-        seed_value = seed_ptr[0];
-    }
+    TRY(toAtenTensor(inputDesc[0], inputs[0], shape_tensor));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
 
-    std::mt19937 local_rng;
-    local_rng.seed(static_cast<std::mt19937::result_type>(seed_value));
-    if (outputs[0] && outputDesc[0] && outputs[0]->data) {
-        aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
-        switch (dt) {
-            DISPATCH_RANDOM_UNIFORM(ACL_FLOAT)
-            DISPATCH_RANDOM_UNIFORM(ACL_DOUBLE)
-            DISPATCH_RANDOM_UNIFORM(ACL_FLOAT16)
-            DISPATCH_RANDOM_UNIFORM(ACL_BF16)
-            DISPATCH_RANDOM_UNIFORM(ACL_INT8)
-            DISPATCH_RANDOM_UNIFORM(ACL_UINT8)
-            DISPATCH_RANDOM_UNIFORM(ACL_INT16)
-            DISPATCH_RANDOM_UNIFORM(ACL_UINT16)
-            DISPATCH_RANDOM_UNIFORM(ACL_INT32)
-            DISPATCH_RANDOM_UNIFORM(ACL_UINT32)
-            DISPATCH_RANDOM_UNIFORM(ACL_INT64)
-            DISPATCH_RANDOM_UNIFORM(ACL_UINT64)
-            DISPATCH_RANDOM_UNIFORM(ACL_BOOL)
-            default:
-                return H_UNIMPLEMENTED;
-        }
-    } else
-        return H_UNIMPLEMENTED;
+    const uint64_t* seed_ptr   = static_cast<const uint64_t*>(inputs[1]->data);
+    const uint64_t* counter_ptr = static_cast<const uint64_t*>(inputs[2]->data);
+    uint64_t effective_seed = *seed_ptr + counter_ptr[1];
+
+    auto gen = at::detail::getDefaultCPUGenerator();
+    gen.set_current_seed(effective_seed);
+
+    at::IntArrayRef sizes(shape_tensor.data_ptr<int64_t>(), shape_tensor.numel());
+    at::rand_out(out, sizes, gen);
+    return H_OK;
+});
+
+REGISTER_OP(StatelessRandperm, {
+    // Входы:  n (int64), seed (int64), offset (int64)
+    // Выходы: перестановка (int64)
+    at::Tensor n_tensor, out;
+    ASSERT(numInputs == 3 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // n: int64
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // seed: int64
+    ASSERT(inputs[2] && inputDesc[2] && inputs[2]->data)      // offset: int64
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], n_tensor));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    int64_t n = n_tensor.item<int64_t>();
+    const int64_t* seed_ptr = static_cast<const int64_t*>(inputs[1]->data);
+    const int64_t* offset_ptr = static_cast<const int64_t*>(inputs[2]->data);
+
+    auto gen = at::detail::getDefaultCPUGenerator();
+    gen.set_current_seed(*seed_ptr + *offset_ptr);
+
+    at::randperm_out(out, n, gen);
     return H_OK;
 });
 
@@ -225,6 +205,57 @@ REGISTER_OP(ZerosLike, {
     return H_OK;
 });
 
+
+REGISTER_OP(Eye, {
+    // Eye не имеет входных тензоров, только выход
+    if (numInputs != 0 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    // attr не обязателен, так как размеры и dtype уже есть в выходном дескрипторе
+
+    size_t ndim = aclGetTensorDescNumDims(outputDesc[0], false);
+    if (ndim != 2)
+        return H_UNASSERTED;   // Eye всегда создаёт двумерную матрицу
+
+    int64_t n = 0; int64_t m = 0; // А это забавно: использование запятой РАЗРУШАЕТ МАКРОСЫ!) Оно путает это с межаргументной запятой
+    if (aclGetTensorDescDimV2(outputDesc[0], 0, &n, false) != ACL_SUCCESS ||
+        aclGetTensorDescDimV2(outputDesc[0], 1, &m, false) != ACL_SUCCESS)
+        return H_UNASSERTED;
+
+    aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
+    size_t elemSize = aclDataTypeBytes(dt);
+    char* data = static_cast<char*>(outputs[0]->data);
+
+    // Заполняем всё нулями
+    std::memset(data, 0, n * m * elemSize);
+
+    // Устанавливаем единицы на главной диагонали
+    for (int64_t i = 0; i < std::min(n, m); ++i) {
+        size_t idx = i * m + i;                     // C-order (row-major)
+        char* elemPtr = data + idx * elemSize;
+        switch (dt) {
+            case ACL_FLOAT:   *reinterpret_cast<float*>(elemPtr) = 1.0f; break;
+            case ACL_DOUBLE:  *reinterpret_cast<double*>(elemPtr) = 1.0; break;
+            case ACL_INT8:    *reinterpret_cast<int8_t*>(elemPtr) = 1; break;
+            case ACL_UINT8:   *reinterpret_cast<uint8_t*>(elemPtr) = 1; break;
+            case ACL_INT16:   *reinterpret_cast<int16_t*>(elemPtr) = 1; break;
+            case ACL_UINT16:  *reinterpret_cast<uint16_t*>(elemPtr) = 1; break;
+            case ACL_INT32:   *reinterpret_cast<int32_t*>(elemPtr) = 1; break;
+            case ACL_UINT32:  *reinterpret_cast<uint32_t*>(elemPtr) = 1; break;
+            case ACL_INT64:   *reinterpret_cast<int64_t*>(elemPtr) = 1; break;
+            case ACL_UINT64:  *reinterpret_cast<uint64_t*>(elemPtr) = 1; break;
+            case ACL_BOOL:    *reinterpret_cast<bool*>(elemPtr) = true; break;
+            case ACL_FLOAT16: *reinterpret_cast<uint16_t*>(elemPtr) = float_to_half(1.0f); break;
+            case ACL_BF16:    *reinterpret_cast<uint16_t*>(elemPtr) = float_to_bf16(1.0f); break;
+            default:
+                return H_UNIMPLEMENTED;
+        }
+    }
+    return H_OK;
+});
+
+
 REGISTER_OP(Fill, {
     if (numInputs != 2 || numOutputs != 1)
         return H_UNASSERTED;
@@ -253,6 +284,22 @@ REGISTER_OP(Fill, {
     }
     return H_OK;
 });
+
+REGISTER_OP(OnesLike, {
+    at::Tensor a, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], a));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    out.copy_(at::ones_like(a));
+    return H_OK;
+});
+
+
+// Арифметика
 
 REGISTER_OP(Mul, {
     at::Tensor a, b, out;
@@ -571,100 +618,20 @@ REGISTER_OP(LessEqual, {
     return H_OK;
 });
 
+
+// Остальное
+
 REGISTER_OP(Cast, {
-    if (numInputs != 1 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
-        return H_UNASSERTED;
+    at::Tensor inp, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0])  // буфер может быть nullptr для пустого тензора
+    ASSERT(inputs[0] && inputDesc[0])
 
-    aclDataType inDt  = aclGetTensorDescType(inputDesc[0], false);
-    aclDataType outDt = aclGetTensorDescType(outputDesc[0], false);
-    size_t count = calc_num_elements(outputDesc[0], outputs[0]->size);
-    if (count == 0) return H_OK;
+    TRY(toAtenTensor(inputDesc[0], inputs[0], inp));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
 
-    // Одинаковые типы – просто копируем память
-    if (inDt == outDt) {
-        size_t elemSize = aclDataTypeBytes(inDt);
-        memcpy(outputs[0]->data, inputs[0]->data, count * elemSize);
-        return H_OK;
-    }
-
-    // Проверка на поддерживаемые типы (без экзотики)
-    auto isSupported = [](aclDataType dt) {
-        switch (dt) {
-            case ACL_FLOAT: case ACL_DOUBLE: case ACL_FLOAT16: case ACL_BF16:
-            case ACL_INT8: case ACL_UINT8: case ACL_INT16: case ACL_UINT16:
-            case ACL_INT32: case ACL_UINT32: case ACL_INT64: case ACL_UINT64:
-            case ACL_BOOL:
-                return true;
-            default:
-                return false;
-        }
-    };
-    if (!isSupported(inDt) || !isSupported(outDt))
-        return H_UNIMPLEMENTED;
-
-    // Функция чтения элемента как double (для 64-битных) или float (для остальных)
-    auto readAsDouble = [&](size_t i) -> double {
-        switch (inDt) {
-            // 64-битные целые и double читаем сразу как double (без потерь)
-            case ACL_INT64:   return static_cast<double>(static_cast<const int64_t*>(inputs[0]->data)[i]);
-            case ACL_UINT64:  return static_cast<double>(static_cast<const uint64_t*>(inputs[0]->data)[i]);
-            case ACL_DOUBLE:  return static_cast<const double*>(inputs[0]->data)[i];
-            // Остальные преобразуем через float – потерь точности для них нет
-            default: {
-                float val = 0.0f;
-                switch (inDt) {
-                    case ACL_FLOAT:   val = aclDataTypeTraits<ACL_FLOAT>::to_float(static_cast<const float*>(inputs[0]->data)[i]); break;
-                    case ACL_FLOAT16: val = aclDataTypeTraits<ACL_FLOAT16>::to_float(static_cast<const uint16_t*>(inputs[0]->data)[i]); break;
-                    case ACL_BF16:    val = aclDataTypeTraits<ACL_BF16>::to_float(static_cast<const uint16_t*>(inputs[0]->data)[i]); break;
-                    case ACL_INT8:    val = aclDataTypeTraits<ACL_INT8>::to_float(static_cast<const int8_t*>(inputs[0]->data)[i]); break;
-                    case ACL_UINT8:   val = aclDataTypeTraits<ACL_UINT8>::to_float(static_cast<const uint8_t*>(inputs[0]->data)[i]); break;
-                    case ACL_INT16:   val = aclDataTypeTraits<ACL_INT16>::to_float(static_cast<const int16_t*>(inputs[0]->data)[i]); break;
-                    case ACL_UINT16:  val = aclDataTypeTraits<ACL_UINT16>::to_float(static_cast<const uint16_t*>(inputs[0]->data)[i]); break;
-                    case ACL_INT32:   val = aclDataTypeTraits<ACL_INT32>::to_float(static_cast<const int32_t*>(inputs[0]->data)[i]); break;
-                    case ACL_UINT32:  val = aclDataTypeTraits<ACL_UINT32>::to_float(static_cast<const uint32_t*>(inputs[0]->data)[i]); break;
-                    case ACL_BOOL:    val = aclDataTypeTraits<ACL_BOOL>::to_float(static_cast<const bool*>(inputs[0]->data)[i]); break;
-                    default: break;
-                }
-                return static_cast<double>(val);
-            }
-        }
-    };
-
-    // Функция записи double в выходной тип
-    auto writeFromDouble = [&](size_t i, double d) {
-        switch (outDt) {
-            case ACL_INT64:   static_cast<int64_t*>(outputs[0]->data)[i]   = static_cast<int64_t>(d); break;
-            case ACL_UINT64:  static_cast<uint64_t*>(outputs[0]->data)[i]  = static_cast<uint64_t>(d); break;
-            case ACL_DOUBLE:  static_cast<double*>(outputs[0]->data)[i]    = d; break;
-            default: {
-                // для всех остальных типов сужаем до float и вызываем from_float
-                float val = static_cast<float>(d);
-                switch (outDt) {
-                    case ACL_FLOAT:   static_cast<float*>(outputs[0]->data)[i] = aclDataTypeTraits<ACL_FLOAT>::from_float(val); break;
-                    case ACL_FLOAT16: static_cast<uint16_t*>(outputs[0]->data)[i] = aclDataTypeTraits<ACL_FLOAT16>::from_float(val); break;
-                    case ACL_BF16:    static_cast<uint16_t*>(outputs[0]->data)[i] = aclDataTypeTraits<ACL_BF16>::from_float(val); break;
-                    case ACL_INT8:    static_cast<int8_t*>(outputs[0]->data)[i]   = aclDataTypeTraits<ACL_INT8>::from_float(val); break;
-                    case ACL_UINT8:   static_cast<uint8_t*>(outputs[0]->data)[i]  = aclDataTypeTraits<ACL_UINT8>::from_float(val); break;
-                    case ACL_INT16:   static_cast<int16_t*>(outputs[0]->data)[i]  = aclDataTypeTraits<ACL_INT16>::from_float(val); break;
-                    case ACL_UINT16:  static_cast<uint16_t*>(outputs[0]->data)[i] = aclDataTypeTraits<ACL_UINT16>::from_float(val); break;
-                    case ACL_INT32:   static_cast<int32_t*>(outputs[0]->data)[i]  = aclDataTypeTraits<ACL_INT32>::from_float(val); break;
-                    case ACL_UINT32:  static_cast<uint32_t*>(outputs[0]->data)[i] = aclDataTypeTraits<ACL_UINT32>::from_float(val); break;
-                    case ACL_BOOL:    static_cast<bool*>(outputs[0]->data)[i]     = aclDataTypeTraits<ACL_BOOL>::from_float(val); break;
-                    default: break;
-                }
-                break;
-            }
-        }
-    };
-
-    for (size_t i = 0; i < count; ++i) {
-        double d = readAsDouble(i);
-        writeFromDouble(i, d);
-    }
+    if (out.numel() > 0)
+        out.copy_(inp.to(out.options()));
     return H_OK;
 });
 
@@ -1247,55 +1214,6 @@ REGISTER_OP(Ceil, {
     return H_OK;
 });
 
-REGISTER_OP(Eye, {
-    // Eye не имеет входных тензоров, только выход
-    if (numInputs != 0 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    // attr не обязателен, так как размеры и dtype уже есть в выходном дескрипторе
-
-    size_t ndim = aclGetTensorDescNumDims(outputDesc[0], false);
-    if (ndim != 2)
-        return H_UNASSERTED;   // Eye всегда создаёт двумерную матрицу
-
-    int64_t n = 0; int64_t m = 0; // А это забавно: использование запятой РАЗРУШАЕТ МАКРОСЫ!) Оно путает это с межаргументной запятой
-    if (aclGetTensorDescDimV2(outputDesc[0], 0, &n, false) != ACL_SUCCESS ||
-        aclGetTensorDescDimV2(outputDesc[0], 1, &m, false) != ACL_SUCCESS)
-        return H_UNASSERTED;
-
-    aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
-    size_t elemSize = aclDataTypeBytes(dt);
-    char* data = static_cast<char*>(outputs[0]->data);
-
-    // Заполняем всё нулями
-    std::memset(data, 0, n * m * elemSize);
-
-    // Устанавливаем единицы на главной диагонали
-    for (int64_t i = 0; i < std::min(n, m); ++i) {
-        size_t idx = i * m + i;                     // C-order (row-major)
-        char* elemPtr = data + idx * elemSize;
-        switch (dt) {
-            case ACL_FLOAT:   *reinterpret_cast<float*>(elemPtr) = 1.0f; break;
-            case ACL_DOUBLE:  *reinterpret_cast<double*>(elemPtr) = 1.0; break;
-            case ACL_INT8:    *reinterpret_cast<int8_t*>(elemPtr) = 1; break;
-            case ACL_UINT8:   *reinterpret_cast<uint8_t*>(elemPtr) = 1; break;
-            case ACL_INT16:   *reinterpret_cast<int16_t*>(elemPtr) = 1; break;
-            case ACL_UINT16:  *reinterpret_cast<uint16_t*>(elemPtr) = 1; break;
-            case ACL_INT32:   *reinterpret_cast<int32_t*>(elemPtr) = 1; break;
-            case ACL_UINT32:  *reinterpret_cast<uint32_t*>(elemPtr) = 1; break;
-            case ACL_INT64:   *reinterpret_cast<int64_t*>(elemPtr) = 1; break;
-            case ACL_UINT64:  *reinterpret_cast<uint64_t*>(elemPtr) = 1; break;
-            case ACL_BOOL:    *reinterpret_cast<bool*>(elemPtr) = true; break;
-            case ACL_FLOAT16: *reinterpret_cast<uint16_t*>(elemPtr) = float_to_half(1.0f); break;
-            case ACL_BF16:    *reinterpret_cast<uint16_t*>(elemPtr) = float_to_bf16(1.0f); break;
-            default:
-                return H_UNIMPLEMENTED;
-        }
-    }
-    return H_OK;
-});
-
 REGISTER_OP(BroadcastTo, {
     if (numInputs != 2 || numOutputs != 1)
         return H_UNASSERTED;
@@ -1361,6 +1279,99 @@ REGISTER_OP(Pack, {
     TRY(toAtenTensor(outputDesc[0], outputs[0], out_tensor));
 
     out_tensor.copy_(at::stack(tensors, axis));
+    return H_OK;
+});
+
+REGISTER_OP(Sort, {
+    // Вход:  self (любой тип)
+    // Выход: values (тот же тип), indices (int64)
+    at::Tensor self, values_out, indices_out;
+    ASSERT(numInputs == 1 && numOutputs == 2)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)   // values
+    ASSERT(outputs[1] && outputDesc[1] && outputs[1]->data)   // indices
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+
+    int64_t axis;
+    bool descending;
+    ASSERT(attr)
+    ASSERT(try_get_attr<int64_t>(attr, "axis", axis))          // ось сортировки
+    ASSERT(try_get_attr<bool>(attr, "descending", descending)) // направление
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], values_out));
+    TRY(toAtenTensor(outputDesc[1], outputs[1], indices_out));
+
+    auto result = at::sort(self, axis, descending);
+    values_out.copy_(std::get<0>(result));
+    indices_out.copy_(std::get<1>(result));
+    return H_OK;
+});
+
+REGISTER_OP(SortV2, {
+    // Вход:  self
+    // Выход: values (тот же тип)
+    at::Tensor self, values_out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+
+    int64_t axis;
+    bool descending;
+    ASSERT(attr)
+    ASSERT(try_get_attr<int64_t>(attr, "axis", axis))
+    ASSERT(try_get_attr<bool>(attr, "descending", descending))
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], values_out));
+
+    auto sorted = std::get<0>(at::sort(self, axis, descending));
+    values_out.copy_(sorted);
+    return H_OK;
+});
+
+REGISTER_OP(OneHot, {
+    // Входы: self (float/int, будет приведён к Long), depth (int), on_value (скаляр), off_value (скаляр)
+    // Выход: one‑hot тензор (тип совпадает с self? в тестах – Long)
+    at::Tensor self, depth_tensor, out;
+    ASSERT(numInputs == 4 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0])                        // выход может быть не пустым
+    ASSERT(inputs[0] && inputDesc[0])                          // self: может быть пустым, data может быть nullptr
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // depth: int, всегда есть данные
+    ASSERT(inputs[2] && inputDesc[2] && inputs[2]->data)      // on_value: скаляр, всегда есть данные
+    ASSERT(inputs[3] && inputDesc[3] && inputs[3]->data)      // off_value: скаляр, всегда есть данные
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));          // toAtenTensor обрабатывает nullptr для пустых тензоров
+    TRY(toAtenTensor(inputDesc[1], inputs[1], depth_tensor));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    int64_t depth = depth_tensor.item<int64_t>();
+    at::Tensor result = at::one_hot(self.to(at::kLong), depth).to(out.options());
+    if (out.numel() > 0)
+        out.copy_(result);
+    return H_OK;
+});
+
+REGISTER_OP(OneHotD, {
+    // Входы: self_copy (int), on_tmp (float [1]), off_tmp (float [1])
+    // Выход: one‑hot тензор (float)
+    at::Tensor self_int, out;
+    ASSERT(numInputs == 3 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0])                        // выход может быть не пустым
+    ASSERT(inputs[0] && inputDesc[0])                          // self_copy: может быть пустым, data м.б. nullptr
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // on_tmp: скаляр [1], данные есть всегда
+    ASSERT(inputs[2] && inputDesc[2] && inputs[2]->data)      // off_tmp: скаляр [1], данные есть всегда
+
+    int64_t axis, depth;
+    ASSERT(attr)
+    ASSERT(try_get_attr<int64_t>(attr, "axis", axis))
+    ASSERT(try_get_attr<int64_t>(attr, "depth", depth))
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self_int));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    at::Tensor result = at::one_hot(self_int, depth).to(out.options());
+    if (out.numel() > 0)
+        out.copy_(result);
     return H_OK;
 });
 

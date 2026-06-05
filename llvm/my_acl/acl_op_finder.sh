@@ -566,12 +566,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NormalizeBatchKernelNpu.cpp:50:  cmd.Name("NormalizeBatch")
     NormalizeV2
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ImageNormalizeKernelNpu.cpp:40:    cmd.Name("NormalizeV2")
-    OneHot
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/OneHotKernelNpu.cpp:66:    cmd.Name("OneHot")
-    OneHotD
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/OnehotNpu.cpp:46:    cmd.Name("OneHotD")
-    OnesLike
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/OnesLikeKernelNpu.cpp:27:  cmd.Name("OnesLike")
     PRelu
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/PreluKernelNpu.cpp:27:    cmd.Name("PRelu")
     PReluGrad
@@ -762,11 +756,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SoftplusKernelNpu.cpp:32:    cmd.Name("SoftplusV2")
     SoftplusV2Grad
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/SoftplusBackwardKernelNpu.cpp:27:    cmd.Name("SoftplusV2Grad")
-    Sort
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ArgsortKernelNpu.cpp:33:    cmd.Name("Sort").Input(self).Output(values).Output(indices).Attr("axis", dim).Attr("descending", descending).Run();
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SortKernelNpu.cpp:32:    cmd.Name("Sort")
-    SortV2
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SortWithoutIndicesKernelNpu.cpp:31:    cmd.Name("SortV2")
     Sqrt
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SqrtKernelNpu.cpp:27:    cmd.Name("Sqrt")
     Square
@@ -780,13 +769,10 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/DropoutKernelNpu.cpp:90:  cmd.Name("StatelessDropOutGenMask")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/opapi/FlashAttentionKernelNpuOpApi.cpp:97:    cmd.Name("StatelessDropOutGenMask")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/opapi/FlashAttentionV2KernelNpuOpApi.cpp:87:    cmd.Name("StatelessDropOutGenMask")
-    StatelessRandperm
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RandpermKernelNpu.cpp:34:  cmd.Name("StatelessRandperm")
     StrideAdd
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/StrideAddKernelNpu.cpp:32:    cmd.Name("StrideAdd")
     StridedSlice
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/IndexingKernelNpu.cpp:31:    cmd.Name("StridedSlice")
-
     SubSample
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SubSampleKernelNpu.cpp:29:    cmd.Name("SubSample")
     Svd
@@ -939,6 +925,12 @@ N
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NeKernelNpu.cpp:34:    cmd.Name("NotEqual")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NeKernelNpu.cpp:51:    cmd.Name("NotEqual")
 O
+    OneHot
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/OneHotKernelNpu.cpp:66:    cmd.Name("OneHot")
+    OneHotD
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/OnehotNpu.cpp:46:    cmd.Name("OneHotD")
+    OnesLike
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/OnesLikeKernelNpu.cpp:27:  cmd.Name("OnesLike")
 P
     Pack
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/StackKernelNpu.cpp:50:    cmd.Name("Pack");
@@ -971,11 +963,18 @@ R
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormGatherStatsWithCountsKernelNpu.cpp:51:    cmd_reduce.Name("ReduceSum")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/SumKernelNpu.cpp:36:    cmd.Name("ReduceSum")
 S
+    Sort
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ArgsortKernelNpu.cpp:33:    cmd.Name("Sort").Input(self).Output(values).Output(indices).Attr("axis", dim).Attr("descending", descending).Run();
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SortKernelNpu.cpp:32:    cmd.Name("Sort")
+    SortV2
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SortWithoutIndicesKernelNpu.cpp:31:    cmd.Name("SortV2")
     StatelessRandomNormalV2
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/NormalKernelNpu.cpp:41:    cmd.Name("StatelessRandomNormalV2")
     StatelessRandomUniformV2
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RandomKernelNpu.cpp:48:  cmd.Name("StatelessRandomUniformV2")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/UniformKernelNpu.cpp:43:    cmd.Name("StatelessRandomUniformV2")
+    StatelessRandperm
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RandpermKernelNpu.cpp:34:  cmd.Name("StatelessRandperm")
     Sub
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RsubKernelNpu.cpp:40:        cmd.Name("Sub").Input(other).Input(other_mul_result).Output(result).Run();
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RsubKernelNpu.cpp:42:        cmd.Name("Sub").Input(other).Input(self).Output(result).Run();
