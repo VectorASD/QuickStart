@@ -1,3 +1,6 @@
+#include "ATen/ops/one_hot.h"
+#include "ATen/ops/one_hot_ops.h"
+#include "ATen/ops/zeros_like.h"
 #include "common.h"
 #include "not_acl.cpp"  // aclGetTensorDescDimV2, aclGetTensorDescNumDims, aclGetTensorDescType
 #include "helpers.cpp"
@@ -179,79 +182,38 @@ REGISTER_OP(StatelessRandperm, {
 
 
 REGISTER_OP(ZerosLike, {
-    if (numInputs != 1 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
+    // Входы:  образец (форма и dtype)
+    // Выходы: тензор из нулей той же формы и типа
+    at::Tensor a, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // образец: любой dtype
 
-    aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
-    switch (dt) {
-        DISPATCH_ZEROS_LIKE(ACL_FLOAT)
-        DISPATCH_ZEROS_LIKE(ACL_DOUBLE)
-        DISPATCH_ZEROS_LIKE(ACL_FLOAT16)
-        DISPATCH_ZEROS_LIKE(ACL_BF16)
-        DISPATCH_ZEROS_LIKE(ACL_INT8)
-        DISPATCH_ZEROS_LIKE(ACL_UINT8)
-        DISPATCH_ZEROS_LIKE(ACL_INT16)
-        DISPATCH_ZEROS_LIKE(ACL_UINT16)
-        DISPATCH_ZEROS_LIKE(ACL_INT32)
-        DISPATCH_ZEROS_LIKE(ACL_UINT32)
-        DISPATCH_ZEROS_LIKE(ACL_INT64)
-        DISPATCH_ZEROS_LIKE(ACL_UINT64)
-        DISPATCH_ZEROS_LIKE(ACL_BOOL)
-        default:
-            return H_UNIMPLEMENTED;
-    }
+    TRY(toAtenTensor(inputDesc[0], inputs[0], a));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    at::zeros_like_out(out, a);
     return H_OK;
 });
 
 
 REGISTER_OP(Eye, {
-    // Eye не имеет входных тензоров, только выход
-    if (numInputs != 0 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    // attr не обязателен, так как размеры и dtype уже есть в выходном дескрипторе
+    // Входы:  отсутствуют (размеры и dtype определяются выходным дескриптором)
+    // Выходы: единичная матрица [n, m]
+    at::Tensor out;
+    ASSERT(numInputs == 0 && numOutputs == 1)   // без входов, один выход
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)  // выходной тензор готов принять данные
 
     size_t ndim = aclGetTensorDescNumDims(outputDesc[0], false);
-    if (ndim != 2)
-        return H_UNASSERTED;   // Eye всегда создаёт двумерную матрицу
+    ASSERT(ndim == 2)                           // выход – двумерная матрица
 
-    int64_t n = 0; int64_t m = 0; // А это забавно: использование запятой РАЗРУШАЕТ МАКРОСЫ!) Оно путает это с межаргументной запятой
-    if (aclGetTensorDescDimV2(outputDesc[0], 0, &n, false) != ACL_SUCCESS ||
-        aclGetTensorDescDimV2(outputDesc[0], 1, &m, false) != ACL_SUCCESS)
-        return H_UNASSERTED;
+    int64_t n = 0, m = 0;
+    ASSERT(aclGetTensorDescDimV2(outputDesc[0], 0, &n, false) == ACL_SUCCESS)  // число строк (n)
+    ASSERT(aclGetTensorDescDimV2(outputDesc[0], 1, &m, false) == ACL_SUCCESS)  // число столбцов (m)
 
-    aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
-    size_t elemSize = aclDataTypeBytes(dt);
-    char* data = static_cast<char*>(outputs[0]->data);
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
 
-    // Заполняем всё нулями
-    std::memset(data, 0, n * m * elemSize);
-
-    // Устанавливаем единицы на главной диагонали
-    for (int64_t i = 0; i < std::min(n, m); ++i) {
-        size_t idx = i * m + i;                     // C-order (row-major)
-        char* elemPtr = data + idx * elemSize;
-        switch (dt) {
-            case ACL_FLOAT:   *reinterpret_cast<float*>(elemPtr) = 1.0f; break;
-            case ACL_DOUBLE:  *reinterpret_cast<double*>(elemPtr) = 1.0; break;
-            case ACL_INT8:    *reinterpret_cast<int8_t*>(elemPtr) = 1; break;
-            case ACL_UINT8:   *reinterpret_cast<uint8_t*>(elemPtr) = 1; break;
-            case ACL_INT16:   *reinterpret_cast<int16_t*>(elemPtr) = 1; break;
-            case ACL_UINT16:  *reinterpret_cast<uint16_t*>(elemPtr) = 1; break;
-            case ACL_INT32:   *reinterpret_cast<int32_t*>(elemPtr) = 1; break;
-            case ACL_UINT32:  *reinterpret_cast<uint32_t*>(elemPtr) = 1; break;
-            case ACL_INT64:   *reinterpret_cast<int64_t*>(elemPtr) = 1; break;
-            case ACL_UINT64:  *reinterpret_cast<uint64_t*>(elemPtr) = 1; break;
-            case ACL_BOOL:    *reinterpret_cast<bool*>(elemPtr) = true; break;
-            case ACL_FLOAT16: *reinterpret_cast<uint16_t*>(elemPtr) = float_to_half(1.0f); break;
-            case ACL_BF16:    *reinterpret_cast<uint16_t*>(elemPtr) = float_to_bf16(1.0f); break;
-            default:
-                return H_UNIMPLEMENTED;
-        }
-    }
+    at::eye_out(out, n, m);
     return H_OK;
 });
 
@@ -276,15 +238,17 @@ REGISTER_OP(Fill, {
 
 
 REGISTER_OP(OnesLike, {
+    // Входы:  образец (форма и dtype)
+    // Выходы: тензор из единиц той же формы и типа
     at::Tensor a, out;
     ASSERT(numInputs == 1 && numOutputs == 1)
     ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
-    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // образец: любой dtype
 
     TRY(toAtenTensor(inputDesc[0], inputs[0], a));
     TRY(toAtenTensor(outputDesc[0], outputs[0], out));
 
-    out.copy_(at::ones_like(a));
+    at::ones_like_out(out, a);
     return H_OK;
 });
 
@@ -292,64 +256,70 @@ REGISTER_OP(OnesLike, {
 // Арифметика
 
 REGISTER_OP(Mul, {
+    // Входы:  a, b (совместимые типы)
+    // Выходы: произведение a * b (с broadcasting)
     at::Tensor a, b, out;
-
     ASSERT(numInputs == 2 && numOutputs == 1)
     ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
-    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
-    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // a
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // b
 
     TRY(toAtenTensor(inputDesc[0], inputs[0], a));
     TRY(toAtenTensor(inputDesc[1], inputs[1], b));
     TRY(toAtenTensor(outputDesc[0], outputs[0], out));
 
-    out.copy_(at::mul(a, b).to(out.options()));
+    at::mul_out(out, a, b);
     return H_OK;
 });
 
 REGISTER_OP(Add, {
+    // Входы:  a, b
+    // Выходы: сумма a + b (с broadcasting)
     at::Tensor a, b, out;
-
     ASSERT(numInputs == 2 && numOutputs == 1)
     ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
-    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
-    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // a
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // b
 
     TRY(toAtenTensor(inputDesc[0], inputs[0], a));
     TRY(toAtenTensor(inputDesc[1], inputs[1], b));
     TRY(toAtenTensor(outputDesc[0], outputs[0], out));
 
-    out.copy_(at::add(a, b));
+    at::add_out(out, a, b);
     return H_OK;
 });
 
 REGISTER_OP(Sub, {
+    // Входы:  a, b
+    // Выходы: разность a - b (с broadcasting)
     at::Tensor a, b, out;
     ASSERT(numInputs == 2 && numOutputs == 1)
     ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
-    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
-    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // a
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // b
 
     TRY(toAtenTensor(inputDesc[0], inputs[0], a));
     TRY(toAtenTensor(inputDesc[1], inputs[1], b));
     TRY(toAtenTensor(outputDesc[0], outputs[0], out));
 
-    out.copy_(at::sub(a, b));
+    at::sub_out(out, a, b);
     return H_OK;
 });
 
 REGISTER_OP(RealDiv, {
+    // Входы:  a, b
+    // Выходы: частное a / b (с broadcasting)
     at::Tensor a, b, out;
     ASSERT(numInputs == 2 && numOutputs == 1)
     ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
-    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
-    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // a
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // b
 
     TRY(toAtenTensor(inputDesc[0], inputs[0], a));
     TRY(toAtenTensor(inputDesc[1], inputs[1], b));
     TRY(toAtenTensor(outputDesc[0], outputs[0], out));
 
-    out.copy_(at::div(a, b));
+    at::div_out(out, a, b);
     return H_OK;
 });
 
@@ -621,7 +591,7 @@ REGISTER_OP(Cast, {
     TRY(toAtenTensor(outputDesc[0], outputs[0], out));
 
     if (out.numel() > 0)
-        out.copy_(inp.to(out.options()));
+        out.copy_(inp.to(out.options()));  // нет to_out
     return H_OK;
 });
 
@@ -1235,6 +1205,8 @@ REGISTER_OP(BroadcastTo, {
 });
 
 REGISTER_OP(ConcatD, {
+    // Входы:  N тензоров одного типа
+    // Выходы: конкатенация вдоль заданной оси
     int N;
     int64_t concat_dim;
     std::vector<at::Tensor> tensors;
@@ -1243,17 +1215,19 @@ REGISTER_OP(ConcatD, {
     ASSERT(numInputs >= 1 && numOutputs == 1)
     ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
     ASSERT(attr)
-    ASSERT(try_get_attr<int>(attr, "N", N) && N == numInputs)
+    ASSERT(try_get_attr<int>(attr, "N", N) && N == numInputs)    // число тензоров
     ASSERT(try_get_attr<int64_t>(attr, "concat_dim", concat_dim))
 
     TRY(toAtenTensors(N, inputDesc, inputs, tensors));
     TRY(toAtenTensor(outputDesc[0], outputs[0], out_tensor));
 
-    out_tensor.copy_(at::cat(tensors, concat_dim));
+    at::cat_out(out_tensor, tensors, concat_dim);
     return H_OK;
 });
 
 REGISTER_OP(Pack, {
+    // Входы:  N тензоров одинакового размера
+    // Выходы: упаковка в новый тензор вдоль новой оси
     int N;
     int64_t axis;
     std::vector<at::Tensor> tensors;
@@ -1268,7 +1242,7 @@ REGISTER_OP(Pack, {
     TRY(toAtenTensors(N, inputDesc, inputs, tensors));
     TRY(toAtenTensor(outputDesc[0], outputs[0], out_tensor));
 
-    out_tensor.copy_(at::stack(tensors, axis));
+    at::stack_out(out_tensor, tensors, axis);
     return H_OK;
 });
 
@@ -1291,9 +1265,16 @@ REGISTER_OP(Sort, {
     TRY(toAtenTensor(outputDesc[0], outputs[0], values_out));
     TRY(toAtenTensor(outputDesc[1], outputs[1], indices_out));
 
-    auto result = at::sort(self, axis, descending);
-    values_out.copy_(std::get<0>(result));
-    indices_out.copy_(std::get<1>(result));
+    // terminate called after throwing an instance of 'c10::Error'
+    //  what():  Expected out tensor to have dtype long int, but got int instead
+    // Exception raised from resize_out at /pytorch/build/aten/src/ATen/RegisterCPU_0.cpp:1106 (most recent call first): ...
+
+    if (indices_out.scalar_type() != at::kLong) {
+        auto [sorted_vals, sorted_idxs] = at::sort(self, axis, descending);
+        values_out.copy_(sorted_vals);
+        indices_out.copy_(sorted_idxs);
+    } else
+        at::sort_out(values_out, indices_out, self, axis, descending);
     return H_OK;
 });
 
@@ -1302,7 +1283,7 @@ REGISTER_OP(SortV2, {
     // Выход: values (тот же тип)
     at::Tensor self, values_out;
     ASSERT(numInputs == 1 && numOutputs == 1)
-    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)   // values
     ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
 
     int64_t axis;
@@ -1314,8 +1295,8 @@ REGISTER_OP(SortV2, {
     TRY(toAtenTensor(inputDesc[0], inputs[0], self));
     TRY(toAtenTensor(outputDesc[0], outputs[0], values_out));
 
-    auto sorted = std::get<0>(at::sort(self, axis, descending));
-    values_out.copy_(sorted);
+    at::Tensor dummy_indices = at::empty_like(values_out, values_out.options().dtype(at::kLong));
+    at::sort_out(values_out, dummy_indices, self, axis, descending);
     return H_OK;
 });
 
@@ -1337,7 +1318,7 @@ REGISTER_OP(OneHot, {
     int64_t depth = depth_tensor.item<int64_t>();
     at::Tensor result = at::one_hot(self.to(at::kLong), depth).to(out.options());
     if (out.numel() > 0)
-        out.copy_(result);
+        out.copy_(result);  // нет one_hot_out
     return H_OK;
 });
 
@@ -1361,7 +1342,7 @@ REGISTER_OP(OneHotD, {
 
     at::Tensor result = at::one_hot(self_int, depth).to(out.options());
     if (out.numel() > 0)
-        out.copy_(result);
+        out.copy_(result);  // нет one_hot_out
     return H_OK;
 });
 

@@ -745,20 +745,6 @@ void broadcastCompareOp(TensorAccessor<bool>& out,
 }
 
 
-#define DISPATCH_ZEROS_LIKE(DT) \
-    case DT: { \
-        using T = aclDataTypeTraits<DT>::type; \
-        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
-        size_t count = out.numElements(); \
-        if constexpr (DT == ACL_BOOL) { \
-            for (size_t i = 0; i < count; ++i) out[i] = false; \
-        } else { \
-            for (size_t i = 0; i < count; ++i) out[i] = static_cast<T>(0); \
-        } \
-        break; \
-    }
-
-
 #define DISPATCH_ISFINITE(DT) \
     case DT: { \
         using T = aclDataTypeTraits<DT>::type; \
