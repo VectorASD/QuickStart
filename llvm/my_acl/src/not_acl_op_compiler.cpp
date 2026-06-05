@@ -257,33 +257,23 @@ REGISTER_OP(Eye, {
 
 
 REGISTER_OP(Fill, {
-    if (numInputs != 2 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
-        return H_UNASSERTED;
+    // Входы:  тензор-образец (размеры задают выход), скалярное значение
+    // Выходы: тензор, заполненный заданным значением
+    at::Tensor dummy, value, out;
+    ASSERT(numInputs == 2 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0])
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
 
-    aclDataType outDt = aclGetTensorDescType(outputDesc[0], false);
-    switch (outDt) {
-        DISPATCH_FILL(ACL_FLOAT)
-        DISPATCH_FILL(ACL_DOUBLE)
-        DISPATCH_FILL(ACL_FLOAT16)
-        DISPATCH_FILL(ACL_BF16)
-        DISPATCH_FILL(ACL_INT8)
-        DISPATCH_FILL(ACL_UINT8)
-        DISPATCH_FILL(ACL_INT16)
-        DISPATCH_FILL(ACL_UINT16)
-        DISPATCH_FILL(ACL_INT32)
-        DISPATCH_FILL(ACL_UINT32)
-        DISPATCH_FILL(ACL_INT64)
-        DISPATCH_FILL(ACL_UINT64)
-        DISPATCH_FILL(ACL_BOOL)
-        default:
-            return H_UNIMPLEMENTED;
-    }
+    TRY(toAtenTensor(inputDesc[0], inputs[0], dummy));
+    TRY(toAtenTensor(inputDesc[1], inputs[1], value));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    at::Scalar fill_scalar = value.item();
+    out.fill_(fill_scalar);
     return H_OK;
 });
+
 
 REGISTER_OP(OnesLike, {
     at::Tensor a, out;
@@ -1395,10 +1385,16 @@ ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
     << formatTensorList("input", inputDesc, inputs, numInputs, PRINT_ALL)
     << formatTensorList("output", outputDesc, outputs, numOutputs, PRINT_DESC);
 
+    auto t_start = std::chrono::steady_clock::now();
+
     OpHandler handler;
     exitCode code = H_UNKNOWN_OP;
     if (opType && OpRegistry::try_find(opType, handler))
         code = handler(numInputs, inputDesc, inputs, numOutputs, outputDesc, outputs, attr);
+
+    auto t_end = std::chrono::steady_clock::now();
+    double elapsed_us = std::chrono::duration<double, std::micro>(t_end - t_start).count();
+    record_op_timing(opType, elapsed_us);
 
     switch (code) {
         case H_UNKNOWN_OP:

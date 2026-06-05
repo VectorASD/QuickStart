@@ -9,6 +9,7 @@
 #include <vector>         // std::vector
 #include <mutex>          // std::lock_guard, std::mutex
 #include <sstream>        // std::ostringstream
+#include <algorithm>      // std::sort
 
 #if defined(_MSC_VER)
     #ifdef FUNC_VISIBILITY
@@ -245,6 +246,8 @@ struct aclopAttr {
 };
 
 
+// безопасное логирование
+
 static std::mutex g_log_mutex;
 
 static bool log_is_quiet() {
@@ -256,17 +259,19 @@ static bool log_is_quiet() {
     return quiet == 1;
 }
 
-static void log_output(const std::ostringstream& oss, bool is_error = false) {
-    if (!is_error && log_is_quiet())
-        return;
-    std::lock_guard<std::mutex> lock(g_log_mutex);
-    std::cout << oss.str() << std::endl;
+static inline void log_output(const std::ostringstream& oss, bool is_error = false) {
+    static bool can_log = !log_is_quiet();
+    if (is_error || can_log) {
+        std::lock_guard<std::mutex> lock(g_log_mutex);
+        std::cout << oss.str() << std::endl;
+    }
 }
-static void log_output(const std::string& msg, bool is_error = false) {
-    if (!is_error && log_is_quiet())
-        return;
-    std::lock_guard<std::mutex> lock(g_log_mutex);
-    std::cout << msg << std::endl;
+static inline void log_output(const std::string& msg, bool is_error = false) {
+    static bool can_log = !log_is_quiet();
+    if (is_error || can_log) {
+        std::lock_guard<std::mutex> lock(g_log_mutex);
+        std::cout << msg << std::endl;
+    }
 }
 
 

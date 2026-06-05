@@ -43,6 +43,17 @@ LEVEL 2:
     clear && build_not_npu && python -c "import torch; print(torch.randn(2, 3, device='npu'))"
 LEVEL 3:
     clear && build_not_npu && python -c "import torch; print(torch.randn(32, 32, device='npu', dtype=torch.float16))"
+LEVEL 4:
+    sudo apt install valgrind
+    Добавлен флаг -g к g++
+    clear && valgrind --leak-check=full pytest test_tensor_constructor_ops.py -sv
+        Утечек памяти не обнаружено. Максимум пару МБ за всё время, и то, только в момент загрузки библиотек
+    clear && valgrind --tool=massif --massif-out-file=massif.out pytest test_tensor_constructor_ops.py -sv
+        Сильная нагрузка на стек, в основном в момент torch.eye. Вероятнее всего, тензоры просто не успевают освободится
+        К примеру, torch.eye(8192, dtype=torch.double) весит 0.5 GB
+    for i in range(100): torch.eye(8192, device="npu", dtype=torch.double)
+        Не очень похоже на то, чтобы у torch_npu и моего ACL были проблемы с освобождением памяти
+    Виноват pytest?!
 
 grep "aclrtSetStreamOverflowSwitch" ~/tmp/pytorch/ -rn
 
@@ -56,7 +67,7 @@ if [ ! -f "$LIB/libhccl.so" ]; then
     echo "Created lib/libhccl.so"
 fi
 
-g++ -shared -fPIC "$SRC/not_acl.cpp" -o "$LIB/libascendcl.so"
+g++ -g -shared -fPIC "$SRC/not_acl.cpp" -o "$LIB/libascendcl.so"
 echo "Created lib/libascendcl.so"
 
 LINK_IT=(
@@ -66,7 +77,7 @@ LINK_IT=(
     -Wl,--as-needed
     -Wl,-rpath='$ORIGIN'
 )
-g++ -shared -fPIC "$SRC/not_acl_op_compiler.cpp" "${LINK_IT[@]}" "${TORCH_FLAGS[@]}" -o "$LIB/libacl_op_compiler.so"
+g++ -g -shared -fPIC "$SRC/not_acl_op_compiler.cpp" "${LINK_IT[@]}" "${TORCH_FLAGS[@]}" -o "$LIB/libacl_op_compiler.so"
 echo "Created lib/libacl_op_compiler.so"
 
 if [ ! -f "$LIB/libge_runner.so" ]; then

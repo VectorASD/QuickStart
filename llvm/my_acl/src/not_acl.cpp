@@ -1,4 +1,6 @@
 #include "common.h"
+#include "op_profiler.h"  // log_op_timings, reset_op_timings
+
 #include <iostream>  // cout, endl
 #include <cstdarg>   // va_end, va_list, va_start
 #include <cstring>   // memcpy, memset, size_t
@@ -793,11 +795,11 @@ ACL_FUNC_VISIBILITY aclError aclrtResetDevice(int32_t deviceId) {
         return ACL_ERROR_INVALID_PARAM;
     }
 
-    // not‑NPU: реального устройства нет, контексты/стримы фиктивные.
-    // Ничего не делаем, просто считаем, что reset прошёл успешно.
-
     log << "\n    reset device (no-op in not‑NPU)";
     log_output(log);
+
+    log_op_timings();
+    reset_op_timings();
 
     return ACL_SUCCESS;
 }
