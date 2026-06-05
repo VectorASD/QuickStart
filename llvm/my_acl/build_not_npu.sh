@@ -36,13 +36,19 @@ if ! grep -qxF "export LD_LIBRARY_PATH=\"$LIB:\$LD_LIBRARY_PATH\"" ~/.bashrc; th
     echo "reopen terminal"
     exit 1
 fi
-# build_not_npu && python -c "import torch_npu"   # stage 1, чтобы просто завелись библиотеки .so внутри torch_npu
-# clear && build_not_npu && python -c "import torch; print(torch.randn(2, 3, device='npu'))"
+: << 'COMMENT'
+LEVEL 1:
+    build_not_npu && python -c "import torch_npu"   # stage 1, чтобы просто завелись библиотеки .so внутри torch_npu
+LEVEL 2:
+    clear && build_not_npu && python -c "import torch; print(torch.randn(2, 3, device='npu'))"
+LEVEL 3:
+    clear && build_not_npu && python -c "import torch; print(torch.randn(32, 32, device='npu', dtype=torch.float16))"
 
-# grep "aclrtSetStreamOverflowSwitch" ~/tmp/pytorch/ -rn
+grep "aclrtSetStreamOverflowSwitch" ~/tmp/pytorch/ -rn
 
-# git -C ~/tmp/pytorch/ submodule update --init --progress third_party/op-plugin
-# grep "cmd.Name" ~/tmp/pytorch/ -rn
+git -C ~/tmp/pytorch/ submodule update --init --progress third_party/op-plugin
+grep "cmd.Name" ~/tmp/pytorch/ -rn
+COMMENT
 
 
 if [ ! -f "$LIB/libhccl.so" ]; then

@@ -255,129 +255,64 @@ REGISTER_OP(Fill, {
 });
 
 REGISTER_OP(Mul, {
-    if (numInputs != 2 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
-        return H_UNASSERTED;
+    at::Tensor a, b, out;
 
-    aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
-    switch (dt) {
-        DISPATCH_MUL(ACL_FLOAT)
-        DISPATCH_MUL(ACL_DOUBLE)
-        DISPATCH_MUL(ACL_FLOAT16)
-        DISPATCH_MUL(ACL_BF16)
-        DISPATCH_MUL(ACL_INT8)
-        DISPATCH_MUL(ACL_UINT8)
-        DISPATCH_MUL(ACL_INT16)
-        DISPATCH_MUL(ACL_UINT16)
-        DISPATCH_MUL(ACL_INT32)
-        DISPATCH_MUL(ACL_UINT32)
-        DISPATCH_MUL(ACL_INT64)
-        DISPATCH_MUL(ACL_UINT64)
-        // ACL_BOOL для Mul не поддерживается в torch_npu (для bool используется LogicalAnd),
-        // поэтому если он сюда попадёт, уйдём в H_UNIMPLEMENTED
-        default:
-            return H_UNIMPLEMENTED;
-    }
+    ASSERT(numInputs == 2 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], a));
+    TRY(toAtenTensor(inputDesc[1], inputs[1], b));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    out.copy_(at::mul(a, b).to(out.options()));
     return H_OK;
 });
 
 REGISTER_OP(Add, {
-    if (numInputs != 2 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
-        return H_UNASSERTED;
+    at::Tensor a, b, out;
 
-    aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
-    switch (dt) {
-        DISPATCH_ADD(ACL_FLOAT)
-        DISPATCH_ADD(ACL_DOUBLE)
-        DISPATCH_ADD(ACL_FLOAT16)
-        DISPATCH_ADD(ACL_BF16)
-        DISPATCH_ADD(ACL_INT8)
-        DISPATCH_ADD(ACL_UINT8)
-        DISPATCH_ADD(ACL_INT16)
-        DISPATCH_ADD(ACL_UINT16)
-        DISPATCH_ADD(ACL_INT32)
-        DISPATCH_ADD(ACL_UINT32)
-        DISPATCH_ADD(ACL_INT64)
-        DISPATCH_ADD(ACL_UINT64)
-        // ACL_BOOL для Add не поддерживается в torch_npu (для bool используется LogicalOr),
-        // поэтому если он сюда попадёт, уйдём в H_UNIMPLEMENTED
-        default:
-            return H_UNIMPLEMENTED;
-    }
+    ASSERT(numInputs == 2 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], a));
+    TRY(toAtenTensor(inputDesc[1], inputs[1], b));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    out.copy_(at::add(a, b));
     return H_OK;
 });
 
 REGISTER_OP(Sub, {
-    if (numInputs != 2 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
-        return H_UNASSERTED;
+    at::Tensor a, b, out;
+    ASSERT(numInputs == 2 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
 
-    aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
-    switch (dt) {
-        DISPATCH_SUB(ACL_FLOAT)
-        DISPATCH_SUB(ACL_DOUBLE)
-        DISPATCH_SUB(ACL_FLOAT16)
-        DISPATCH_SUB(ACL_BF16)
-        DISPATCH_SUB(ACL_INT8)
-        DISPATCH_SUB(ACL_UINT8)
-        DISPATCH_SUB(ACL_INT16)
-        DISPATCH_SUB(ACL_UINT16)
-        DISPATCH_SUB(ACL_INT32)
-        DISPATCH_SUB(ACL_UINT32)
-        DISPATCH_SUB(ACL_INT64)
-        DISPATCH_SUB(ACL_UINT64)
-        // ACL_BOOL не используется для Sub
-        default:
-            return H_UNIMPLEMENTED;
-    }
+    TRY(toAtenTensor(inputDesc[0], inputs[0], a));
+    TRY(toAtenTensor(inputDesc[1], inputs[1], b));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    out.copy_(at::sub(a, b));
     return H_OK;
 });
 
 REGISTER_OP(RealDiv, {
-    if (numInputs != 2 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
-        return H_UNASSERTED;
+    at::Tensor a, b, out;
+    ASSERT(numInputs == 2 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
 
-    aclDataType dt = aclGetTensorDescType(outputDesc[0], false);
-    switch (dt) {
-        DISPATCH_DIV(ACL_FLOAT)
-        DISPATCH_DIV(ACL_DOUBLE)
-        DISPATCH_DIV(ACL_FLOAT16)
-        DISPATCH_DIV(ACL_BF16)
-        // целые типы — с защитой от деления на ноль (всегда даст 0)
-        DISPATCH_DIV(ACL_INT8)
-        DISPATCH_DIV(ACL_UINT8)
-        DISPATCH_DIV(ACL_INT16)
-        DISPATCH_DIV(ACL_UINT16)
-        DISPATCH_DIV(ACL_INT32)
-        DISPATCH_DIV(ACL_UINT32)
-        DISPATCH_DIV(ACL_INT64)
-        DISPATCH_DIV(ACL_UINT64)
-        // ACL_BOOL для RealDiv не используется
-        default:
-            return H_UNIMPLEMENTED;
-    }
+    TRY(toAtenTensor(inputDesc[0], inputs[0], a));
+    TRY(toAtenTensor(inputDesc[1], inputs[1], b));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    out.copy_(at::div(a, b));
     return H_OK;
 });
 

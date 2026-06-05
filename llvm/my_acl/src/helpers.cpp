@@ -122,6 +122,31 @@ static std::string tensorDescToString(const aclTensorDesc* desc) {
     return oss.str();
 }
 
+// float16: знак 1 бит, экспонента 5, мантисса 10
+// float32: знак 1 бит, экспонента 8, мантисса 23
+inline float half_to_float(uint16_t v) {
+    at::Tensor t = at::from_blob(&v, {1}, at::TensorOptions().dtype(at::kHalf));
+    return t.item<float>();
+}
+inline uint16_t float_to_half(float f) {
+    at::Tensor t = at::from_blob(&f, {1}, at::TensorOptions().dtype(at::kFloat));
+    return t.to(at::kHalf).item<c10::Half>().x;
+}
+
+// float16: знак 1 бит, экспонента 8, мантисса 7
+// float32: знак 1 бит, экспонента 8, мантисса 23
+inline float bf16_to_float(uint16_t v) {
+    uint32_t bits = static_cast<uint32_t>(v) << 16;
+    float res;
+    std::memcpy(&res, &bits, sizeof(res));
+    return res;
+}
+inline uint16_t float_to_bf16(float f) {
+    uint32_t bits;
+    std::memcpy(&bits, &f, sizeof(bits));
+    return static_cast<uint16_t>(bits >> 16);
+}
+
 // Преобразует один элемент тензора в строку по его типу
 static std::string aclElementToString(aclDataType dtype, const void* elemPtr) {
     if (!elemPtr)
@@ -145,12 +170,19 @@ static std::string aclElementToString(aclDataType dtype, const void* elemPtr) {
                 oss << std::scientific << std::setprecision(4) << val;
             return oss.str();
         }
-        case ACL_FLOAT16:
+        case ACL_FLOAT16: {
+            uint16_t v = *static_cast<const uint16_t*>(elemPtr);
+            float f = half_to_float(v);
+            std::ostringstream oss;
+            if (std::abs(f) >= 1e-4f && std::abs(f) < 1e4f)
+                oss << std::fixed << std::setprecision(4) << f;
+            else
+                oss << std::scientific << std::setprecision(4) << f;
+            return oss.str();
+        }
         case ACL_BF16: {
             uint16_t v = *static_cast<const uint16_t*>(elemPtr);
-            uint32_t bits = static_cast<uint32_t>(v) << 16;
-            float f;
-            std::memcpy(&f, &bits, sizeof(f));
+            float f = bf16_to_float(v);
             std::ostringstream oss;
             if (std::abs(f) >= 1e-4f && std::abs(f) < 1e4f)
                 oss << std::fixed << std::setprecision(4) << f;
@@ -328,15 +360,16 @@ struct OpRegistry {
     }
 };
 
-#define REGISTER_OP(NAME, BODY) \
+#define REGISTER_OP(NAME, ...) \
     static exitCode _op_##NAME(int numInputs, const aclTensorDesc* const inputDesc[], \
                                const aclDataBuffer* const inputs[], \
                                int numOutputs, const aclTensorDesc* const outputDesc[], \
                                aclDataBuffer* const outputs[], \
                                const aclopAttr* attr) { \
-        BODY \
+        __VA_ARGS__ \
     } \
     static bool _reg_##NAME = (OpRegistry::add(#NAME, _op_##NAME), true)
+// За счёт __VA_ARGS__, теперь можно писать запятые прямо в BODY (что заменён на '...')
 
 #define TRY(expr) \
     do { \
@@ -500,33 +533,6 @@ DEFINE_ACL_TYPE(ACL_UINT32,  uint32_t,    static_cast<float>(v), static_cast<uin
 DEFINE_ACL_TYPE(ACL_INT64,   int64_t,     static_cast<float>(v), static_cast<int64_t>(f))
 DEFINE_ACL_TYPE(ACL_UINT64,  uint64_t,    static_cast<float>(v), static_cast<uint64_t>(f))
 DEFINE_ACL_TYPE(ACL_BOOL,    bool,        v ? 1.0f : 0.0f, f != 0.0f)
-
-// Для float16/bf16 и экзотических типов – храним как uint16_t/uint8_t,
-// но арифметика через float
-inline float half_to_float(uint16_t v) {
-    uint32_t bits = static_cast<uint32_t>(v) << 16;
-    float res;
-    std::memcpy(&res, &bits, sizeof(res));
-    return res;
-}
-inline uint16_t float_to_half(float f) {
-    uint32_t bits;
-    std::memcpy(&bits, &f, sizeof(bits));
-    return static_cast<uint16_t>(bits >> 16);
-}
-// bf16 имеет аналогичное бинарное представление (старшие 16 бит float)
-inline float bf16_to_float(uint16_t v) {
-    uint32_t bits = static_cast<uint32_t>(v) << 16;
-    float res;
-    std::memcpy(&res, &bits, sizeof(res));
-    return res;
-}
-inline uint16_t float_to_bf16(float f) {
-    uint32_t bits;
-    std::memcpy(&bits, &f, sizeof(bits));
-    return static_cast<uint16_t>(bits >> 16);
-}
-
 DEFINE_ACL_TYPE(ACL_FLOAT16, uint16_t, half_to_float(v), float_to_half(f))
 DEFINE_ACL_TYPE(ACL_BF16,    uint16_t, bf16_to_float(v), float_to_bf16(f))
 
@@ -585,59 +591,6 @@ template <aclDataType DT>
 auto makeTensorAccessor(const void* data, const std::vector<int64_t>& dims) {
     using T = typename aclDataTypeTraits<DT>::type;
     return TensorAccessor<T>(data, dims);
-}
-
-
-template <typename T, typename BinaryOp>
-void broadcastBinaryOp(TensorAccessor<T>& out,
-                       const TensorAccessor<T>& a,
-                       const std::vector<int64_t>& aDims,
-                       const TensorAccessor<T>& b,
-                       const std::vector<int64_t>& bDims,
-                       BinaryOp op) {
-    // Скалярный случай
-    if (out.numElements() == 1 && a.numElements() == 1 && b.numElements() == 1) {
-        out[0] = op(a[0], b[0]);
-        return;
-    }
-
-    const auto& outDims = out.dims();
-    const size_t ndim = outDims.size();
-
-    auto expandDims = [ndim](const std::vector<int64_t>& dims) {
-        std::vector<int64_t> expanded(ndim, 1);
-        size_t offset = ndim - dims.size();
-        std::copy(dims.begin(), dims.end(), expanded.begin() + offset);
-        return expanded;
-    };
-    std::vector<int64_t> aBroad = expandDims(aDims);
-    std::vector<int64_t> bBroad = expandDims(bDims);
-
-    auto computeStrides = [](const std::vector<int64_t>& dims) {
-        std::vector<int64_t> strides(dims.size());
-        if (!dims.empty()) {
-            strides.back() = 1;
-            for (int i = dims.size()-2; i >= 0; --i)
-                strides[i] = strides[i+1] * dims[i];
-        }
-        return strides;
-    };
-    std::vector<int64_t> outStrides = computeStrides(outDims);
-    std::vector<int64_t> aStrides = computeStrides(aBroad);
-    std::vector<int64_t> bStrides = computeStrides(bBroad);
-
-    const size_t outSize = out.numElements();
-    for (size_t linear = 0; linear < outSize; ++linear) {
-        size_t aIdx = 0, bIdx = 0;
-        size_t temp = linear;
-        for (size_t d = 0; d < ndim; ++d) {
-            int64_t coord = temp / outStrides[d];
-            temp %= outStrides[d];
-            if (aBroad[d] > 1) aIdx += coord * aStrides[d];
-            if (bBroad[d] > 1) bIdx += coord * bStrides[d];
-        }
-        out[linear] = op(a[aIdx], b[bIdx]);
-    }
 }
 
 
@@ -783,65 +736,6 @@ void fillRandomNormal(TensorAccessor<typename aclDataTypeTraits<DT>::type>& out,
         T fillValue = value[0]; /* второй вход – скаляр */ \
         size_t count = out.numElements(); \
         for (size_t i = 0; i < count; ++i) out[i] = fillValue; \
-        break; \
-    }
-
-
-#define DISPATCH_MUL(DT) \
-    case DT: { \
-        using T = aclDataTypeTraits<DT>::type; \
-        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
-        TensorAccessor<T> inA(inputs[0]->data, inputDesc[0]->dims); \
-        TensorAccessor<T> inB(inputs[1]->data, inputDesc[1]->dims); \
-        broadcastBinaryOp(out, inA, inputDesc[0]->dims, \
-                            inB, inputDesc[1]->dims, \
-                            std::multiplies<T>{}); \
-        break; \
-    }
-
-#define DISPATCH_ADD(DT) \
-    case DT: { \
-        using T = aclDataTypeTraits<DT>::type; \
-        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
-        TensorAccessor<T> inA(inputs[0]->data, inputDesc[0]->dims); \
-        TensorAccessor<T> inB(inputs[1]->data, inputDesc[1]->dims); \
-        broadcastBinaryOp(out, inA, inputDesc[0]->dims, \
-                            inB, inputDesc[1]->dims, \
-                            std::plus<T>{}); \
-        break; \
-    }
-
-#define DISPATCH_SUB(DT) \
-    case DT: { \
-        using T = aclDataTypeTraits<DT>::type; \
-        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
-        TensorAccessor<T> inA(inputs[0]->data, inputDesc[0]->dims); \
-        TensorAccessor<T> inB(inputs[1]->data, inputDesc[1]->dims); \
-        broadcastBinaryOp(out, inA, inputDesc[0]->dims, \
-                            inB, inputDesc[1]->dims, \
-                            std::minus<T>{}); \
-        break; \
-    }
-
-#define DISPATCH_DIV(DT) \
-    case DT: { \
-        using T = aclDataTypeTraits<DT>::type; \
-        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
-        TensorAccessor<T> inA(inputs[0]->data, inputDesc[0]->dims); \
-        TensorAccessor<T> inB(inputs[1]->data, inputDesc[1]->dims); \
-        auto divOp = [](T a, T b) -> T { \
-            if constexpr (std::is_integral_v<T>) { \
-                if (b == 0) return 0; \
-                if constexpr (std::is_signed_v<T>) { \
-                    if (b == -1 && a == std::numeric_limits<T>::min()) return 0; \
-                } \
-                return a / b; \
-            } else { \
-                return a / b; \
-            } \
-        }; \
-        broadcastBinaryOp(out, inA, inputDesc[0]->dims, \
-                          inB, inputDesc[1]->dims, divOp); \
         break; \
     }
 
