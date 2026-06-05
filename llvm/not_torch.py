@@ -15,6 +15,7 @@ import warnings
 import sysconfig
 from functools import wraps, lru_cache
 from pathlib import Path
+from io import BytesIO
 
 from typing import TYPE_CHECKING, Any, Optional, Union, Callable
 
@@ -133,7 +134,7 @@ def _launcher(IR, kernel_name, gridX, gridY, gridZ, tensor_kinds, non_constexpr_
     else:
         launch_metadata = IR, kernel_name, (gridX, gridY, gridZ), tensor_kinds, non_constexpr_vals
         for idx, arg in enumerate(non_constexpr_vals):
-            if isinstance(arg, torch.Tensor):
+            if isinstance(arg, Tensor):
                 arg._launch_metadata = idx, *launch_metadata
 
 class npu_mod:
@@ -400,6 +401,12 @@ class device:
         obj.index = index
         return obj
 
+    def __reduce__(self):
+        return (
+            device,
+            (self.type, self.index)
+        )
+
     def __repr__(self):
         if self.index is not None:
             return f"device(type={self.type!r}, index={self.index})"
@@ -432,19 +439,25 @@ class device:
 
 
 class Tensor:
+    __torch_dispatch__ = torch._C._disabled_torch_dispatch_impl
+
     def __init__(self, real_tensor, real_device=None):
+        if isinstance(real_tensor, Tensor):
+            real_tensor = real_tensor._tensor
+            real_device = real_device or real_tensor._device
         assert real_tensor.device.type == "cpu"
         self._tensor = real_tensor
         if real_device is None:
             real_device = device("cpu")
         self._device = real_device
 
+    def __reduce__(self):
+        return (
+            Tensor,
+            (self._tensor, self._device),
+        )
+
     def __repr__(self, *, tensor_contents=None):
-        if _torch.overrides.has_torch_function_unary(self):
-            return _torch.overrides.handle_torch_function(
-                _torch.Tensor.__repr__, (self,), self, tensor_contents=tensor_contents
-            )
-        # All strings are unicode in Python 3.
         return _torch._tensor_str._str(self, tensor_contents=tensor_contents)
 
     @property
@@ -574,11 +587,14 @@ class BoolTensor(Tensor):     ...
 
 
 import contextlib
+import _io
+import collections
 
 SKIPED_TYPES = {
     bool,
     int,
     str,
+    bytearray,
     torch.dtype,
     torch.layout,
     contextlib._GeneratorContextManager,
@@ -586,26 +602,50 @@ SKIPED_TYPES = {
     torch._vendor.packaging._structures.InfinityType, # здесь всего 2 типа, без родительского общего класса
     torch._vendor.packaging._structures.NegativeInfinityType,
     torch.testing._comparison.TensorLikePair,
+    torch._C._TorchDispatchModeKey,
+  # for torch.save:
+    _io.BytesIO,
+    types.ModuleType,
+    set,
+    torch.serialization._open_zipfile_writer_buffer,
+    torch.PyTorchFileWriter,
+    torch.storage.TypedStorage,
+    collections.OrderedDict,
+    torch.storage.UntypedStorage,
+    torch.serialization._open_buffer_writer,
+  # for torch.load:
+    bytes,
+    torch.serialization._open_buffer_reader,
+    types.GeneratorType,
+    type,
 }
 UnpackedDualTensor = torch.autograd.forward_ad.UnpackedDualTensor
 
 def type_wrapper(obj, real_device):
-    if obj is None or type(obj) in SKIPED_TYPES:
+    T = type(obj)
+
+    if obj is None or T in SKIPED_TYPES:
         return obj
 
-    if type(obj) is _torch.Tensor:
+    if T is Tensor:
+        return obj
+
+    if T is torch.Tensor:
         return Tensor(obj, real_device)
 
     if inspect.isfunction(obj) or inspect.isbuiltin(obj):
         return wrap_torch_function(obj)
 
-    if isinstance(obj, UnpackedDualTensor):
+    if T is UnpackedDualTensor:
         return type(obj)(*(type_wrapper(v, real_device) for v in obj))
-    if isinstance(obj, tuple):
-        assert type(obj) is tuple
+    if T is tuple:
         return tuple(type_wrapper(v, real_device) for v in obj)
-    if isinstance(obj, list):
+
+    if T is list:
         return [type_wrapper(v, real_device) for v in obj]
+
+    if T is dict:
+        return {k: type_wrapper(v, real_device) for k, v in obj.items()}
 
     print("[my type_wrapper] unsupported type:", type(obj))
     exit()
@@ -623,7 +663,7 @@ def type_unwrapper(obj, founded_device):
             raise RuntimeError(f"Device mismatch: {founded_device[0]} vs {obj._device}")
         return obj._tensor
 
-    if T is _torch.Tensor:
+    if T is torch.Tensor:
         return obj
 
     if T is tuple:
@@ -724,7 +764,6 @@ with warnings.catch_warnings():
     visited = {}
     wrapper_bot(torch, visited)
 
-visited[torch].Tensor = Tensor
 visited[torch].device = device
 visited[torch.testing].assert_close = assert_close
 
@@ -874,14 +913,7 @@ not_torch_switcher.on()
 
 
 
-if __name__ == "__main__":
-    print(torch.randn(2, 3))
-    print(torch.randn(2, 3, device="npu"))
-    print(torch.randn(2, 3).to("npu"))
-    print(torch.library.Library == Library)
-
-    print(torch.randn(100, 100))
-
+def implement_self():
     torch_path = Path(inspect.getfile(torch))
     my_path   = Path(__file__)
     aten_path = Path(sys.modules[PythonArgParser.__module__].__file__)
@@ -906,8 +938,35 @@ elif "$not_torch_is_loaded$" not in sys.modules:
     p = str(not_torch_path.parent)
     if p not in sys.path:
         sys.path.insert(0, p)
-    import not_torch
+    # import not_torch
 """[:-1]
 
     implemented = torch_path.read_text().split(splitter, 1)[0] + implementor
     torch_path.write_text(implemented) # enter in terminal:   sudo chown $(id -u):python -R /opt/python311
+
+
+
+if __name__ == "__main__":
+    print(torch.randn(2, 3))
+    print(torch.randn(2, 3, device="npu"))
+    print(torch.randn(2, 3).to("npu"))
+    print(torch.library.Library == Library)
+
+    print(torch.randn(100, 100))
+
+    obj = torch.randn(3, 4)
+    for device_ in ("cpu", "npu"):
+        obj = obj.to(device_)
+
+        buff = BytesIO()
+        torch.save(obj, buff, _use_new_zipfile_serialization=False)
+        dump = buff.getvalue()
+        assert isinstance(dump, bytes)
+        print("torch.load:", torch.load(BytesIO(dump), weights_only=False), "bytes:", len(dump), "b.") # ошибка! Теряется девайс XD
+
+        import pickle
+        dump = pickle.dumps(obj)
+        assert isinstance(dump, bytes)
+        print("pickle.loads:", pickle.loads(dump), "bytes:", len(dump), "b.")
+
+    implement_self()
