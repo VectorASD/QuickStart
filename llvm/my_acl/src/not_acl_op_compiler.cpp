@@ -2,6 +2,7 @@
 #include "not_acl.cpp"  // aclGetTensorDescType
 #include "helpers.cpp"  // calc_num_elements, formatTensorList
 #include <cstring>      // memcpy, memset, size_t, strstr
+#include <string>
 
 void __not_acl_op_compiler_placeholder() {}
 
@@ -33,6 +34,9 @@ typedef enum {
     ACL_OP_DEBUG_OPTION
 } aclCompileOpt;
 
+constexpr int ACL_COMPILE_OPT_COUNT = static_cast<int>(ACL_OP_DEBUG_OPTION) + 1;
+static std::string compileOptValues[ACL_COMPILE_OPT_COUNT];
+
 static const char* aclCompileOptToString(aclCompileOpt opt) {
     switch (opt) {
         case ACL_PRECISION_MODE:            return "PRECISION_MODE";
@@ -57,14 +61,30 @@ static const char* aclCompileOptToString(aclCompileOpt opt) {
 }
 
 ACL_FUNC_VISIBILITY aclError aclSetCompileopt(aclCompileOpt opt, const char *value) {
-    std::ostringstream log;
+ /* std::ostringstream log;
     log << "[aclSetCompileopt] opt=" << aclCompileOptToString(opt)
         << " (" << static_cast<int>(opt) << ")"
         << " value=" << (value ? value : "(null)");
-    log_output(log);
+    log_output(log); */
 
-    // not‑NPU: компилятора нет, все compile options игнорируются
+    compileOptValues[opt] = (value != nullptr) ? value : std::string{};
+
     return ACL_SUCCESS;
+}
+
+static std::string logCompileOpts() {
+    std::ostringstream log;
+    bool first = true;
+    for (int i = 0; i < ACL_COMPILE_OPT_COUNT; ++i)
+        if (!compileOptValues[i].empty()) {
+            if (first)
+                first = false;
+            else
+                log << ", ";
+            log << aclCompileOptToString(static_cast<aclCompileOpt>(i))
+                << "=" << compileOptValues[i];
+        }
+    return log.str();
 }
 
 
@@ -1424,6 +1444,7 @@ ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
     std::ostringstream log;
     log << "[aclopCompileAndExecute] opType=" << (opType ? opType : "(null)")
         << " opPath=" << (opPath ? opPath : "(null)") << " stream=" << stream
+        << "\n    opts: " << logCompileOpts()
         << "\n    numInputs=" << numInputs << " numOutputs=" << numOutputs
     << formatTensorList("input", inputDesc, inputs, numInputs, PRINT_ALL)
     << formatTensorList("output", outputDesc, outputs, numOutputs, PRINT_DESC);

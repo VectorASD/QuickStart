@@ -163,9 +163,9 @@ ACL_FUNC_VISIBILITY aclError aclrtSynchronizeStreamWithTimeout(aclrtStream strea
 
 ACL_FUNC_VISIBILITY aclError aclrtGetDeviceCount(uint32_t *count) {
     *count = g_device_count;
-    std::ostringstream log;
-    log << "[aclrtGetDeviceCount] count=" << *count;
-    log_output(log);
+ // std::ostringstream log;
+ // log << "[aclrtGetDeviceCount] count=" << *count;
+ // log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -288,7 +288,7 @@ ACL_FUNC_VISIBILITY aclError aclrtGetDevice(int32_t *deviceId) {
         log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
     }
-    log_output(log);
+ // log_output(log);
 
     *deviceId = g_current_device;
 
@@ -1087,8 +1087,8 @@ ACL_FUNC_VISIBILITY void aclSetTensorDescName(aclTensorDesc *desc, const char *n
 
     desc->name = name;
 
-    log << "\n    stored name=\"" << desc->name << "\"";
-    log_output(log);
+ // log << "\n    stored name=\"" << desc->name << "\"";
+ // log_output(log);
 }
 
 ACL_FUNC_VISIBILITY aclError aclSetTensorFormat(aclTensorDesc *desc, aclFormat format) {
@@ -1556,16 +1556,16 @@ ACL_FUNC_VISIBILITY aclopAttr *aclopCreateAttr() {
         return nullptr;
     }
 
-    log << "\n    created attr=" << a;
-    log_output(log);
+ // log << "\n    created attr=" << a;
+ // log_output(log);
 
     return a;
 }
 
 ACL_FUNC_VISIBILITY void aclopDestroyAttr(const aclopAttr *attr) {
-    std::ostringstream log;
-    log << "[aclopDestroyAttr] attr=" << attr;
-    log_output(log);
+ // std::ostringstream log;
+ // log << "[aclopDestroyAttr] attr=" << attr;
+ // log_output(log);
 
     delete attr;
 }
@@ -1584,8 +1584,8 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrBool(aclopAttr *attr, const char *attrN
 
     attr->bools[attrName] = attrValue;
 
-    log << "\n    stored bool: " << attrName << "=" << (int)attrValue;
-    log_output(log);
+ // log << "\n    stored bool: " << attrName << "=" << (int)attrValue;
+ // log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -1604,8 +1604,8 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrDataType(aclopAttr *attr, const char *a
 
     attr->dtypes[attrName] = attrValue;
 
-    log << "\n    stored dtype: " << attrName << "=" << static_cast<int>(attrValue);
-    log_output(log);
+ // log << "\n    stored dtype: " << attrName << "=" << static_cast<int>(attrValue);
+ // log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -1624,8 +1624,8 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrFloat(aclopAttr *attr, const char *attr
 
     attr->floats[attrName] = attrValue;
 
-    log << "\n    stored float: " << attrName << "=" << attrValue;
-    log_output(log);
+ // log << "\n    stored float: " << attrName << "=" << attrValue;
+ // log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -1644,8 +1644,8 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrInt(aclopAttr *attr, const char *attrNa
 
     attr->ints[attrName] = attrValue;
 
-    log << "\n    stored int: " << attrName << "=" << attrValue;
-    log_output(log);
+ // log << "\n    stored int: " << attrName << "=" << attrValue;
+ // log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -1672,9 +1672,9 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListBool(aclopAttr *attr, const char *a
 
     attr->list_bools[attrName] = std::move(out);
 
-    log << "\n    stored list<uint8_t>: " << attrName
-        << " size=" << numValues;
-    log_output(log);
+ // log << "\n    stored list<uint8_t>: " << attrName
+ //     << " size=" << numValues;
+ // log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -1701,9 +1701,9 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListFloat(aclopAttr *attr, const char *
 
     attr->list_floats[attrName] = std::move(out);
 
-    log << "\n    stored list<float>: " << attrName
-        << " size=" << numValues;
-    log_output(log);
+ // log << "\n    stored list<float>: " << attrName
+ //     << " size=" << numValues;
+ // log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -1730,9 +1730,9 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListInt(aclopAttr *attr, const char *at
 
     attr->list_ints[attrName] = std::move(out);
 
-    log << "\n    stored list<int64_t>: " << attrName
-        << " size=" << numValues;
-    log_output(log);
+ // log << "\n    stored list<int64_t>: " << attrName
+ //     << " size=" << numValues;
+ // log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -1780,9 +1780,9 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListListInt(aclopAttr *attr,
 
     attr->list_list_ints[attrName] = std::move(out);
 
-    log << "\n    stored list<list<int64_t>>: " << attrName
-        << " lists=" << numLists;
-    log_output(log);
+ // log << "\n    stored list<list<int64_t>>: " << attrName
+ //     << " lists=" << numLists;
+ // log_output(log);
 
     return ACL_SUCCESS;
 }
@@ -1801,9 +1801,9 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrString(aclopAttr *attr, const char *att
 
     attr->strings[attrName] = attrValue;
 
-    log << "\n    stored string: " << attrName
-        << "=\"" << attrValue << "\"";
-    log_output(log);
+ // log << "\n    stored string: " << attrName
+ //     << "=\"" << attrValue << "\"";
+ // log_output(log);
 
     return ACL_SUCCESS;
 }
