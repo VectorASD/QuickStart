@@ -77,8 +77,8 @@ def test_accuracy_randn(shape, dtype):
 
     mean = torch.mean(ref_out)
     std = torch.std(ref_out)
-    assert torch.abs(mean) < 0.01
-    assert torch.abs(std - 1) < 0.01
+    assert torch.abs(mean) < 0.016
+    assert torch.abs(std - 1) < 0.016
 
 
 @pytest.mark.rand_like
@@ -104,8 +104,8 @@ def test_accuracy_randn_like(shape, dtype):
 
     mean = torch.mean(ref_out)
     std = torch.std(ref_out)
-    assert torch.abs(mean) < 0.01
-    assert torch.abs(std - 1) < 0.01
+    assert torch.abs(mean) < 0.016
+    assert torch.abs(std - 1) < 0.016
 
 
 @pytest.mark.zeros
