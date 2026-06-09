@@ -1,3 +1,4 @@
+#include "ATen/ops/as_strided_copy.h"
 #include "ATen/ops/one_hot.h"
 #include "ATen/ops/one_hot_ops.h"
 #include "ATen/ops/zeros_like.h"
@@ -69,11 +70,38 @@ ACL_FUNC_VISIBILITY aclError aclSetCompileopt(aclCompileOpt opt, const char *val
  /* std::ostringstream log;
     log << "[aclSetCompileopt] opt=" << aclCompileOptToString(opt)
         << " (" << static_cast<int>(opt) << ")"
-        << " value=" << (value ? value : "(null)");
+        << " value='" << (value ? value : "(null)") << '\'';
     log_output(log); */
 
     compileOptValues[opt] = (value != nullptr) ? value : std::string{};
 
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY size_t aclGetCompileoptSize(aclCompileOpt opt) {
+    std::ostringstream log;
+    log << "[aclGetCompileoptSize] opt=" << aclCompileOptToString(opt)
+        << " (" << static_cast<int>(opt) << ")";
+    log_output(log);
+
+    return compileOptValues[opt].size() + 1; // +1 для '\0'
+}
+
+ACL_FUNC_VISIBILITY aclError aclGetCompileopt(aclCompileOpt opt, char *value, size_t length) {    
+    std::ostringstream log;
+    log << "[aclGetCompileopt] opt=" << aclCompileOptToString(opt)
+        << " (" << static_cast<int>(opt) << ")"
+        << " length=" << length
+        << " value='" << compileOptValues[opt] << '\'';
+    log_output(log);
+
+    if (!value || length == 0)
+        return ACL_ERROR_INVALID_PARAM;
+
+    auto val = compileOptValues[opt];
+    if (val.size() + 1 > length)
+        return ACL_ERROR_INVALID_PARAM; // буфер слишком мал, использовался явно не aclGetCompileoptSize
+    strcpy(value, val.c_str());
     return ACL_SUCCESS;
 }
 
@@ -87,10 +115,13 @@ static std::string logCompileOpts() {
             else
                 log << ", ";
             log << aclCompileOptToString(static_cast<aclCompileOpt>(i))
-                << "=" << compileOptValues[i];
+                << "='" << compileOptValues[i] << '\'';
         }
     return log.str();
 }
+
+static bool _init = (compileOptValues[ACL_OP_JIT_COMPILE] = "disable", true);
+// Иначе комплексные числа просто не заведутся
 
 
 // aclopCompileAndExecute функционал
@@ -112,7 +143,7 @@ REGISTER_OP(StatelessRandomNormalV2, {
     at::Tensor shape_tensor, out;
     ASSERT(numInputs == 4 && numOutputs == 1)                 // ровно 4 входа, 1 выход
     ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)   // выходной буфер существует и не пуст
-    ASSERT(inputs[0] && inputDesc[0])                          // shape: может быть пустым (data = nullptr для скаляра)
+    ASSERT(inputs[0] && inputDesc[0])                         // shape: может быть пустым (data = nullptr для скаляра)
     ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // seed: uint64, не пуст
     ASSERT(inputs[2] && inputDesc[2] && inputs[2]->data)      // counter: uint64[2], не пуст
 
@@ -131,23 +162,22 @@ REGISTER_OP(StatelessRandomNormalV2, {
     return H_OK;
 });
 
-
 REGISTER_OP(StatelessRandomUniformV2, {
     // Входы:  shape (int64), seed (uint64), counter (uint64[2]), alg (int32)
     // Выходы: result (float/double/half/…)
     at::Tensor shape_tensor, out;
     ASSERT(numInputs == 4 && numOutputs == 1)
     ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
-    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // shape: int64
-    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // seed: uint64
-    ASSERT(inputs[2] && inputDesc[2] && inputs[2]->data)      // counter: uint64[2]
+    ASSERT(inputs[0] && inputDesc[0])                         // shape: может быть пустым (data = nullptr для скаляра)
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // seed: uint64, не пуст
+    ASSERT(inputs[2] && inputDesc[2] && inputs[2]->data)      // counter: uint64[2], не пуст
 
     TRY(toAtenTensor(inputDesc[0], inputs[0], shape_tensor));
     TRY(toAtenTensor(outputDesc[0], outputs[0], out));
 
     const uint64_t* seed_ptr   = static_cast<const uint64_t*>(inputs[1]->data);
     const uint64_t* counter_ptr = static_cast<const uint64_t*>(inputs[2]->data);
-    uint64_t effective_seed = *seed_ptr + counter_ptr[1];
+    uint64_t effective_seed = *seed_ptr + counter_ptr[1];     // offset = counter[1]
 
     auto gen = at::detail::getDefaultCPUGenerator();
     gen.set_current_seed(effective_seed);
@@ -163,9 +193,9 @@ REGISTER_OP(StatelessRandperm, {
     at::Tensor n_tensor, out;
     ASSERT(numInputs == 3 && numOutputs == 1)
     ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
-    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // n: int64
-    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // seed: int64
-    ASSERT(inputs[2] && inputDesc[2] && inputs[2]->data)      // offset: int64
+    ASSERT(inputs[0] && inputDesc[0])                         // n: int64, может быть пустым (data = nullptr для n=0)
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // seed: int64, не пуст
+    ASSERT(inputs[2] && inputDesc[2] && inputs[2]->data)      // offset: int64, не пуст
 
     TRY(toAtenTensor(inputDesc[0], inputs[0], n_tensor));
     TRY(toAtenTensor(outputDesc[0], outputs[0], out));
@@ -580,7 +610,66 @@ REGISTER_OP(LessEqual, {
 });
 
 
-// Остальное
+// Унарные операции
+
+REGISTER_OP(Abs, {
+    // Вход:  a (float/double/int/half/bf16) – тензор любого числового типа
+    // Выход: out (тот же тип) – модуль элементов входного тензора
+    at::Tensor a, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // a: тензор
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], a));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    at::abs_out(out, a);
+    return H_OK;
+});
+
+REGISTER_OP(Acosh, {
+    // Вход:  self (float/double/half/bf16) – тензор, к которому применяется гиперболический арккосинус
+    // Выход: result (тот же тип) – тензор с вычисленным acosh(self)
+    at::Tensor self, result;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)   // result: тензор плавающего типа
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // self: тензор плавающего типа
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], result));
+
+    at::acosh_out(result, self);
+    return H_OK;
+});
+
+REGISTER_OP(AsStrided, {
+    // Входы:  self (тензор), shape (int64[]), stride (int64[]), storage_offset (int64 скаляр)
+    // Выходы: result (тензор с новыми shape и stride)
+    at::Tensor self, result;
+    ASSERT(numInputs == 4 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)   // result: тензор с заданной формой
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // self: входной тензор
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // shape: int64[]
+    ASSERT(inputs[2] && inputDesc[2] && inputs[2]->data)      // stride: int64[]
+    ASSERT(inputs[3] && inputDesc[3] && inputs[3]->data)      // storage_offset: int64 скаляр
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], result));
+
+    at::Tensor shape_tensor, stride_tensor, offset_tensor;
+    TRY(toAtenTensor(inputDesc[1], inputs[1], shape_tensor));
+    TRY(toAtenTensor(inputDesc[2], inputs[2], stride_tensor));
+    TRY(toAtenTensor(inputDesc[3], inputs[3], offset_tensor));
+
+    int64_t storage_offset = offset_tensor.item<int64_t>();
+    auto shape_ptr = shape_tensor.data_ptr<int64_t>();
+    auto stride_ptr = stride_tensor.data_ptr<int64_t>();
+    int64_t ndim = shape_tensor.numel();
+
+    at::as_strided_copy_out(result, self, at::IntArrayRef(shape_ptr, ndim),
+                          at::IntArrayRef(stride_ptr, ndim), storage_offset);
+    return H_OK;
+});
 
 REGISTER_OP(Cast, {
     at::Tensor inp, out;
@@ -595,6 +684,24 @@ REGISTER_OP(Cast, {
         out.copy_(inp.to(out.options()));  // нет to_out
     return H_OK;
 });
+
+REGISTER_OP(Ceil, {
+    // Вход:  a (float/double/half/bf16) – тензор с плавающей точкой
+    // Выход: out (тот же тип) – округление вверх до целого
+    at::Tensor a, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // a: тензор с плавающей точкой
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], a));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    at::ceil_out(out, a);
+    return H_OK;
+});
+
+
+// Остальное
 
 REGISTER_OP(LogicalAnd, {
     if (numInputs != 2 || numOutputs != 1)
@@ -686,21 +793,6 @@ REGISTER_OP(MaskedSelect, {
         default:
             return H_UNIMPLEMENTED;
     }
-    return H_OK;
-});
-
-REGISTER_OP(Abs, {
-    // Вход:  a (float/double/int/half/bf16) – тензор любого числового типа
-    // Выход: out (тот же тип) – модуль элементов входного тензора
-    at::Tensor a, out;
-    ASSERT(numInputs == 1 && numOutputs == 1)
-    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
-    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // a: тензор
-
-    TRY(toAtenTensor(inputDesc[0], inputs[0], a));
-    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
-
-    at::abs_out(out, a);
     return H_OK;
 });
 
@@ -1139,18 +1231,18 @@ REGISTER_OP(ReduceStdV2Update, {
     return H_OK;
 });
 
-REGISTER_OP(Ceil, {
-    // Вход:  a (float/double/half/bf16) – тензор с плавающей точкой
-    // Выход: out (тот же тип) – округление вверх до целого
-    at::Tensor a, out;
+REGISTER_OP(Acos, {
+    // Вход:  self (float/double/half/bf16) – тензор, к которому применяется арккосинус
+    // Выход: result (тот же тип) – тензор с вычисленным acos(self)
+    at::Tensor self, result;
     ASSERT(numInputs == 1 && numOutputs == 1)
-    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
-    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // a: тензор с плавающей точкой
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)   // result: тензор плавающего типа
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // self: тензор плавающего типа
 
-    TRY(toAtenTensor(inputDesc[0], inputs[0], a));
-    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], result));
 
-    at::ceil_out(out, a);
+    at::acos_out(result, self);
     return H_OK;
 });
 

@@ -70,3 +70,54 @@ def test_accuracy_abs(shape, dtype):
     res_out = torch.abs(inp)
 
     assert_equal(res_out, ref_out)
+
+
+@pytest.mark.inplace
+@pytest.mark.abs_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_abs_(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp.clone())
+
+    ref_out = torch.abs_(ref_inp)
+    res_out = torch.abs_(inp)
+
+    assert_equal(res_out, ref_out)
+
+
+@pytest.mark.acos
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_acos(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.acos(ref_inp)
+    res_out = torch.acos(inp)
+
+    assert_close(res_out, ref_out, dtype, True)
+
+
+@pytest.mark.angle
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", COMPLEX_DTYPES + FLOAT_DTYPES + ALL_INT_DTYPES + BOOL_TYPES)
+def test_accuracy_angle(shape, dtype):
+    if dtype in BOOL_TYPES:
+        inp = torch.randint(0, 2, size=shape, dtype=dtype, device=device)
+    elif dtype in ALL_INT_DTYPES:
+        inp = torch.randint(-0x7FFF, 0x7FFF, size=shape, dtype=dtype, device=device)
+    elif dtype in COMPLEX_DTYPES + FLOAT_DTYPES:
+        inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+    try:
+        ref_out = torch.angle(ref_inp)
+    except RuntimeError as e:
+        if "angle_cpu" in str(e) and "ComplexHalf" in str(e):
+            pytest.skip("Skipping angle ComplexHalf for unsupported dtype on CPU")
+        else:
+            raise
+    ref_out = torch.angle(ref_inp)
+    res_out = torch.angle(inp)
+    dtype_out = res_out.dtype
+    assert_close(res_out, ref_out, dtype_out)

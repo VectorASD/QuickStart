@@ -264,6 +264,13 @@ ACL_FUNC_VISIBILITY aclError aclrtMallocAlign32(void **devPtr,
         return ACL_ERROR_INVALID_PARAM;
     }
 
+    if (size == 0) {
+        *devPtr = nullptr;
+        log << "\n    size == 0 → devPtr = nullptr";
+        log_output(log, true);
+        return ACL_SUCCESS;
+    }
+
     // not‑NPU: выделяем память, выровненную на 32 байта
     void *ptr = nullptr;
     int ret = posix_memalign(&ptr, 32, size);
@@ -390,7 +397,7 @@ ACL_FUNC_VISIBILITY aclError aclrtDestroyStream(aclrtStream stream) {
     log << "[aclrtDestroyStream] stream=" << stream;
     log_output(log);
 
-    // not‑NPU: стримы не хранятся, просто no-op
+    free(stream);
 
     return ACL_SUCCESS;
 }
@@ -881,8 +888,9 @@ ACL_FUNC_VISIBILITY aclError aclrtDestroyStreamForce(aclrtStream stream) {
     std::ostringstream log;
     log << "[aclrtDestroyStreamForce] stream=" << stream;
     log_output(log);
+    
+    free(stream);
 
-    // not‑NPU: стримы не управляются, принудительное уничтожение эквивалентно обычному
     return ACL_SUCCESS;
 }
 

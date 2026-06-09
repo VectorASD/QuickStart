@@ -245,67 +245,77 @@ inline uint16_t float_to_bf16(float f) {
     return static_cast<uint16_t>(bits >> 16);
 }
 
+template <typename T>
+static std::string formatFloatValue(T val) {
+    std::ostringstream oss;
+    if constexpr (std::is_same_v<T, float>) {
+        if (std::abs(val) >= 1e-4f && std::abs(val) < 1e4f)
+            oss << std::fixed << std::setprecision(4) << val;
+        else
+            oss << std::scientific << std::setprecision(4) << val;
+    } else {
+        if (std::abs(val) >= 1e-4 && std::abs(val) < 1e4)
+            oss << std::fixed << std::setprecision(4) << val;
+        else
+            oss << std::scientific << std::setprecision(4) << val;
+    }
+    return oss.str();
+}
+
 // Преобразует один элемент тензора в строку по его типу
 static std::string aclElementToString(aclDataType dtype, const void* elemPtr) {
-    if (!elemPtr)
-        return "?";
+    if (!elemPtr) return "?";
+
+    auto formatFloat = [](float val) { return formatFloatValue(val); };
+    auto formatDouble = [](double val) { return formatFloatValue(val); };
+
     switch (dtype) {
-        case ACL_FLOAT: {
-            float val = *static_cast<const float*>(elemPtr);
+        case ACL_FLOAT:   return formatFloat(*static_cast<const float*>(elemPtr));
+        case ACL_DOUBLE:  return formatDouble(*static_cast<const double*>(elemPtr));
+        case ACL_FLOAT16: return formatFloat(half_to_float(*static_cast<const uint16_t*>(elemPtr)));
+        case ACL_BF16:    return formatFloat(bf16_to_float(*static_cast<const uint16_t*>(elemPtr)));
+        case ACL_INT8:    return std::to_string(static_cast<int>(*static_cast<const int8_t*>(elemPtr)));
+        case ACL_UINT8:   return std::to_string(static_cast<unsigned>(*static_cast<const uint8_t*>(elemPtr)));
+        case ACL_INT16:   return std::to_string(*static_cast<const int16_t*>(elemPtr));
+        case ACL_UINT16:  return std::to_string(*static_cast<const uint16_t*>(elemPtr));
+        case ACL_INT32:   return std::to_string(*static_cast<const int32_t*>(elemPtr));
+        case ACL_UINT32:  return std::to_string(*static_cast<const uint32_t*>(elemPtr));
+        case ACL_INT64:   return std::to_string(*static_cast<const int64_t*>(elemPtr));
+        case ACL_UINT64:  return std::to_string(*static_cast<const uint64_t*>(elemPtr));
+        case ACL_BOOL:    return *static_cast<const bool*>(elemPtr) ? "true" : "false";
+
+        case ACL_COMPLEX32: {
+            const uint16_t* p = static_cast<const uint16_t*>(elemPtr);
+            float real = half_to_float(p[0]);
+            float imag = half_to_float(p[1]);
+            if (real == 0.0f && imag == 0.0f)
+                return "0";
             std::ostringstream oss;
-            if (std::abs(val) >= 1e-4f && std::abs(val) < 1e4f)
-                oss << std::fixed << std::setprecision(4) << val;
-            else
-                oss << std::scientific << std::setprecision(4) << val;
+            oss << formatFloat(real)
+                << (imag >= 0 && !std::signbit(imag) ? "+" : "")
+                << formatFloat(imag) << "j";
             return oss.str();
         }
-        case ACL_DOUBLE: {
-            double val = *static_cast<const double*>(elemPtr);
+        case ACL_COMPLEX64: {
+            const float* p = static_cast<const float*>(elemPtr);
+            if (p[0] == 0.0f && p[1] == 0.0f)
+                return "0";
             std::ostringstream oss;
-            if (std::abs(val) >= 1e-4 && std::abs(val) < 1e4)
-                oss << std::fixed << std::setprecision(4) << val;
-            else
-                oss << std::scientific << std::setprecision(4) << val;
+            oss << formatFloat(p[0])
+                << (p[1] >= 0 && !std::signbit(p[1]) ? "+" : "")
+                << formatFloat(p[1]) << "j";
             return oss.str();
         }
-        case ACL_FLOAT16: {
-            uint16_t v = *static_cast<const uint16_t*>(elemPtr);
-            float f = half_to_float(v);
+        case ACL_COMPLEX128: {
+            const double* p = static_cast<const double*>(elemPtr);
+            if (p[0] == 0.0 && p[1] == 0.0)
+                return "0";
             std::ostringstream oss;
-            if (std::abs(f) >= 1e-4f && std::abs(f) < 1e4f)
-                oss << std::fixed << std::setprecision(4) << f;
-            else
-                oss << std::scientific << std::setprecision(4) << f;
+            oss << formatDouble(p[0])
+                << (p[1] >= 0 && !std::signbit(p[1]) ? "+" : "")
+                << formatDouble(p[1]) << "j";
             return oss.str();
         }
-        case ACL_BF16: {
-            uint16_t v = *static_cast<const uint16_t*>(elemPtr);
-            float f = bf16_to_float(v);
-            std::ostringstream oss;
-            if (std::abs(f) >= 1e-4f && std::abs(f) < 1e4f)
-                oss << std::fixed << std::setprecision(4) << f;
-            else
-                oss << std::scientific << std::setprecision(4) << f;
-            return oss.str();
-        }
-        case ACL_INT8:
-            return std::to_string(static_cast<int>(*static_cast<const int8_t*>(elemPtr)));
-        case ACL_UINT8:
-            return std::to_string(static_cast<unsigned>(*static_cast<const uint8_t*>(elemPtr)));
-        case ACL_INT16:
-            return std::to_string(*static_cast<const int16_t*>(elemPtr));
-        case ACL_UINT16:
-            return std::to_string(*static_cast<const uint16_t*>(elemPtr));
-        case ACL_INT32:
-            return std::to_string(*static_cast<const int32_t*>(elemPtr));
-        case ACL_UINT32:
-            return std::to_string(*static_cast<const uint32_t*>(elemPtr));
-        case ACL_INT64:
-            return std::to_string(*static_cast<const int64_t*>(elemPtr));
-        case ACL_UINT64:
-            return std::to_string(*static_cast<const uint64_t*>(elemPtr));
-        case ACL_BOOL:
-            return *static_cast<const bool*>(elemPtr) ? "true" : "false";
         default:
             return "?";
     }
@@ -497,10 +507,9 @@ static inline at::ScalarType toAtenType(aclDataType dt) {
         case ACL_INT64:   return at::kLong;
         case ACL_UINT64:  return at::kUInt64;
         case ACL_BOOL:    return at::kBool;
+        case ACL_COMPLEX32:  return at::kComplexHalf;
         case ACL_COMPLEX64:  return at::kComplexFloat;
         case ACL_COMPLEX128: return at::kComplexDouble;
-        case ACL_COMPLEX32:  // нет прямого аналога, fallback к complex float
-                             return at::kComplexFloat;
         default:          return at::ScalarType::Undefined;
     }
 }

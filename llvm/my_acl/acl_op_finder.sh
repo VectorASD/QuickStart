@@ -51,10 +51,6 @@ done
 : << 'COMMENT'
 финальный результат поисков (всего 384 операций):
 
-    Acos
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AcosKernelNpu.cpp:27:    cmd.Name("Acos")
-    Acosh
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AcoshKernelNpu.cpp:27:    cmd.Name("Acosh")
     AdaptiveAvgPool2d
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AdaptiveAvgPool2dKernelNpu.cpp:52:        cmd.Name("AdaptiveAvgPool2d")
     AdaptiveAvgPool2dGrad
@@ -85,9 +81,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ArgmaxKernelNpu.cpp:28:    cmd.Name("ArgMaxV2")
     ArgMin
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ArgminKernelNpu.cpp:30:    cmd.Name("ArgMin")
-    AsStrided
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AsStridedKernelNpu.cpp:70:        cmd.Name("AsStrided")
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AsStridedKernelNpu.cpp:86:        cmd.Name("AsStrided")
     AscendQuantV2
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/QuantizeKernelNpu.cpp:81:    cmd.Name("AscendQuantV2")
     Asin
@@ -856,6 +849,10 @@ A
     Abs
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/config/README.md:97:    cmd.Name("Abs")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AbsKernelNpu.cpp:27:    cmd.Name("Abs")
+    Acos
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AcosKernelNpu.cpp:27:    cmd.Name("Acos")
+    Acosh
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AcoshKernelNpu.cpp:27:    cmd.Name("Acosh")
     Add
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AddKernelNpu.cpp:59:    cmd.Name("Add")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AddKernelNpu.cpp:94:            cmd.Name("Add").Input(self).Input(other).Output(result, "", c10::nullopt, real_type).Run();
@@ -865,6 +862,9 @@ A
     ArgMinWithValue
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MinKernelNpu.cpp:35:    cmd.Name("ArgMinWithValue")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MinV1KernelNpu.cpp:31:    cmd.Name("ArgMinWithValue")
+    AsStrided
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AsStridedKernelNpu.cpp:70:        cmd.Name("AsStrided")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/AsStridedKernelNpu.cpp:86:        cmd.Name("AsStrided")
 B
     BroadcastTo
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BroadcastKernelNpu.cpp:31:    cmd.Name("BroadcastTo")

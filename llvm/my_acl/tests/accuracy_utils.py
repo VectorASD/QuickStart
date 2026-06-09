@@ -98,7 +98,7 @@ def assert_close(res, ref, dtype, equal_nan=False, reduce_dim=1, atol=1e-4):
     if dtype is None:
         dtype = torch.float32
     assert res.dtype == dtype
-    ref = ref.to(dtype, device="cpu")
+    ref = ref.to(dtype=dtype, device="cpu")
     res = res.to(device="cpu")
     rtol = RESOLUTION[dtype]
     torch.testing.assert_close(res, ref, atol=atol * reduce_dim, rtol=rtol, equal_nan=equal_nan)
