@@ -1,13 +1,19 @@
+import pytest
+
 import ctypes
 import gc
 import os
 import pty
+from pathlib import Path
 import psutil
-import pytest
 import select
+import signal
+import stat
 import subprocess
 import sys
 import threading
+
+
 
 # ---------- memory check ----------
 libc = ctypes.CDLL("libc.so.6")
@@ -29,6 +35,8 @@ def memory_check(request):
     check_memory()
     yield
     check_memory()
+
+
 
 # ---------- Attrs ----------
 class Attrs:
@@ -104,7 +112,10 @@ class VirtualTerminal:
         self.dirty_start_row = None
         self.dirty_start_col = None
 
-        self.fd = open(log_path, 'w+b')
+        log_path.touch(exist_ok=True)
+        log_path.chmod(log_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        self.fd = log_path.open('w+b')
+
         magic = b'body=$(tail -n +2 "$0"); printf "%b\\n" "$body"; exit\n'
         self.fd.write(magic)
         self.magic_len = len(magic)
@@ -142,17 +153,17 @@ class VirtualTerminal:
             elif c == '\n':
                 # перед переходом на новую строку – финализируем текущую, если она изменялась
                 if self.dirty_start_row is not None:
-                    self._flush_current_line()
+                    self._flush_dirty_region()
                     self.dirty_start_row = None
                     self.dirty_start_col = None
                 # записываем физический перевод строки в лог
-                self.fd.write(b'\r\n')
+                self.fd.write(b'\n')
                 self._linefeed()
                 # запоминаем начало новой строки
                 if len(self.line_offsets) <= self.cursor_row:
                     self.line_offsets.extend([None] * (self.cursor_row - len(self.line_offsets) + 1))
                 self.line_offsets[self.cursor_row] = self.fd.tell()
-                self.last_written_attrs = DEFAULT_ATTRS.copy()
+                # НЕ сбрасываем last_written_attrs – атрибуты наследуются с предыдущей строки
                 i += 1
             elif c == '\r':
                 self.cursor_col = 0
@@ -175,17 +186,32 @@ class VirtualTerminal:
 
         # в конце ввода финализируем последнюю изменённую строку
         if self.dirty_start_row is not None:
-            self._flush_current_line()
+            self._flush_dirty_region()
             self.dirty_start_row = None
             self.dirty_start_col = None
             self.fd.flush()
 
     def close(self):
+        # Если последние атрибуты не дефолтные, сбрасываем их в лог
+        if self.last_written_attrs != DEFAULT_ATTRS:
+            diff = diff_attrs(self.last_written_attrs, DEFAULT_ATTRS)
+            if diff:
+                self._write_raw(diff)
         self.fd.close()
 
     # -----------------------------------------------------------------
     #  Основные функции: put и flush
     # -----------------------------------------------------------------
+    def _update_dirty(self, row: int, col: int):
+        """Помечает ячейку (row, col) как минимальную границу грязного региона."""
+        if self.dirty_start_row is None:
+            self.dirty_start_row = row
+            self.dirty_start_col = col
+        elif row < self.dirty_start_row or \
+             (row == self.dirty_start_row and col < self.dirty_start_col):
+            self.dirty_start_row = row
+            self.dirty_start_col = col
+
     def _put_char(self, char: str):
         """Добавляет/заменяет символ в позиции курсора и двигает курсор."""
         # autowrap
@@ -195,15 +221,7 @@ class VirtualTerminal:
             if self.cursor_row >= self.max_height:
                 self._scroll_up()
 
-        # отслеживание самой ранней «грязной» ячейки
-        if self.dirty_start_row is None:
-            self.dirty_start_row = self.cursor_row
-            self.dirty_start_col = self.cursor_col
-        else:
-            if (self.cursor_row < self.dirty_start_row or
-                (self.cursor_row == self.dirty_start_row and self.cursor_col < self.dirty_start_col)):
-                self.dirty_start_row = self.cursor_row
-                self.dirty_start_col = self.cursor_col
+        self._update_dirty(self.cursor_row, self.cursor_col)
 
         # гарантируем существование строки и столбца в матрице
         while len(self.screen) <= self.cursor_row:
@@ -237,46 +255,83 @@ class VirtualTerminal:
         self.screen.append([])
         self.cursor_row = self.max_height - 1
 
-    def _flush_current_line(self):
-        """Записывает в файл (или перезаписывает) текущую изменённую строку."""
+    def _flush_dirty_region(self):
+        if self.dirty_start_row is None:
+            return
+
         row = self.dirty_start_row
-        if row is None or row >= len(self.screen):
+        col = self.dirty_start_col
+        if row >= len(self.screen):
             return
         line = self.screen[row]
 
-        # Найти последний значащий столбец (не пробел или не дефолтные атрибуты)
+        # 1. Определяем позицию в файле и начальные атрибуты
+        if col == 0:
+            # Начало строки: ищем позицию начала строки в файле
+            if row < len(self.line_offsets) and self.line_offsets[row] is not None:
+                self.fd.seek(self.line_offsets[row])
+            else:
+                self.fd.seek(0, os.SEEK_END)
+                if row >= len(self.line_offsets):
+                    self.line_offsets.extend([None] * (row - len(self.line_offsets) + 1))
+                self.line_offsets[row] = self.fd.tell()
+            # Атрибуты перед началом строки — от последнего значащего символа выше
+            last_attrs = self._get_effective_attrs(row - 1, self.width - 1)
+        else:
+            # Ищем последнюю записанную в файл ячейку строго левее col
+            pos = None
+            prev_attrs = None
+            for c in range(col - 1, -1, -1):
+                if c < len(line) and line[c][2] is not None:
+                    pos = line[c][2] + len(line[c][0].encode('utf-8'))
+                    prev_attrs = line[c][1].copy()
+                    break
+            if pos is not None:
+                self.fd.seek(pos)
+                last_attrs = prev_attrs
+            else:
+                # Записанных ячеек левее нет — начинаем с начала строки
+                if row < len(self.line_offsets) and self.line_offsets[row] is not None:
+                    self.fd.seek(self.line_offsets[row])
+                else:
+                    self.fd.seek(0, os.SEEK_END)
+                    if row >= len(self.line_offsets):
+                        self.line_offsets.extend([None] * (row - len(self.line_offsets) + 1))
+                    self.line_offsets[row] = self.fd.tell()
+                last_attrs = self._get_effective_attrs(row, col - 1)
+
+        # 2. Определяем последний значащий столбец в строке
         last_sig = -1
         for c in range(len(line)):
             ch, attrs, _ = line[c]
             if ch != ' ' or attrs != DEFAULT_ATTRS:
                 last_sig = c
 
-        # Определить offset начала строки в файле
-        if row < len(self.line_offsets) and self.line_offsets[row] is not None:
-            start_offset = self.line_offsets[row]
-        else:
-            # Новая строка, начинаем с конца файла
-            self.fd.seek(0, os.SEEK_END)
-            # Расширяем line_offsets, если нужно
-            if row >= len(self.line_offsets):
-                self.line_offsets.extend([None] * (row - len(self.line_offsets) + 1))
-            self.line_offsets[row] = self.fd.tell()
-            start_offset = self.line_offsets[row]
-
-        if last_sig == -1:
-            # Строка стала пустой – удаляем её содержимое
-            self.fd.seek(start_offset)
-            self.fd.truncate()
-            # line_offsets[row] остаётся на начало (теперь здесь конец файла)
+        # 3. Особый случай: грязь находится правее всех значащих символов
+        if col > last_sig:
+            if last_sig >= 0:
+                last_cell = line[last_sig]
+                if last_cell[2] is not None:
+                    self.fd.seek(last_cell[2] + len(last_cell[0].encode('utf-8')))
+                # Проверяем, изменились ли атрибуты для будущих символов
+                current_eff = self._get_effective_attrs(row, col - 1)
+                if current_eff != last_attrs:
+                    diff = diff_attrs(last_attrs, current_eff)
+                    if diff:
+                        self._write_raw(diff)
+                        last_attrs = current_eff.copy()
+            # Усекаем хвост (до следующей строки)
+            if row + 1 < len(self.line_offsets) and self.line_offsets[row+1] is not None:
+                next_start = self.line_offsets[row+1]
+                if self.fd.tell() < next_start:
+                    self.fd.truncate(next_start)
+            else:
+                self.fd.truncate()
+            self.last_written_attrs = last_attrs
             return
 
-        # Начинаем запись с чистого состояния атрибутов для этой строки
-        self.fd.seek(start_offset)
-        self.last_written_attrs = DEFAULT_ATTRS.copy()
-        last_attrs = self.last_written_attrs
-
-        # Выводим все символы строки от 0 до last_sig
-        for col in range(last_sig + 1):
+        # 4. Обычная перезапись от col до last_sig
+        while col <= last_sig:
             if col < len(line):
                 cell = line[col]
             else:
@@ -284,7 +339,6 @@ class VirtualTerminal:
             char = cell[0]
             attrs = cell[1]
 
-            # Умная расстановка атрибутов
             if attrs != last_attrs:
                 if char == ' ' and not _has_visible_effect(attrs):
                     self._write_char(' ', last_attrs)
@@ -297,18 +351,18 @@ class VirtualTerminal:
             else:
                 self._write_char(char, last_attrs)
 
-            # Обновляем ячейку в матрице и её offset
             while len(line) <= col:
                 line.append([' ', DEFAULT_ATTRS.copy(), None])
             line[col][0] = char
             line[col][1] = attrs.copy()
             line[col][2] = self.fd.tell() - len(char.encode('utf-8'))
+            col += 1
 
-        # Обрезаем хвост, оставшийся от предыдущей более длинной версии строки
-        # Если есть следующая строка с известным offset, обрезаем до неё
-        if row + 1 < len(self.line_offsets) and self.line_offsets[row + 1] is not None:
-            next_start = self.line_offsets[row + 1]
-            self.fd.truncate(next_start)
+        # 5. Обрезаем хвост
+        if row + 1 < len(self.line_offsets) and self.line_offsets[row+1] is not None:
+            next_start = self.line_offsets[row+1]
+            if self.fd.tell() < next_start:
+                self.fd.truncate(next_start)
         else:
             self.fd.truncate()
 
@@ -331,6 +385,30 @@ class VirtualTerminal:
     # -----------------------------------------------------------------
     #  Обработка CSI-команд
     # -----------------------------------------------------------------
+    def _get_effective_attrs(self, row: int, col: int) -> Attrs:
+        """
+        Ищет ближайший значащий символ слева от (row, col) или на предыдущих строках.
+        Значащим считается символ, который НЕ является пробелом без видимых атрибутов
+        (т.е. если пробел подчёркнут/зачёркнут/инвертирован или имеет фон – он видим).
+        """
+        r, c = row, col
+        while r >= 0:
+            if r >= len(self.screen):
+                r -= 1
+                c = self.width - 1
+                continue
+            line = self.screen[r]
+            while c >= 0:
+                if c < len(line):
+                    ch, attrs, _ = line[c]
+                    # игнорируем только пробелы без видимых эффектов
+                    if ch != ' ' or _has_visible_effect(attrs):
+                        return attrs.copy()
+                c -= 1
+            r -= 1
+            c = self.width - 1
+        return DEFAULT_ATTRS.copy()
+
     def _csi_dispatch(self, command: str, params_str: str):
         params = []
         if params_str.strip():
@@ -345,6 +423,8 @@ class VirtualTerminal:
 
         if command == 'm':
             self._sgr(params)
+            if self.cursor_row < len(self.screen):
+                self._update_dirty(self.cursor_row, self.cursor_col)
         elif command == 'A':  # вверх
             n = params[0] if params else 1
             self.cursor_row = max(0, self.cursor_row - n)
@@ -473,7 +553,7 @@ def is_child_process():
         return current.exe() == parent.exe()
     except: return False
 
-def run_pytest_via_subprocess():
+def run_pytest_via_subprocess(log_path):
     env = os.environ.copy()
     rows, cols = get_terminal_size()
     args = [sys.executable, '-m', 'pytest'] + sys.argv[1:]
@@ -492,8 +572,7 @@ def run_pytest_via_subprocess():
     )
     os.close(slave_fd)
 
-    log_file_path = "my.log"
-    terminal = VirtualTerminal(log_file_path, width=cols, max_height=1000)
+    terminal = VirtualTerminal(log_path, width=cols, max_height=1000)
 
     def read_and_process():
         nonlocal proc
@@ -524,10 +603,43 @@ def run_pytest_via_subprocess():
     try:
         proc.wait()
     except KeyboardInterrupt:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+        except ProcessLookupError:
+            pass
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+            proc.wait()
+    except KeyboardInterrupt:
         proc.terminate()
         proc.wait()
     thread.join(timeout=1)
-    sys.exit(proc.returncode)
+  # sys.exit(proc.returncode) # Тогда после Ctrl+C или любого неудавшегося теста, pytest начнёт много писать "INTERNALERROR> ..."
+    os._exit(proc.returncode)
 
-if not is_child_process():
-    run_pytest_via_subprocess()
+
+
+def make_log_path(config):
+    test_files = [arg for arg in config.args if arg.endswith('.py')]
+    assert len(test_files) == 1, test_files
+    test_file = Path(test_files[0]).resolve()
+    log_dir = test_file.parent / "log"
+    log_dir.mkdir(exist_ok=True)
+    stem = test_file.stem
+    if stem.startswith("test_"):
+        stem = stem[len("test_"):]
+    return log_dir / f"{stem}.log"
+
+def pytest_addoption(parser):
+    parser.addoption("--log", action="store_true", default=False, help="Enable virtual terminal logging")
+
+def pytest_configure(config):
+    if config.getoption("log", default=False):
+        if is_child_process():
+            config.option.capture = "fd"
+        else:
+            config.option.capture = "no"
+            log_path = make_log_path(config)
+            run_pytest_via_subprocess(log_path)
