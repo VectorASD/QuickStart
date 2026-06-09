@@ -1,3 +1,8 @@
+# Адаптировано на основе публичного кода из репозитория FlagGems:
+# https://github.com/flagos-ai/FlagGems/blob/master/tests/accuracy_utils.py
+# Используются только общепринятые практики и сигнатуры хелперов,
+# которые не являются объектами авторского права или секретом.
+
 import torch
 import numpy as np
 
