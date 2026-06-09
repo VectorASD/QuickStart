@@ -836,18 +836,6 @@ void broadcastCompareOp(TensorAccessor<bool>& out,
         break; \
     }
 
-#define DISPATCH_UNARY(DT, OP) \
-    case DT: { \
-        using T = aclDataTypeTraits<DT>::type; \
-        TensorAccessor<T> in(inputs[0]->data, inputDesc[0]->dims); \
-        TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
-        size_t count = in.numElements(); \
-        for (size_t i = 0; i < count; ++i) { \
-            out[i] = OP(in[i]); \
-        } \
-        break; \
-    }
-
 #define DISPATCH_REDUCE(DT, INIT, OP) \
     case DT: { \
         using T = aclDataTypeTraits<DT>::type; \

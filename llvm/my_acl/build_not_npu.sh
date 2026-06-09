@@ -54,6 +54,9 @@ LEVEL 4:
     for i in range(100): torch.eye(8192, device="npu", dtype=torch.double)
         Не очень похоже на то, чтобы у torch_npu и моего ACL были проблемы с освобождением памяти
     Виноват pytest?!
+        Нет.
+    Решение найдено:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
 
 grep "aclrtSetStreamOverflowSwitch" ~/tmp/pytorch/ -rn
 

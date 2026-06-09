@@ -112,7 +112,7 @@ REGISTER_OP(StatelessRandomNormalV2, {
     at::Tensor shape_tensor, out;
     ASSERT(numInputs == 4 && numOutputs == 1)                 // ровно 4 входа, 1 выход
     ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)   // выходной буфер существует и не пуст
-    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // shape: int64, не пуст
+    ASSERT(inputs[0] && inputDesc[0])                          // shape: может быть пустым (data = nullptr для скаляра)
     ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)      // seed: uint64, не пуст
     ASSERT(inputs[2] && inputDesc[2] && inputs[2]->data)      // counter: uint64[2], не пуст
 
@@ -130,6 +130,7 @@ REGISTER_OP(StatelessRandomNormalV2, {
     at::randn_out(out, sizes, gen);
     return H_OK;
 });
+
 
 REGISTER_OP(StatelessRandomUniformV2, {
     // Входы:  shape (int64), seed (uint64), counter (uint64[2]), alg (int32)
@@ -689,31 +690,17 @@ REGISTER_OP(MaskedSelect, {
 });
 
 REGISTER_OP(Abs, {
-    if (numInputs != 1 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
-        return H_UNASSERTED;
+    // Вход:  a (float/double/int/half/bf16) – тензор любого числового типа
+    // Выход: out (тот же тип) – модуль элементов входного тензора
+    at::Tensor a, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // a: тензор
 
-    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
-    switch (inDt) {
-        DISPATCH_UNARY(ACL_FLOAT,   std::abs)
-        DISPATCH_UNARY(ACL_DOUBLE,  std::abs)
-        DISPATCH_UNARY(ACL_INT8,    std::abs)
-        DISPATCH_UNARY(ACL_INT16,   std::abs)
-        DISPATCH_UNARY(ACL_INT32,   std::abs)
-        DISPATCH_UNARY(ACL_INT64,   std::abs)
-        // беззнаковые: abs эквивалентно копированию
-        DISPATCH_UNARY(ACL_UINT8,   [](uint8_t v) { return v; })
-        DISPATCH_UNARY(ACL_UINT16,  [](uint16_t v) { return v; })
-        DISPATCH_UNARY(ACL_UINT32,  [](uint32_t v) { return v; })
-        DISPATCH_UNARY(ACL_UINT64,  [](uint64_t v) { return v; })
-        DISPATCH_UNARY(ACL_FLOAT16, [](uint16_t v) { return float_to_half(std::abs(half_to_float(v))); })
-        DISPATCH_UNARY(ACL_BF16,    [](uint16_t v) { return float_to_bf16(std::abs(bf16_to_float(v))); })
-        default:
-            return H_UNIMPLEMENTED;
-    }
+    TRY(toAtenTensor(inputDesc[0], inputs[0], a));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    at::abs_out(out, a);
     return H_OK;
 });
 
@@ -1153,24 +1140,17 @@ REGISTER_OP(ReduceStdV2Update, {
 });
 
 REGISTER_OP(Ceil, {
-    if (numInputs != 1 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
-        return H_UNASSERTED;
+    // Вход:  a (float/double/half/bf16) – тензор с плавающей точкой
+    // Выход: out (тот же тип) – округление вверх до целого
+    at::Tensor a, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // a: тензор с плавающей точкой
 
-    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
-    switch (inDt) {
-        DISPATCH_UNARY(ACL_FLOAT,   std::ceil)
-        DISPATCH_UNARY(ACL_DOUBLE,  std::ceil)
-        DISPATCH_UNARY(ACL_FLOAT16, [](uint16_t v) { return float_to_half(std::ceil(half_to_float(v))); })
-        DISPATCH_UNARY(ACL_BF16,    [](uint16_t v) { return float_to_bf16(std::ceil(bf16_to_float(v))); })
-        // Целые типы не должны попадать в Ceil на NPU (torch_npu делает проверку ceil_integral_identity)
-        // Если всё же попали — возвращаем H_UNIMPLEMENTED
-        default:
-            return H_UNIMPLEMENTED;
-    }
+    TRY(toAtenTensor(inputDesc[0], inputs[0], a));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    at::ceil_out(out, a);
     return H_OK;
 });
 

@@ -34,7 +34,10 @@ ALL_FLOAT_DTYPES = (*FLOAT_DTYPES, *((torch.float64,) if fp64_is_supported else 
 
 INT_DTYPES = (torch.int16, torch.int32)
 ALL_INT_DTYPES = (*INT_DTYPES, *((torch.int64,) if int64_is_supported else ()))
+
 BOOL_TYPES = (torch.bool,)
+
+COMPLEX_DTYPES = (torch.complex32, torch.complex64)
 
 
 
@@ -44,6 +47,21 @@ QUICK_MODE = False
 
 DISTRIBUTION_SHAPES = ((20, 320, 15),)
 POINTWISE_SHAPES = (((2, 19, 7),) if QUICK_MODE else ((), (1,), (1024, 1024), (20, 320, 15), (16, 128, 64, 60), (16, 7, 57, 32, 29)))
+
+SWIGLU_SPECIAL_SHAPES = (((2, 19, 8),) if QUICK_MODE else (
+    (2,),
+    (64,),
+    (32, 64),
+    (256, 512),
+    (1, 128),
+    (8, 16, 32),
+    (16, 32, 64),
+    (20, 320, 16),
+    (4, 8, 16, 32),
+    (8, 16, 32, 64),
+    (10,),
+    (20, 30),
+))
 
 
 
@@ -67,6 +85,14 @@ RESOLUTION = {
     torch.complex32: 1e-3,
     torch.complex64: 1.3e-6,
 }
+
+def unsqueeze_tuple(t, max_len):
+    return t + (1,) * (max_len - len(t))
+
+def unsqueeze_tensor(inp, max_ndim):
+    for _ in range(inp.ndim, max_ndim):
+        inp = inp.unsqueeze(-1)
+    return inp
 
 def assert_close(res, ref, dtype, equal_nan=False, reduce_dim=1, atol=1e-4):
     if dtype is None:

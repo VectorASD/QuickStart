@@ -1,0 +1,72 @@
+# ----------------------------------------------------------------------
+#  Тесты для not_npu: проверка соответствия нашего эмулированного ACL
+#  реальному Ascend CANN Toolkit.
+#
+#  Исходная идея и мета-данные тестов (имена функций, наборы параметров,
+#  декораторы pytest) взяты из внутренних тестов FlagGems (приватного
+#  репозитория Huawei), однако **тела тестов написаны с нуля**.
+#
+#  Из FlagGems используются исключительно:
+#    - названия тестовых функций (test_accuracy_zeros, ...),
+#    - комбинации параметров (shapes, dtypes, fill_value),
+#    - pytest-маркеры и parametrize-декораторы.
+#  Это общепринятые обозначения и функциональность pytest/PyTorch,
+#  которые не являются объектом авторского права.
+#
+#  Сам torch_npu (и его код) никак не модифицируется: мы лишь
+#  подменяем несколько .so-библиотек (not_npu), эмулируя поведение
+#  Ascend CANN Toolkit на CPU.  Цель – убедиться, что наши
+#  реализации операций (ACL) полностью совместимы с реальным
+#  поведением toolkit'а на NPU.
+#
+#  Полезные библиотеки – полностью наша реализация (not_npu):
+#    - libascendcl.so          (базовый runtime: устройства, память, тензоры)
+#    - libacl_op_compiler.so   (эмуляция операторов ACL)
+#
+#  Заглушки, необходимые только для успешной линковки символов при импорте torch_npu._C:
+#    - libacl_tdt_channel.so
+#    - libge_runner.so
+#    - libgraph.so
+#    - libhccl.so
+#
+#  Все проверки выполняются стандартными средствами PyTorch и pytest.
+# ----------------------------------------------------------------------
+
+import pytest
+import torch
+
+TE_AVAILABLE = True
+
+from .accuracy_utils import (
+    ALL_FLOAT_DTYPES,
+    ALL_INT_DTYPES,
+    BOOL_TYPES,
+    COMPLEX_DTYPES,
+    FLOAT_DTYPES,
+    INT_DTYPES,
+    POINTWISE_SHAPES,
+    SWIGLU_SPECIAL_SHAPES,
+    assert_close,
+    assert_equal,
+    to_reference,
+    unsqueeze_tensor,
+    unsqueeze_tuple,
+    device,
+)
+
+# pytest test_unary_pointwise_ops.py -m abs -sv
+# pytest test_unary_pointwise_ops.py --count-100 --log
+
+
+
+@pytest.mark.abs
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_abs(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.abs(ref_inp)
+    res_out = torch.abs(inp)
+
+    assert_equal(res_out, ref_out)
