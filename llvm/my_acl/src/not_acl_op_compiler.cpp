@@ -1,8 +1,11 @@
 #include "common.h"     // log_output, ...
+
+#include "op_profiler.h" // record_op_timing
+
 #include "not_acl.cpp"  // aclGetTensorDescDimV2, aclGetTensorDescNumDims, aclGetTensorDescType
 #include "helpers.cpp"
-#include <cstring>      // memset, size_t
-#include <string>       // string
+#include <cstring>      // size_t, strcpy
+#include <string>       // std::string
 
 #include <ATen/core/Generator.h>
 

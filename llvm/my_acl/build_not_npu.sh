@@ -23,9 +23,11 @@ echo "TORCH_LIB=$TORCH_LIB"
 COMMENT
 TORCH_INCLUDE=/opt/python311/lib/python3.11/site-packages/torch/include
 TORCH_LIB=/opt/python311/lib/python3.11/site-packages/torch/lib
-TORCH_FLAGS=(
+TORCH_COMPILE_FLAGS=(
     -I"$TORCH_INCLUDE"
     -I"$TORCH_INCLUDE/torch/csrc/api/include"
+)
+TORCH_LINK_FLAGS=(
     -L"$TORCH_LIB"
     -ltorch -ltorch_cpu -lc10
 )
@@ -66,28 +68,67 @@ grep "cmd.Name" ~/tmp/pytorch/ -rn
 COMMENT
 
 
-export CC="ccache gcc"
-export CXX="ccache g++"
-export MOLD_FLAGS="-fuse-ld=mold"
+get_obj_name() {
+    local args=("$@")
+    local obj_file=""
+    for ((i=0; i < ${#args[@]}; i++)); do
+        if [[ "${args[i]}" == "-o" ]]; then
+            obj_file="${args[i+1]}"
+            break
+        fi
+    done
+    if [[ -z "$obj_file" ]]; then
+        echo "Error: no -o specified in command" >&2
+        exit 1
+    fi
+    basename "$obj_file"
+}
+
+build_obj() {
+    local compiler="$1"
+    local src="$2"
+    local obj="$3"
+    local extra_flags="$4"
+
+    local obj_name=$(basename "$obj")
+    echo -n "build $obj_name... "
+
+    ccache $compiler -fPIC -c "$SRC/$src" -I"$SRC" $extra_flags -o "$OBJ/$obj"
+
+    local ret=$?
+    if [[ $ret -eq 0 ]]; then
+        echo "DONE"
+    else
+        echo "FAILED"
+        exit $ret
+    fi
+}
+
+CC="gcc"
+CXX="g++"
+MOLD_FLAGS="-fuse-ld=mold"
 
 # 1. Компиляция объектных файлов (ccache кеширует .o)
-$CXX    -fPIC -c "$SRC/not_acl.cpp"               -I"$SRC" -o "$OBJ/not_acl.o"                               && echo "not_acl.o             DONE"
-$CXX    -fPIC -c "$SRC/not_acl_op_compiler.cpp"   -I"$SRC" ${TORCH_FLAGS[@]} -o "$OBJ/not_acl_op_compiler.o" && echo "not_acl_op_compiler.o DONE"
-$CXX    -fPIC -c "$SRC/not_opapi.cpp"             -I"$SRC" ${TORCH_FLAGS[@]} -o "$OBJ/not_opapi.o"           && echo "not_opapi.o           DONE"
+build_obj $CC not_hccl.c            not_hccl.o
+build_obj $CC not_ge_runner.c       not_ge_runner.o
+build_obj $CC not_graph.c           not_graph.o
+build_obj $CC not_acl_tdt_channel.c not_acl_tdt_channel.o
 
-$CC     -fPIC -c "$SRC/not_hccl.c"                -o "$OBJ/not_hccl.o"
-$CC     -fPIC -c "$SRC/not_ge_runner.c"           -o "$OBJ/not_ge_runner.o"
-$CC     -fPIC -c "$SRC/not_graph.c"               -o "$OBJ/not_graph.o"
-$CC     -fPIC -c "$SRC/not_acl_tdt_channel.c"     -o "$OBJ/not_acl_tdt_channel.o"
+build_obj $CXX not_acl.cpp             not_acl.o
+build_obj $CXX op_profiler.cpp         op_profiler.o
+build_obj $CXX not_acl_op_compiler.cpp not_acl_op_compiler.o "${TORCH_COMPILE_FLAGS[@]}"
+build_obj $CXX not_opapi.cpp           not_opapi.o "${TORCH_COMPILE_FLAGS[@]}"
 
 # 2. Линковка разделяемых библиотек (mold ускоряет)
-echo "Linking shared libraries..."
-$CC  $MOLD_FLAGS -shared "$OBJ/not_hccl.o"               -o "$LIB/libhccl.so"
-$CXX $MOLD_FLAGS -shared "$OBJ/not_acl.o"                -o "$LIB/libascendcl.so"
-$CXX $MOLD_FLAGS -shared "$OBJ/not_opapi.o"              ${TORCH_FLAGS[@]} -o "$LIB/libopapi.so"
-$CXX $MOLD_FLAGS -shared "$OBJ/not_acl_op_compiler.o"   \
+echo -n "Linking shared libraries... "
+$CC  $MOLD_FLAGS -shared "$OBJ/not_hccl.o"            -o "$LIB/libhccl.so"
+$CC  $MOLD_FLAGS -shared "$OBJ/not_ge_runner.o"       -o "$LIB/libge_runner.so"
+$CC  $MOLD_FLAGS -shared "$OBJ/not_graph.o"           -o "$LIB/libgraph.so"
+$CC  $MOLD_FLAGS -shared "$OBJ/not_acl_tdt_channel.o" -o "$LIB/libacl_tdt_channel.so"
+
+$CXX $MOLD_FLAGS -shared "$OBJ/not_acl.o" "$OBJ/op_profiler.o" -o "$LIB/libascendcl.so"
+$CXX $MOLD_FLAGS -shared "$OBJ/not_opapi.o"                    -o "$LIB/libopapi.so"   ${TORCH_LINK_FLAGS[@]}
+$CXX $MOLD_FLAGS -shared "$OBJ/not_acl_op_compiler.o"          -o "$LIB/libacl_op_compiler.so" \
     -L"$LIB" -Wl,--no-as-needed -lascendcl -Wl,--as-needed \
-    -Wl,-rpath='$ORIGIN' ${TORCH_FLAGS[@]} -o "$LIB/libacl_op_compiler.so"
-$CC  $MOLD_FLAGS -shared "$OBJ/not_ge_runner.o"          -o "$LIB/libge_runner.so"
-$CC  $MOLD_FLAGS -shared "$OBJ/not_graph.o"              -o "$LIB/libgraph.so"
-$CC  $MOLD_FLAGS -shared "$OBJ/not_acl_tdt_channel.o"    -o "$LIB/libacl_tdt_channel.so"
+    -Wl,-rpath='$ORIGIN' ${TORCH_LINK_FLAGS[@]}
+echo "DONE"
