@@ -108,7 +108,9 @@ def test_accuracy_angle(shape, dtype):
     elif dtype in ALL_INT_DTYPES:
         inp = torch.randint(-0x7FFF, 0x7FFF, size=shape, dtype=dtype, device=device)
     elif dtype in COMPLEX_DTYPES + FLOAT_DTYPES:
-        inp = torch.randn(shape, dtype=dtype, device=device)
+        inp = torch.randn(shape, dtype=dtype, device="cpu").to(device)
+        # какие-то проблемы в самом torch_npu - выделяет меньше памяти под тензор, чем надо?
+        # это приводит к Segmentation fault при вызове to_reference(inp)
     ref_inp = to_reference(inp)
     try:
         ref_out = torch.angle(ref_inp)

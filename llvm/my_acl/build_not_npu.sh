@@ -127,7 +127,8 @@ $CC  $MOLD_FLAGS -shared "$OBJ/not_graph.o"           -o "$LIB/libgraph.so"
 $CC  $MOLD_FLAGS -shared "$OBJ/not_acl_tdt_channel.o" -o "$LIB/libacl_tdt_channel.so"
 
 $CXX $MOLD_FLAGS -shared "$OBJ/not_acl.o" "$OBJ/op_profiler.o" -o "$LIB/libascendcl.so"
-$CXX $MOLD_FLAGS -shared "$OBJ/not_opapi.o"                    -o "$LIB/libopapi.so"   ${TORCH_LINK_FLAGS[@]}
+$CXX $MOLD_FLAGS -shared "$OBJ/not_opapi.o"                    -o "$LIB/libopapi.so" \
+    -L"$LIB" -lascendcl ${TORCH_LINK_FLAGS[@]}
 $CXX $MOLD_FLAGS -shared "$OBJ/not_acl_op_compiler.o"          -o "$LIB/libacl_op_compiler.so" \
     -L"$LIB" -Wl,--no-as-needed -lascendcl -Wl,--as-needed \
     -Wl,-rpath='$ORIGIN' ${TORCH_LINK_FLAGS[@]}

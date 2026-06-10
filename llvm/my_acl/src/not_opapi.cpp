@@ -8,10 +8,13 @@
 //  находятся в пакете: cann-opbase.run/ops_base/aclnn/acl_meta.h
 // ===================================================================
 
-#include "common.h"     // log_output, ...
-#include "not_acl.cpp"  // aclCreateTensorDesc, ...
-#include "helpers.cpp"
+#include "common.h"      // log_output, ...
+#include "not_acl.cpp"   // aclCreateDataBuffer, aclCreateTensorDesc
+#include "helpers.cpp"   // aclDataTypeToString, aclFormatToString, tensorDataToString
+#include "op_profiler.h" // record_op_timing
+
 #include <cstdint>      // int32_t, int64_t, uint64_t
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,6 +30,63 @@ struct aclScalarList {};
 typedef int32_t aclnnStatus;
 constexpr aclnnStatus OK = 0;
 constexpr aclnnStatus UNIMPLEMENTED = 1;
+constexpr aclnnStatus INVALID_PARAM = 2;
+constexpr aclnnStatus UNASSERTED    = 3;
+
+
+
+#undef ASSERT_CODE
+#undef ASSERT
+
+#define ASSERT_CODE(cond, code) \
+    do { \
+        if (!(cond)) { \
+            std::ostringstream _log; \
+            _log << "Error: " << __func__ << " assertion '" #cond "' failed"; \
+            log_output(_log, true); \
+            return code; \
+        } \
+    } while (0);
+
+#define ASSERT(cond) ASSERT_CODE(cond, UNASSERTED)
+
+#define LOAD_TENSOR(tensor_var, acl_tensor_ptr) \
+    do { \
+        auto _tensor = (acl_tensor_ptr); \
+        if (!(acl_tensor_ptr) || !_tensor->desc || !_tensor->buffer) { \
+            return UNIMPLEMENTED; \
+        } \
+        at::ScalarType type; \
+        if (!try_toAtenType(_tensor->desc->dtype, type)) { \
+            return UNIMPLEMENTED; \
+        } \
+        auto opts = at::TensorOptions().dtype(type).device(at::kCPU); \
+        std::vector<int64_t> dims = _tensor->desc->dims; \
+        std::vector<int64_t> strides = _tensor->strides; \
+        int64_t offset = _tensor->offset; \
+        size_t elemSize = aclDataTypeBytes(_tensor->desc->dtype); \
+        /* from_blob с stride и offset */ \
+        tensor_var = at::from_blob( \
+            (char*) _tensor->buffer->data + offset * elemSize, \
+            dims, strides, opts); \
+    } while (0);
+
+#define DEFINE_ACLNN_OP(NAME, EXECUTOR_TYPE, ...) \
+    __attribute__((visibility("default"))) \
+    aclnnStatus NAME(void *workspace, \
+                     uint64_t workspaceSize, \
+                     aclOpExecutor *executor, \
+                     aclrtStream stream) { \
+        auto t_start = std::chrono::steady_clock::now(); \
+        auto *exec = reinterpret_cast<EXECUTOR_TYPE*>(executor); \
+        ASSERT(exec) \
+        __VA_ARGS__ \
+        delete exec; \
+        auto t_end = std::chrono::steady_clock::now(); \
+        double elapsed_us = std::chrono::duration<double, std::micro>(t_end - t_start).count(); \
+        record_op_timing(#NAME, elapsed_us); \
+        return OK; \
+    }
 
 
 
@@ -101,8 +161,8 @@ aclTensor* aclCreateTensor(const int64_t* viewDims, uint64_t viewDimsNum, aclDat
     }
     tensor->offset = offset;
 
-    log << "\n" << tensorDataToString(tensor);
-    log_output(log, true);
+ // log << "\n" << tensorDataToString(tensor);
+ // log_output(log, true);
 
     return tensor;
 }
@@ -156,10 +216,17 @@ aclScalarList* aclCreateScalarList(const aclScalar* const* value, uint64_t size)
 }
 
 aclnnStatus aclDestroyTensor(const aclTensor* tensor) {
-    std::ostringstream log;
-    log << "[aclDestroyTensor] tensor=" << static_cast<const void*>(tensor);
-    log_output(log, true);
-    return UNIMPLEMENTED;
+ // std::ostringstream log;
+ // log << "[aclDestroyTensor] tensor=" << static_cast<const void*>(tensor);
+ // log_output(log, true);
+    if (tensor) {
+        if (tensor->desc)
+            aclDestroyTensorDesc(tensor->desc);
+        if (tensor->buffer)
+            aclDestroyDataBuffer(tensor->buffer);
+        delete tensor;
+    }
+    return OK;
 }
 
 aclnnStatus aclDestroyScalar(const aclScalar* scalar) {
@@ -450,35 +517,28 @@ aclnnStatus aclnnAngleV2GetWorkspaceSize(const aclTensor *x,
         << " workspaceSize=" << static_cast<void*>(workspaceSize)
         << " executor=" << static_cast<void*>(executor);
 
-    if (!workspaceSize || !executor) {
-        log << "\nError: UNIMPLEMENTED";
-        log_output(log, true);
-        return UNIMPLEMENTED;
-    }
+    ASSERT_CODE(workspaceSize && executor, INVALID_PARAM)
+    ASSERT(x && out)
 
     UnaryExecutor* exec = new UnaryExecutor{x, out};
-    *workspaceSize = 123;
+    *workspaceSize = 0;
     *executor = reinterpret_cast<aclOpExecutor*>(exec);
 
-    log << "\n    executor=" << static_cast<const void*>(exec);
-    log_output(log, true);
+ // log << "\n    executor=" << static_cast<const void*>(exec);
+ // log_output(log, true);
 
     return OK;
 }
 
-__attribute__((visibility("default")))
-aclnnStatus aclnnAngleV2(void *workspace,
-                         uint64_t workspaceSize,
-                         aclOpExecutor *executor,
-                         aclrtStream stream) {
-    std::ostringstream log;
-    log << "[aclnnAngleV2] workspace=" << workspace
-        << " workspaceSize=" << workspaceSize
-        << " executor=" << static_cast<const void*>(executor)
-        << " stream=" << stream;
-    log_output(log, true);
-    return OK;
-}
+DEFINE_ACLNN_OP(aclnnAngleV2, UnaryExecutor, {
+    ASSERT_CODE(!workspace && !workspaceSize && stream, INVALID_PARAM)
+
+    at::Tensor x_tensor, out_tensor;
+    LOAD_TENSOR(x_tensor, exec->x);
+    LOAD_TENSOR(out_tensor, exec->out);
+
+    at::angle_out(out_tensor, x_tensor);
+})
 
 
 #ifdef __cplusplus
