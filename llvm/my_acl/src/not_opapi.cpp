@@ -33,6 +33,18 @@ constexpr aclnnStatus UNIMPLEMENTED = 1;
 
 // ~~~ Основное meta-API ~~~
 
+aclTensor* aclCreateTensor(const int64_t* viewDims, uint64_t viewDimsNum, aclDataType dataType,
+                           const int64_t* stride, int64_t offset, aclFormat format,
+                           const int64_t* storageDims, uint64_t storageDimsNum,
+                           void* tensorData) {
+    std::ostringstream log;
+    log << "[aclCreateTensor] viewDimsNum=" << viewDimsNum
+        << " dataType=" << dataType
+        << " tensorData=" << tensorData;
+    log_output(log, true);
+    return nullptr;   // заглушка
+}
+
 aclScalar* aclCreateScalar(void* value, aclDataType dataType) {
     std::ostringstream log;
     log << "[aclCreateScalar] value=" << value
@@ -81,6 +93,13 @@ aclScalarList* aclCreateScalarList(const aclScalar* const* value, uint64_t size)
     return nullptr;
 }
 
+aclnnStatus aclDestroyTensor(const aclTensor* tensor) {
+    std::ostringstream log;
+    log << "[aclDestroyTensor] tensor=" << static_cast<const void*>(tensor);
+    log_output(log, true);
+    return UNIMPLEMENTED;
+}
+
 aclnnStatus aclDestroyScalar(const aclScalar* scalar) {
     std::ostringstream log;
     log << "[aclDestroyScalar] scalar=" << static_cast<const void*>(scalar);
@@ -123,7 +142,22 @@ aclnnStatus aclDestroyScalarList(const aclScalarList* array) {
     return UNIMPLEMENTED;
 }
 
-// aclGetViewShape, aclGetDataType – уже реализованы в not_opapi.cpp (настоящие)
+aclnnStatus aclGetViewShape(const aclTensor* tensor, int64_t** viewDims, uint64_t* viewDimsNum) {
+    std::ostringstream log;
+    log << "[aclGetViewShape] tensor=" << static_cast<const void*>(tensor)
+        << " viewDims=" << static_cast<void*>(viewDims)
+        << " viewDimsNum=" << static_cast<void*>(viewDimsNum);
+    log_output(log, true);
+    return UNIMPLEMENTED;
+}
+
+aclnnStatus aclGetDataType(const aclTensor* tensor, aclDataType* dataType) {
+    std::ostringstream log;
+    log << "[aclGetDataType] tensor=" << static_cast<const void*>(tensor)
+        << " dataType=" << static_cast<void*>(dataType);
+    log_output(log, true);
+    return UNIMPLEMENTED;
+}
 
 aclnnStatus aclGetStorageShape(const aclTensor* tensor, int64_t** storageDims, uint64_t* storageDimsNum) {
     std::ostringstream log;
@@ -333,6 +367,14 @@ aclnnStatus aclDumpOpTensors(const char* opType, const char* opName, aclTensor**
 }
 
 
+// ~~~ общие компоненты ~~~
+
+struct UnaryExecutor {
+    const aclTensor* x;
+    const aclTensor* out;
+};
+
+
 // ~~~ aclnn_angle_v2.h ~~~
 
 __attribute__((visibility("default")))
@@ -345,8 +387,21 @@ aclnnStatus aclnnAngleV2GetWorkspaceSize(const aclTensor *x,
         << " out=" << static_cast<const void*>(out)
         << " workspaceSize=" << static_cast<void*>(workspaceSize)
         << " executor=" << static_cast<void*>(executor);
+
+    if (!workspaceSize || !executor) {
+        log << "\nError: UNIMPLEMENTED";
+        log_output(log, true);
+        return UNIMPLEMENTED;
+    }
+
+    UnaryExecutor* exec = new UnaryExecutor{x, out};
+    *workspaceSize = 123;
+    *executor = reinterpret_cast<aclOpExecutor*>(exec);
+
+    log << "\n    executor=" << static_cast<const void*>(exec);
     log_output(log, true);
-    return UNIMPLEMENTED;
+
+    return OK;
 }
 
 __attribute__((visibility("default")))
@@ -360,7 +415,7 @@ aclnnStatus aclnnAngleV2(void *workspace,
         << " executor=" << static_cast<const void*>(executor)
         << " stream=" << stream;
     log_output(log, true);
-    return UNIMPLEMENTED;
+    return OK;
 }
 
 
