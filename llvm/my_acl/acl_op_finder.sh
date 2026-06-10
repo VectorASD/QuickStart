@@ -640,11 +640,6 @@ done
     ReverseV2
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FlipKernelNpu.cpp:31:    cmd.Name("ReverseV2")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ReverseKernelNpu.cpp:29:    cmd.Name("ReverseV2")
-    RightShift
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__Rshift__KernelNpu.cpp:29:    cmd.Name("RightShift")
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__Rshift__KernelNpu.cpp:43:    cmd.Name("RightShift")
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__iRshift__KernelNpu.cpp:27:    cmd.Name("RightShift").Input(self).Input(other, self.scalar_type()).Output(result).Run();
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__iRshift__KernelNpu.cpp:34:    cmd.Name("RightShift").Input(self).Input(other).Output(result).Run();
     RmsNorm
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RmsNormKernelNpu.cpp:49:    cmd.Name("RmsNorm")
     RmsNormGrad
@@ -962,6 +957,11 @@ R
     ReduceSum
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BatchNormGatherStatsWithCountsKernelNpu.cpp:51:    cmd_reduce.Name("ReduceSum")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/SumKernelNpu.cpp:36:    cmd.Name("ReduceSum")
+    RightShift
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__Rshift__KernelNpu.cpp:29:    cmd.Name("RightShift")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__Rshift__KernelNpu.cpp:43:    cmd.Name("RightShift")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__iRshift__KernelNpu.cpp:27:    cmd.Name("RightShift").Input(self).Input(other, self.scalar_type()).Output(result).Run();
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__iRshift__KernelNpu.cpp:34:    cmd.Name("RightShift").Input(self).Input(other).Output(result).Run();
 S
     Sort
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ArgsortKernelNpu.cpp:33:    cmd.Name("Sort").Input(self).Output(values).Output(indices).Attr("axis", dim).Attr("descending", descending).Run();

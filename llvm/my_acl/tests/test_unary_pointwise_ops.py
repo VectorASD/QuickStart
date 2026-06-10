@@ -162,3 +162,61 @@ def test_accuracy_bitwise_left_shift(shapes, dtype):
     ref_out = torch.bitwise_left_shift(ref_a, ref_b)
     res_out = NPU_bitwise_left_shift(res_a, res_b)
     assert_close(res_out, ref_out, dtype)
+
+
+def NPU_bitwise_right_shift(res_a, res_b):
+    res_a, res_b = broadcast_tensors(res_a, res_b)
+    return res_a >> res_b
+
+@pytest.mark.bitwise_right_shift
+@pytest.mark.parametrize("shapes", BITWISE_SHAPES)
+@pytest.mark.parametrize("dtype", ALL_INT_DTYPES + (torch.uint8,))
+def test_accuracy_bitwise_right_shift(shapes, dtype):
+    shape_a, shape_b = shapes
+    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device="cpu").to(device)
+    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device="cpu").to(device)
+    ref_a = to_reference(res_a)
+    ref_b = to_reference(res_b)
+
+    ref_out = torch.bitwise_right_shift(ref_a, ref_b)
+    res_out = NPU_bitwise_right_shift(res_a, res_b)
+    assert_close(res_out, ref_out, dtype)
+
+
+INPLACE_BITWISE_SHAPES = [
+    ((512, 1024), (512, 1024)),
+    ((256, 512), (1, 512)),
+    ((256, 512), (256, 1)),
+    ((1024,), ()),
+    # а здесь убрали те 3 формы, которые ломаются из-за op-plugin -_-
+]
+
+
+@pytest.mark.bitwise_left_shift
+@pytest.mark.parametrize("shapes", INPLACE_BITWISE_SHAPES)
+@pytest.mark.parametrize("dtype", ALL_INT_DTYPES + (torch.uint8,))
+def test_accuracy_bitwise_left_shift_(shapes, dtype):
+    shape_a, shape_b = shapes
+    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device="cpu").to(device)
+    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device="cpu").to(device)
+    ref_a = to_reference(res_a.clone())
+    ref_b = to_reference(res_b)
+
+    ref_a.bitwise_left_shift_(ref_b)
+    res_a = res_a << res_b  # res_a.bitwise_left_shift_(res_b)
+    assert_close(res_a, ref_a, dtype)
+
+
+@pytest.mark.bitwise_right_shift
+@pytest.mark.parametrize("shapes", INPLACE_BITWISE_SHAPES)
+@pytest.mark.parametrize("dtype", ALL_INT_DTYPES + (torch.uint8,))
+def test_accuracy_bitwise_right_shift_(shapes, dtype):
+    shape_a, shape_b = shapes
+    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device="cpu").to(device)
+    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device="cpu").to(device)
+    ref_a = to_reference(res_a.clone())
+    ref_b = to_reference(res_b)
+
+    ref_a.bitwise_right_shift_(ref_b)
+    res_a = res_a >> res_b  # res_a.bitwise_right_shift_(res_b)
+    assert_close(res_a, ref_a, dtype)

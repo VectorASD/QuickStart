@@ -720,6 +720,27 @@ REGISTER_OP(LeftShift, {
     return H_OK;
 });
 
+REGISTER_OP(RightShift, {
+    // Входы: self (целочисленный тензор), other (целочисленный тензор/скаляр)
+    // Выходы: result (тот же тип)
+    at::Tensor self, other, out;
+    ASSERT(numInputs == 2 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(inputDesc[1], inputs[1], other));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    ASSERT_CODE(self.scalar_type() == other.scalar_type() &&
+                at::isIntegralType(self.scalar_type(), /*includeBool=*/false),
+                H_UNIMPLEMENTED);
+
+    at::bitwise_right_shift_out(out, self, other);
+    return H_OK;
+});
+
 
 // Остальное
 
