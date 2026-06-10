@@ -9,9 +9,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 SRC="$SCRIPT_DIR/src"
+OBJ="$SCRIPT_DIR/obj"
 LIB="$SCRIPT_DIR/lib"
 
-mkdir -p "$LIB"
+mkdir -p "$OBJ" "$LIB"
 
 
 : << 'COMMENT'
@@ -69,38 +70,24 @@ export CC="ccache gcc"
 export CXX="ccache g++"
 export MOLD_FLAGS="-fuse-ld=mold"
 
-if [ ! -f "$LIB/libhccl.so" ]; then
-    $CC $MOLD_FLAGS -shared -fPIC "$SRC/not_hccl.c" -o "$LIB/libhccl.so"
-    echo "Created lib/libhccl.so"
-fi
+# 1. Компиляция объектных файлов (ccache кеширует .o)
+$CXX    -fPIC -c "$SRC/not_acl.cpp"               -I"$SRC" -o "$OBJ/not_acl.o"                               && echo "not_acl.o             DONE"
+$CXX    -fPIC -c "$SRC/not_acl_op_compiler.cpp"   -I"$SRC" ${TORCH_FLAGS[@]} -o "$OBJ/not_acl_op_compiler.o" && echo "not_acl_op_compiler.o DONE"
+$CXX    -fPIC -c "$SRC/not_opapi.cpp"             -I"$SRC" ${TORCH_FLAGS[@]} -o "$OBJ/not_opapi.o"           && echo "not_opapi.o           DONE"
 
-$CXX $MOLD_FLAGS -g -shared -fPIC "$SRC/not_acl.cpp" -o "$LIB/libascendcl.so"
-echo "Created lib/libascendcl.so"
+$CC     -fPIC -c "$SRC/not_hccl.c"                -o "$OBJ/not_hccl.o"
+$CC     -fPIC -c "$SRC/not_ge_runner.c"           -o "$OBJ/not_ge_runner.o"
+$CC     -fPIC -c "$SRC/not_graph.c"               -o "$OBJ/not_graph.o"
+$CC     -fPIC -c "$SRC/not_acl_tdt_channel.c"     -o "$OBJ/not_acl_tdt_channel.o"
 
-$CXX $MOLD_FLAGS -g -shared -fPIC "$SRC/not_opapi.cpp" "${TORCH_FLAGS[@]}" -o "$LIB/libopapi.so"
-echo "Created lib/libopapi.so"
-
-LINK_IT=(
-    -L"$LIB"
-    -Wl,--no-as-needed
-    -lascendcl
-    -Wl,--as-needed
-    -Wl,-rpath='$ORIGIN'
-)
-$CXX $MOLD_FLAGS -g -shared -fPIC "$SRC/not_acl_op_compiler.cpp" "${LINK_IT[@]}" "${TORCH_FLAGS[@]}" -o "$LIB/libacl_op_compiler.so"
-echo "Created lib/libacl_op_compiler.so"
-
-if [ ! -f "$LIB/libge_runner.so" ]; then
-    $CC $MOLD_FLAGS -shared -fPIC "$SRC/not_ge_runner.c" -o "$LIB/libge_runner.so"
-    echo "Created lib/libge_runner.so"
-fi
-
-if [ ! -f "$LIB/libgraph.so" ]; then
-    $CC $MOLD_FLAGS -shared -fPIC "$SRC/not_graph.c" -o "$LIB/libgraph.so"
-    echo "Created lib/libgraph.so"
-fi
-
-if [ ! -f "$LIB/libacl_tdt_channel.so" ]; then
-    $CC $MOLD_FLAGS -shared -fPIC "$SRC/not_acl_tdt_channel.c" -o "$LIB/libacl_tdt_channel.so"
-    echo "Created lib/libacl_tdt_channel.so"
-fi
+# 2. Линковка разделяемых библиотек (mold ускоряет)
+echo "Linking shared libraries..."
+$CC  $MOLD_FLAGS -shared "$OBJ/not_hccl.o"               -o "$LIB/libhccl.so"
+$CXX $MOLD_FLAGS -shared "$OBJ/not_acl.o"                -o "$LIB/libascendcl.so"
+$CXX $MOLD_FLAGS -shared "$OBJ/not_opapi.o"              ${TORCH_FLAGS[@]} -o "$LIB/libopapi.so"
+$CXX $MOLD_FLAGS -shared "$OBJ/not_acl_op_compiler.o"   \
+    -L"$LIB" -Wl,--no-as-needed -lascendcl -Wl,--as-needed \
+    -Wl,-rpath='$ORIGIN' ${TORCH_FLAGS[@]} -o "$LIB/libacl_op_compiler.so"
+$CC  $MOLD_FLAGS -shared "$OBJ/not_ge_runner.o"          -o "$LIB/libge_runner.so"
+$CC  $MOLD_FLAGS -shared "$OBJ/not_graph.o"              -o "$LIB/libgraph.so"
+$CC  $MOLD_FLAGS -shared "$OBJ/not_acl_tdt_channel.o"    -o "$LIB/libacl_tdt_channel.so"
