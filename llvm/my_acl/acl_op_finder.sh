@@ -418,11 +418,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LeakyReluKernelNpu.cpp:28:    cmd.Name("LeakyRelu")
     LeakyReluGrad
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LeakyReluBackwardKernelNpu.cpp:29:    cmd.Name("LeakyReluGrad")
-    LeftShift
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__Lshift__KernelNpu.cpp:28:    cmd.Name("LeftShift").Input(self).Input(other_broadcast).Output(result).Run();
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__Lshift__KernelNpu.cpp:36:    cmd.Name("LeftShift").Input(self).Input(other_broadcast).Output(result).Run();
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__iLshift__KernelNpu.cpp:29:    cmd.Name("LeftShift").Input(self).Input(other_broadcast).Output(result).Run();
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__iLshift__KernelNpu.cpp:37:    cmd.Name("LeftShift").Input(self).Input(other_broadcast).Output(result).Run();
     Lerp
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LerpKernelNpu.cpp:42:    cmd.Name("Lerp")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LerpKernelNpu.cpp:58:    cmd.Name("Lerp")
@@ -898,6 +893,11 @@ I
 J
 K
 L
+    LeftShift
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__Lshift__KernelNpu.cpp:28:    cmd.Name("LeftShift").Input(self).Input(other_broadcast).Output(result).Run();
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__Lshift__KernelNpu.cpp:36:    cmd.Name("LeftShift").Input(self).Input(other_broadcast).Output(result).Run();
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__iLshift__KernelNpu.cpp:29:    cmd.Name("LeftShift").Input(self).Input(other_broadcast).Output(result).Run();
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__iLshift__KernelNpu.cpp:37:    cmd.Name("LeftShift").Input(self).Input(other_broadcast).Output(result).Run();
     Less
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LtKernelNpu.cpp:29:  cmd.Name("Less")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LtKernelNpu.cpp:40:  cmd.Name("Less")

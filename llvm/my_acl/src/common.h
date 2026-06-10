@@ -107,7 +107,8 @@ static const int ACL_SUCCESS = 0;
 static const int ACL_ERROR_INVALID_PARAM         = 100000;
 static const int ACL_ERROR_OP_NOT_FOUND          = 100024;
 static const int ACL_ERROR_UNSUPPORTED_DATA_TYPE = 100026;
-static const int ACL_ERROR_BAD_ALLOC = 200000;
+static const int ACL_ERROR_BAD_ALLOC      = 200000;
+static const int ACL_ERROR_INTERNAL_ERROR = 500000;
 
 typedef enum {
     ACL_MEMTYPE_DEVICE = 0,

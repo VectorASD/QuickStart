@@ -123,3 +123,42 @@ def test_accuracy_angle(shape, dtype):
     res_out = torch.angle(inp)
     dtype_out = res_out.dtype
     assert_close(res_out, ref_out, dtype_out)
+
+
+BITWISE_SHAPES = (
+    ((512, 1024), (512, 1024)),
+    ((256, 512), (1, 512)),
+    ((256, 512), (256, 1)),
+    ((1, 512), (256, 512)),
+    ((256, 1), (256, 512)),
+    ((1024,), ()),
+    ((), (1024,)),
+)
+
+
+def broadcast_tensors(a, b):
+    shape = torch.broadcast_shapes(a.shape, b.shape)
+    a = a.expand(shape).contiguous()
+    b = b.expand(shape).contiguous()
+    return a, b
+
+def NPU_bitwise_left_shift(res_a, res_b):
+    res_a, res_b = broadcast_tensors(res_a, res_b)
+    return res_a << res_b  # torch.bitwise_left_shift(res_a, res_b)
+    # [W610 18:26:03.055846726 VariableFallbackKernel.cpp:250] Warning: CAUTION: The operator 'aten::bitwise_left_shift.Tensor_out' is not currently supported on the NPU backend and will fall back to run on the CPU. This may have performance implications. (function npu_cpu_fallback)
+    # И кто эту шляпу придумал (недодумал)?! Зато оператор '<<' ещё как не fallback'ается.
+    # Ещё и внутри op-plugin накосячили, что требуется теперь broadcast_tensors из-за недопустимного прямого expand внутри -_-
+
+@pytest.mark.bitwise_left_shift
+@pytest.mark.parametrize("shapes", BITWISE_SHAPES)
+@pytest.mark.parametrize("dtype", ALL_INT_DTYPES + (torch.uint8,))
+def test_accuracy_bitwise_left_shift(shapes, dtype):
+    shape_a, shape_b = shapes
+    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device=device)
+    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device=device)
+    ref_a = to_reference(res_a)
+    ref_b = to_reference(res_b)
+
+    ref_out = torch.bitwise_left_shift(ref_a, ref_b)
+    res_out = NPU_bitwise_left_shift(res_a, res_b)
+    assert_close(res_out, ref_out, dtype)

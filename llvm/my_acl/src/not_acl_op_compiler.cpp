@@ -699,6 +699,27 @@ REGISTER_OP(Ceil, {
     return H_OK;
 });
 
+REGISTER_OP(LeftShift, {
+    // Входы: self (целочисленный тензор), other (целочисленный тензор/скаляр)
+    // Выходы: result (тот же тип)
+    at::Tensor self, other, out;
+    ASSERT(numInputs == 2 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(inputDesc[1], inputs[1], other));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    ASSERT_CODE(self.scalar_type() == other.scalar_type() &&
+                at::isIntegralType(self.scalar_type(), /*includeBool=*/false),
+                H_UNIMPLEMENTED);
+
+    at::bitwise_left_shift_out(out, self, other);
+    return H_OK;
+});
+
 
 // Остальное
 
@@ -1424,51 +1445,61 @@ REGISTER_OP(Dummy, {
 
 
 ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
-    int numInputs, const aclTensorDesc *const inputDesc[], const aclDataBuffer *const inputs[],
-    int numOutputs, const aclTensorDesc *const outputDesc[], aclDataBuffer *const outputs[],
-    const aclopAttr *attr, aclopEngineType engineType, aclopCompileType compileFlag,
-    const char *opPath, aclrtStream stream) {
+        int numInputs, const aclTensorDesc *const inputDesc[], const aclDataBuffer *const inputs[],
+        int numOutputs, const aclTensorDesc *const outputDesc[], aclDataBuffer *const outputs[],
+        const aclopAttr *attr, aclopEngineType engineType, aclopCompileType compileFlag,
+        const char *opPath, aclrtStream stream) {
+        std::ostringstream log;
 
-    std::ostringstream log;
     log << "[aclopCompileAndExecute] opType=" << (opType ? opType : "(null)")
         << " opPath=" << (opPath ? opPath : "(null)") << " stream=" << stream
         << "\n    opts: " << logCompileOpts()
         << "\n    numInputs=" << numInputs << " numOutputs=" << numOutputs
     << formatTensorList("input", inputDesc, inputs, numInputs, PRINT_ALL)
     << formatTensorList("output", outputDesc, outputs, numOutputs, PRINT_DESC);
+    try {
 
-    auto t_start = std::chrono::steady_clock::now();
+        auto t_start = std::chrono::steady_clock::now();
 
-    OpHandler handler;
-    exitCode code = H_UNKNOWN_OP;
-    if (opType && OpRegistry::try_find(opType, handler))
-        code = handler(numInputs, inputDesc, inputs, numOutputs, outputDesc, outputs, attr);
+        OpHandler handler;
+        exitCode code = H_UNKNOWN_OP;
+        if (opType && OpRegistry::try_find(opType, handler))
+            code = handler(numInputs, inputDesc, inputs, numOutputs, outputDesc, outputs, attr);
 
-    auto t_end = std::chrono::steady_clock::now();
-    double elapsed_us = std::chrono::duration<double, std::micro>(t_end - t_start).count();
-    record_op_timing(opType, elapsed_us);
+        auto t_end = std::chrono::steady_clock::now();
+        double elapsed_us = std::chrono::duration<double, std::micro>(t_end - t_start).count();
+        record_op_timing(opType, elapsed_us);
 
-    switch (code) {
-        case H_UNKNOWN_OP:
-            log << "\nError: unknown operation: " << (opType ? opType : "(null)");
-            log_output(log, true);
-            return ACL_ERROR_OP_NOT_FOUND;
-        case H_OK:
-            break;
-        case H_UNASSERTED:
-            log << "\nError: assertion failed for operation " << opType;
-            log_output(log, true);
-            return ACL_ERROR_INVALID_PARAM;
-        case H_UNIMPLEMENTED:
-            log << "\nError: unsupported dtype for operation " << opType;
-            log_output(log, true);
-            return ACL_ERROR_UNSUPPORTED_DATA_TYPE;
+        switch (code) {
+            case H_UNKNOWN_OP:
+                log << "\nError: unknown operation: " << (opType ? opType : "(null)");
+                log_output(log, true);
+                return ACL_ERROR_OP_NOT_FOUND;
+            case H_OK:
+                break;
+            case H_UNASSERTED:
+                log << "\nError: assertion failed for operation " << opType;
+                log_output(log, true);
+                return ACL_ERROR_INVALID_PARAM;
+            case H_UNIMPLEMENTED:
+                log << "\nError: unsupported dtype for operation " << opType;
+                log_output(log, true);
+                return ACL_ERROR_UNSUPPORTED_DATA_TYPE;
+        }
+
+        log << formatTensorList("output", outputDesc, outputs, numOutputs, PRINT_DATA);
+        log_output(log);
+
+        return ACL_SUCCESS;
+    } catch (const std::exception& e) {
+        log << "\nError: !!! C++ exception in handler for " << opType << ": " << e.what();
+        log_output(log, true);
+        return ACL_ERROR_INTERNAL_ERROR;
+    } catch (...) {
+        log << "\nError: !!! Unknown C++ exception in handler for " << opType;
+        log_output(log, true);
+        return ACL_ERROR_INTERNAL_ERROR;
     }
-
-    log << formatTensorList("output", outputDesc, outputs, numOutputs, PRINT_DATA);
-    log_output(log);
-
-    return ACL_SUCCESS;
 }
 
 // ========== aclopCompileAndExecuteV2 делегирует первой версии ==========

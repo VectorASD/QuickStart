@@ -6,6 +6,7 @@ import os
 import pty
 from pathlib import Path
 import psutil
+import re
 import select
 import signal
 import stat
@@ -35,6 +36,19 @@ def memory_check(request):
     check_memory()
     yield
     check_memory()
+
+@pytest.fixture(autouse=True)
+def check_fallback(capfd):
+    yield
+    captured = capfd.readouterr()
+    if "CAUTION" in captured.err:
+        ops = []
+        for line in captured.err.splitlines():
+            match = re.search(r"operator '([^']+)'", line)
+            if match:
+                ops.append(match.group(1))
+        ops_list = "\n".join(f"  - {op}" for op in ops) if ops else "unknown"
+        pytest.fail(f"NPU fallback to CPU detected!\nUnsported operations:\n{ops_list}\n\nOriginal stderr:\n{captured.err}")
 
 
 
