@@ -1,8 +1,4 @@
-#include "ATen/ops/as_strided_copy.h"
-#include "ATen/ops/one_hot.h"
-#include "ATen/ops/one_hot_ops.h"
-#include "ATen/ops/zeros_like.h"
-#include "common.h"
+#include "common.h"     // log_output, ...
 #include "not_acl.cpp"  // aclGetTensorDescDimV2, aclGetTensorDescNumDims, aclGetTensorDescType
 #include "helpers.cpp"
 #include <cstring>      // memset, size_t

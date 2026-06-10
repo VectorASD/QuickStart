@@ -50,3 +50,23 @@ rm *.run
 find . -name libhccl.so
     ./cann-hccl/hccl/lib64/libhccl.so
     Нашлась потеряшка!)
+
+find . -name libopapi.so
+    ./cann-950-ops-legacy/opp/built-in/op_impl/ai_core/tbe/op_api/lib/linux/x86_64/libopapi.so
+    ./cann-950-ops-legacy/x86_64-linux/lib64/libopapi.so
+    Нужно для работы aclnn-операций!
+
+
+grep "aclnnAngleV2" . -R
+    ./cann-950-ops-math/opp/include/aclnnop -> ../../x86_64-linux/include/aclnnop/
+    grep: ./cann-950-ops-math/x86_64-linux/lib64/libopapi_math.so: binary file matches
+    ./cann-950-ops-math/x86_64-linux/include/aclnnop/level2/aclnn_angle_v2.h:/* funtion: aclnnAngleV2GetWorkspaceSize
+    ./cann-950-ops-math/x86_64-linux/include/aclnnop/level2/aclnn_angle_v2.h:aclnnStatus aclnnAngleV2GetWorkspaceSize(
+    ./cann-950-ops-math/x86_64-linux/include/aclnnop/level2/aclnn_angle_v2.h:/* funtion: aclnnAngleV2
+    ./cann-950-ops-math/x86_64-linux/include/aclnnop/level2/aclnn_angle_v2.h:aclnnStatus aclnnAngleV2(
+    ./cann-950-ops-math/x86_64-linux/include/aclnnop/aclnn_angle_v2.h:/* funtion: aclnnAngleV2GetWorkspaceSize
+    ./cann-950-ops-math/x86_64-linux/include/aclnnop/aclnn_angle_v2.h:aclnnStatus aclnnAngleV2GetWorkspaceSize(
+    ./cann-950-ops-math/x86_64-linux/include/aclnnop/aclnn_angle_v2.h:/* funtion: aclnnAngleV2
+    ./cann-950-ops-math/x86_64-linux/include/aclnnop/aclnn_angle_v2.h:aclnnStatus aclnnAngleV2(
+    grep: ./cann-950-ops-legacy/opp/built-in/op_impl/ai_core/tbe/op_api/lib/linux/x86_64/libopapi.so: binary file matches
+    grep: ./cann-950-ops-legacy/x86_64-linux/lib64/libopapi.so: binary file matches

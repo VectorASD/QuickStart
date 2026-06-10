@@ -65,13 +65,20 @@ grep "cmd.Name" ~/tmp/pytorch/ -rn
 COMMENT
 
 
+export CC="ccache gcc"
+export CXX="ccache g++"
+export MOLD_FLAGS="-fuse-ld=mold"
+
 if [ ! -f "$LIB/libhccl.so" ]; then
-    gcc -shared -fPIC "$SRC/not_hccl.c" -o "$LIB/libhccl.so"
+    $CC $MOLD_FLAGS -shared -fPIC "$SRC/not_hccl.c" -o "$LIB/libhccl.so"
     echo "Created lib/libhccl.so"
 fi
 
-g++ -g -shared -fPIC "$SRC/not_acl.cpp" -o "$LIB/libascendcl.so"
+$CXX $MOLD_FLAGS -g -shared -fPIC "$SRC/not_acl.cpp" -o "$LIB/libascendcl.so"
 echo "Created lib/libascendcl.so"
+
+$CXX $MOLD_FLAGS -g -shared -fPIC "$SRC/not_opapi.cpp" "${TORCH_FLAGS[@]}" -o "$LIB/libopapi.so"
+echo "Created lib/libopapi.so"
 
 LINK_IT=(
     -L"$LIB"
@@ -80,20 +87,20 @@ LINK_IT=(
     -Wl,--as-needed
     -Wl,-rpath='$ORIGIN'
 )
-g++ -g -shared -fPIC "$SRC/not_acl_op_compiler.cpp" "${LINK_IT[@]}" "${TORCH_FLAGS[@]}" -o "$LIB/libacl_op_compiler.so"
+$CXX $MOLD_FLAGS -g -shared -fPIC "$SRC/not_acl_op_compiler.cpp" "${LINK_IT[@]}" "${TORCH_FLAGS[@]}" -o "$LIB/libacl_op_compiler.so"
 echo "Created lib/libacl_op_compiler.so"
 
 if [ ! -f "$LIB/libge_runner.so" ]; then
-    gcc -shared -fPIC "$SRC/not_ge_runner.c" -o "$LIB/libge_runner.so"
+    $CC $MOLD_FLAGS -shared -fPIC "$SRC/not_ge_runner.c" -o "$LIB/libge_runner.so"
     echo "Created lib/libge_runner.so"
 fi
 
 if [ ! -f "$LIB/libgraph.so" ]; then
-    gcc -shared -fPIC "$SRC/not_graph.c" -o "$LIB/libgraph.so"
+    $CC $MOLD_FLAGS -shared -fPIC "$SRC/not_graph.c" -o "$LIB/libgraph.so"
     echo "Created lib/libgraph.so"
 fi
 
 if [ ! -f "$LIB/libacl_tdt_channel.so" ]; then
-    gcc -shared -fPIC "$SRC/not_acl_tdt_channel.c" -o "$LIB/libacl_tdt_channel.so"
+    $CC $MOLD_FLAGS -shared -fPIC "$SRC/not_acl_tdt_channel.c" -o "$LIB/libacl_tdt_channel.so"
     echo "Created lib/libacl_tdt_channel.so"
 fi
