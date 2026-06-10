@@ -9,6 +9,7 @@
 // ===================================================================
 
 #include "common.h"     // log_output, ...
+#include "not_acl.cpp"  // aclCreateTensorDesc, ...
 #include "helpers.cpp"
 #include <cstdint>      // int32_t, int64_t, uint64_t
 
@@ -17,8 +18,6 @@ extern "C" {
 #endif
 
 struct aclOpExecutor {};
-struct aclTensor {};
-struct aclScalar {};
 struct aclIntArray {};
 struct aclFloatArray {};
 struct aclBoolArray {};
@@ -31,6 +30,21 @@ constexpr aclnnStatus UNIMPLEMENTED = 1;
 
 
 
+struct aclTensor {
+    aclTensorDesc* desc;
+    aclDataBuffer* buffer;
+    std::vector<int64_t> strides;
+    int64_t offset;
+};
+
+struct aclScalar {};
+
+static std::string tensorDataToString(const aclTensor* tensor) {
+    return tensorDataToString(tensor->desc, tensor->buffer, tensor->strides, tensor->offset);
+}
+
+
+
 // ~~~ Основное meta-API ~~~
 
 aclTensor* aclCreateTensor(const int64_t* viewDims, uint64_t viewDimsNum, aclDataType dataType,
@@ -38,11 +52,59 @@ aclTensor* aclCreateTensor(const int64_t* viewDims, uint64_t viewDimsNum, aclDat
                            const int64_t* storageDims, uint64_t storageDimsNum,
                            void* tensorData) {
     std::ostringstream log;
-    log << "[aclCreateTensor] viewDimsNum=" << viewDimsNum
-        << " dataType=" << dataType
-        << " tensorData=" << tensorData;
+    log << "[aclCreateTensor] dataType=" << aclDataTypeToString(dataType)
+        << " format=" << aclFormatToString(format);
+
+    if (viewDimsNum) {
+        log << "\n    viewDims: ";
+        for (int i = 0; i < viewDimsNum; i++)
+            log << (i ? ", " : "") << viewDims[i];
+
+        log << "\n    stride: ";
+        for (int i = 0; i < viewDimsNum; i++)
+            log << (i ? ", " : "") << stride[i];
+    } else
+        log << "\n    it's scalar";
+
+    log << "\n    storageDims: ";
+    for (int i = 0; i < storageDimsNum; i++)
+        log << (i ? ", " : "") << storageDims[i];
+    if (!storageDimsNum) log << '-';
+
+    size_t totalElements = 1;
+    for (uint64_t i = 0; i < viewDimsNum; ++i)
+        totalElements *= viewDims[i];
+    size_t size = aclDataTypeBytes(dataType);
+
+    if (storageDimsNum != 1 || storageDims[0] != totalElements) {
+        log << "\nError: strange storageDims";
+        log_output(log, true);
+        return nullptr;
+    }
+
+    aclTensorDesc* desc = aclCreateTensorDesc(dataType, static_cast<int>(viewDimsNum), viewDims, format);
+    aclDataBuffer* buffer = aclCreateDataBuffer(tensorData, size);
+
+    aclTensor* tensor = new aclTensor();
+    tensor->desc = desc;
+    tensor->buffer = buffer;
+    if (stride) {
+        tensor->strides.assign(stride, stride + viewDimsNum);
+    } else {
+        // Плотный stride
+        tensor->strides.resize(viewDimsNum);
+        int64_t step = 1;
+        for (int i = viewDimsNum - 1; i >= 0; --i) {
+            tensor->strides[i] = step;
+            step *= viewDims[i];
+        }
+    }
+    tensor->offset = offset;
+
+    log << "\n" << tensorDataToString(tensor);
     log_output(log, true);
-    return nullptr;   // заглушка
+
+    return tensor;
 }
 
 aclScalar* aclCreateScalar(void* value, aclDataType dataType) {
