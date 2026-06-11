@@ -1866,10 +1866,10 @@ ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
         << " opPath=" << (opPath ? opPath : "(null)") << " stream=" << stream
         << "\n    opts: " << logCompileOpts()
      // << "\n    numInputs=" << numInputs << " numOutputs=" << numOutputs
-        << "\n attrs=";
+        << "\n    attrs: ";
     formatAclOpAttr(attrs, log);
-    log << formatTensorList("input", inputDesc, inputs, numInputs, PRINT_ALL)
-        << formatTensorList("output", outputDesc, outputs, numOutputs, PRINT_DESC);
+    formatTensorList(log, "input", inputDesc, inputs, numInputs, PRINT_ALL);
+    formatTensorList(log, "output", outputDesc, outputs, numOutputs, PRINT_DESC);
     try {
 
         auto t_start = std::chrono::steady_clock::now();
@@ -1900,7 +1900,7 @@ ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
                 return ACL_ERROR_UNSUPPORTED_DATA_TYPE;
         }
 
-        log << formatTensorList("output", outputDesc, outputs, numOutputs, PRINT_DATA);
+        formatTensorList(log, "output", outputDesc, outputs, numOutputs, PRINT_DATA);
         log_output(log);
 
         return ACL_SUCCESS;

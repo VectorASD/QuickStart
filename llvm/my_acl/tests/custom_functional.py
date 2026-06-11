@@ -55,12 +55,7 @@ def geglu_torch(input_tensor: torch.Tensor) -> torch.Tensor:
     # Разделяем на две половины по последней оси
     a, b = input_tensor.chunk(2, dim=-1)
     # Применяем GELU (tanh-приближение) к первой половине и умножаем на вторую
-    return F.gelu(a, approximate='tanh') * b
-    # TODO!
-    # Проверка показала, что при возврате a, b, a + b, a * b и F.gelu(a) нет проблем,
-    # а стоит добавить approximate='tanh' без умножения на 'b', как бы понимает,
-    # что появляется путаница типов атрибутов???
-    # Надо переписать движок атрибутов, чтобы не было смешения типов и ПОЯВИЛАСЬ ВОЗМОЖНОСТЬ ЛОГИРОВАТЬ АТРИБУТЫ В ОПЕРАЦИЯХ!
+    return F.gelu(a, approximate="tanh") * b
 
 def dgeglu_torch(grad_output: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
     """

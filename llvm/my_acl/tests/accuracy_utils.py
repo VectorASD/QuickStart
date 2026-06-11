@@ -19,8 +19,14 @@ from _pytest.warning_types import PytestUnknownMarkWarning
 
 warnings.filterwarnings("ignore", category=PytestUnknownMarkWarning)
 
-device = "npu"
+class _Device(str):
+    @staticmethod
+    def log_it():
+        del os.environ["NOT_NPU_QUIET"]
+device = _Device("npu")
 os.environ["NOT_NPU_QUIET"] = '1'
+
+torch.npu.use_compatible_impl(True)  # Иначе пойдёт использовать плохой Gelu (теряется approximate="tanh" и прочее)
 
 
 
