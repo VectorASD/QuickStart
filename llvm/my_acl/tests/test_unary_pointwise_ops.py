@@ -35,8 +35,6 @@
 import pytest
 import torch
 
-TE_AVAILABLE = True
-
 from .accuracy_utils import (
     ALL_FLOAT_DTYPES,
     ALL_INT_DTYPES,
@@ -136,19 +134,6 @@ BITWISE_SHAPES = (
 )
 
 
-def broadcast_tensors(a, b):
-    shape = torch.broadcast_shapes(a.shape, b.shape)
-    a = a.expand(shape).contiguous()
-    b = b.expand(shape).contiguous()
-    return a, b
-
-def NPU_bitwise_left_shift(res_a, res_b):
-    res_a, res_b = broadcast_tensors(res_a, res_b)
-    return res_a << res_b  # torch.bitwise_left_shift(res_a, res_b)
-    # [W610 18:26:03.055846726 VariableFallbackKernel.cpp:250] Warning: CAUTION: The operator 'aten::bitwise_left_shift.Tensor_out' is not currently supported on the NPU backend and will fall back to run on the CPU. This may have performance implications. (function npu_cpu_fallback)
-    # И кто эту шляпу придумал (недодумал)?! Зато оператор '<<' ещё как не fallback'ается.
-    # Ещё и внутри op-plugin накосячили, что требуется теперь broadcast_tensors из-за недопустимного прямого expand внутри -_-
-
 @pytest.mark.bitwise_left_shift
 @pytest.mark.parametrize("shapes", BITWISE_SHAPES)
 @pytest.mark.parametrize("dtype", ALL_INT_DTYPES + (torch.uint8,))
@@ -160,13 +145,9 @@ def test_accuracy_bitwise_left_shift(shapes, dtype):
     ref_b = to_reference(res_b)
 
     ref_out = torch.bitwise_left_shift(ref_a, ref_b)
-    res_out = NPU_bitwise_left_shift(res_a, res_b)
+    res_out = torch.bitwise_left_shift(res_a, res_b)
     assert_close(res_out, ref_out, dtype)
 
-
-def NPU_bitwise_right_shift(res_a, res_b):
-    res_a, res_b = broadcast_tensors(res_a, res_b)
-    return res_a >> res_b
 
 @pytest.mark.bitwise_right_shift
 @pytest.mark.parametrize("shapes", BITWISE_SHAPES)
@@ -179,7 +160,7 @@ def test_accuracy_bitwise_right_shift(shapes, dtype):
     ref_b = to_reference(res_b)
 
     ref_out = torch.bitwise_right_shift(ref_a, ref_b)
-    res_out = NPU_bitwise_right_shift(res_a, res_b)
+    res_out = torch.bitwise_right_shift(res_a, res_b)
     assert_close(res_out, ref_out, dtype)
 
 
@@ -188,7 +169,7 @@ INPLACE_BITWISE_SHAPES = [
     ((256, 512), (1, 512)),
     ((256, 512), (256, 1)),
     ((1024,), ()),
-    # а здесь убрали те 3 формы, которые ломаются из-за op-plugin -_-
+    # сдвиги подразумевают изменение формы self тензора, что невозможно в inplace режиме (copy_ сломается)
 ]
 
 
@@ -203,7 +184,7 @@ def test_accuracy_bitwise_left_shift_(shapes, dtype):
     ref_b = to_reference(res_b)
 
     ref_a.bitwise_left_shift_(ref_b)
-    res_a = res_a << res_b  # res_a.bitwise_left_shift_(res_b)
+    res_a.bitwise_left_shift_(res_b)
     assert_close(res_a, ref_a, dtype)
 
 
@@ -218,7 +199,7 @@ def test_accuracy_bitwise_right_shift_(shapes, dtype):
     ref_b = to_reference(res_b)
 
     ref_a.bitwise_right_shift_(ref_b)
-    res_a = res_a >> res_b  # res_a.bitwise_right_shift_(res_b)
+    res_a.bitwise_right_shift_(res_b)
     assert_close(res_a, ref_a, dtype)
 
 
@@ -348,4 +329,49 @@ def test_accuracy_exp2_(shape, dtype):
     ref_out = torch.exp2_(ref_inp)
     res_out = torch.exp2_(inp)
 
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.geglu
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_geglu(shape, dtype):
+    if len(shape) == 0:
+        pytest.skip("GEGLU does not support 0-dim scalar tensors.")
+
+    if shape[-1] % 2 != 0:
+        shape = list(shape)
+        shape[-1] += 1
+        shape = tuple(shape)
+
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.geglu(ref_inp)
+    res_out = torch.geglu(inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.dgeglu
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_dgeglu(shape, dtype):
+    if len(shape) == 0:
+        pytest.skip("dgeglu does not support 0-dim scalar tensors.")
+
+    if shape[-1] % 2 != 0:
+        shape = list(shape)
+        shape[-1] += 1
+        shape = tuple(shape)
+    grad_output_shape = list(shape)
+    grad_output_shape[-1] //= 2
+
+    inp         = torch.randn(shape, dtype=dtype, device=device)
+    grad_output = torch.randn(tuple(grad_output_shape), dtype=dtype, device=device)
+    ref_inp         = to_reference(inp)
+    ref_grad_output = to_reference(grad_output)
+
+    ref_out = torch.dgeglu(ref_grad_output, ref_inp)
+    res_out = torch.dgeglu(grad_output, inp)
     assert_close(res_out, ref_out, dtype)

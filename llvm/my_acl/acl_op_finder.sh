@@ -302,10 +302,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ErfcKernelNpu.cpp:27:    cmd.Name("Erfc")
     Erfinv
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ErfinvKernelNpu.cpp:27:    cmd.Name("Erfinv")
-    FastGelu
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FastGeluKernelNpu.cpp:45:    cmd.Name("FastGelu")
-    FastGeluGrad
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FastGeluKernelNpu.cpp:32:    cmd.Name("FastGeluGrad")
     FillDiagonal
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FillDiagonalKernelNpu.cpp:31:    cmd.Name("FillDiagonal")
     Floor
@@ -335,10 +331,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/EmbeddingKernelNpu.cpp:34:    cmd.Name("GatherV2")
     GatherV2D
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EmbeddingRenormKernelNpu.cpp:30:    cmd.Name("GatherV2D")
-    Gelu
-~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/GeluKernelNpu.cpp:23:    cmd.Name("Gelu")
-    GeluGrad
-~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/GeluBackwardKernelNpu.cpp:23:    cmd.Name("GeluGrad")
     GridAssignPositive
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/GridAssignPositiveKernelNpu.cpp:64:    cmd.Name("GridAssignPositive")
     GridSampler2D
@@ -697,8 +689,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SinKernelNpu.cpp:28:    cmd.Name("Sin")
     Sinh
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SinhKernelNpu.cpp:27:  cmd.Name("Sinh")
-    Slice
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SliceKernelNpu.cpp:31:    cmd.Name("Slice")
     SmoothL1LossGradV2
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SmoothL1LossBackwardKernelNpu.cpp:34:    cmd.Name("SmoothL1LossGradV2")
     SmoothL1LossV2
@@ -736,8 +726,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/opapi/FlashAttentionV2KernelNpuOpApi.cpp:87:    cmd.Name("StatelessDropOutGenMask")
     StrideAdd
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/StrideAddKernelNpu.cpp:32:    cmd.Name("StrideAdd")
-    StridedSlice
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/IndexingKernelNpu.cpp:31:    cmd.Name("StridedSlice")
     SubSample
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SubSampleKernelNpu.cpp:29:    cmd.Name("SubSample")
     Svd
@@ -861,10 +849,18 @@ E
     Expm1
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/Expm1KernelNpu.cpp:27:    cmd.Name("Expm1")
 F
+    FastGelu
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FastGeluKernelNpu.cpp:45:    cmd.Name("FastGelu")
+    FastGeluGrad
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FastGeluKernelNpu.cpp:32:    cmd.Name("FastGeluGrad")
     Fill
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FillKernelNpu.cpp:27:    cmd.Name("Fill");
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FillKernelNpu.cpp:43:    cmd.Name("Fill");
 G
+    Gelu
+~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/GeluKernelNpu.cpp:23:    cmd.Name("Gelu")
+    GeluGrad
+~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/GeluBackwardKernelNpu.cpp:23:    cmd.Name("GeluGrad")
     Greater
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/GtKernelNpu.cpp:29:  cmd.Name("Greater")
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/GtKernelNpu.cpp:41:  cmd.Name("Greater")
@@ -963,6 +959,8 @@ R
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__iRshift__KernelNpu.cpp:27:    cmd.Name("RightShift").Input(self).Input(other, self.scalar_type()).Output(result).Run();
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/__iRshift__KernelNpu.cpp:34:    cmd.Name("RightShift").Input(self).Input(other).Output(result).Run();
 S
+    Slice
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SliceKernelNpu.cpp:31:    cmd.Name("Slice")
     Sort
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ArgsortKernelNpu.cpp:33:    cmd.Name("Sort").Input(self).Output(values).Output(indices).Attr("axis", dim).Attr("descending", descending).Run();
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/SortKernelNpu.cpp:32:    cmd.Name("Sort")
@@ -975,6 +973,8 @@ S
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/UniformKernelNpu.cpp:43:    cmd.Name("StatelessRandomUniformV2")
     StatelessRandperm
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RandpermKernelNpu.cpp:34:  cmd.Name("StatelessRandperm")
+    StridedSlice
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/IndexingKernelNpu.cpp:31:    cmd.Name("StridedSlice")
     Sub
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RsubKernelNpu.cpp:40:        cmd.Name("Sub").Input(other).Input(other_mul_result).Output(result).Run();
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/RsubKernelNpu.cpp:42:        cmd.Name("Sub").Input(other).Input(self).Output(result).Run();

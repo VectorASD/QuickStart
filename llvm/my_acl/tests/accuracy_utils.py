@@ -6,6 +6,8 @@
 import torch
 import numpy as np
 
+from .custom_functional import *  # патчим torch новыми функциями
+
 import random
 import time
 import os

@@ -626,21 +626,6 @@ REGISTER_OP(Abs, {
     return H_OK;
 });
 
-REGISTER_OP(Acosh, {
-    // Вход:  self (float/double/half/bf16) – тензор, к которому применяется гиперболический арккосинус
-    // Выход: result (тот же тип) – тензор с вычисленным acosh(self)
-    at::Tensor self, result;
-    ASSERT(numInputs == 1 && numOutputs == 1)
-    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)   // result: тензор плавающего типа
-    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // self: тензор плавающего типа
-
-    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
-    TRY(toAtenTensor(outputDesc[0], outputs[0], result));
-
-    at::acosh_out(result, self);
-    return H_OK;
-});
-
 REGISTER_OP(AsStrided, {
     // Входы:  self (тензор), shape (int64[]), stride (int64[]), storage_offset (int64 скаляр)
     // Выходы: result (тензор с новыми shape и stride)
@@ -699,6 +684,7 @@ REGISTER_OP(Ceil, {
     return H_OK;
 });
 
+
 REGISTER_OP(LeftShift, {
     // Входы: self (целочисленный тензор), other (целочисленный тензор/скаляр)
     // Выходы: result (тот же тип)
@@ -741,6 +727,7 @@ REGISTER_OP(RightShift, {
     return H_OK;
 });
 
+
 REGISTER_OP(Invert, {
     // Входы: self (целочисленный тензор)
     // Выходы: result (тот же тип)
@@ -778,6 +765,31 @@ REGISTER_OP(LogicalNot, {
     return H_OK;
 });
 
+REGISTER_OP(LogicalAnd, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
+        return H_UNASSERTED;
+
+    // LogicalAnd в torch_npu вызывается только для bool
+    if (aclGetTensorDescType(inputDesc[0], false) != ACL_BOOL ||
+        aclGetTensorDescType(inputDesc[1], false) != ACL_BOOL)
+        return H_UNIMPLEMENTED;
+
+    TensorAccessor<bool> inA(inputs[0]->data, inputDesc[0]->dims);
+    TensorAccessor<bool> inB(inputs[1]->data, inputDesc[1]->dims);
+    TensorAccessor<bool> out(outputs[0]->data, outputDesc[0]->dims);
+    broadcastCompareOp<ACL_BOOL>(out, inA, inputDesc[0]->dims,
+                                 inB, inputDesc[1]->dims,
+                                 std::logical_and<bool>{});
+    return H_OK;
+});
+
+
 REGISTER_OP(Cos, {
     // Входы: self (float/double/half/bf16 тензор)
     // Выходы: result (тот же тип)
@@ -813,6 +825,37 @@ REGISTER_OP(Cosh, {
     at::cosh_out(out, self);
     return H_OK;
 });
+
+REGISTER_OP(Acos, {
+    // Вход:  self (float/double/half/bf16) – тензор, к которому применяется арккосинус
+    // Выход: result (тот же тип) – тензор с вычисленным acos(self)
+    at::Tensor self, result;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)   // result: тензор плавающего типа
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // self: тензор плавающего типа
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], result));
+
+    at::acos_out(result, self);
+    return H_OK;
+});
+
+REGISTER_OP(Acosh, {
+    // Вход:  self (float/double/half/bf16) – тензор, к которому применяется гиперболический арккосинус
+    // Выход: result (тот же тип) – тензор с вычисленным acosh(self)
+    at::Tensor self, result;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)   // result: тензор плавающего типа
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // self: тензор плавающего типа
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], result));
+
+    at::acosh_out(result, self);
+    return H_OK;
+});
+
 
 REGISTER_OP(Exp, {
     // Входы: self (float/double/half/bf16 тензор)
@@ -850,6 +893,7 @@ REGISTER_OP(Expm1, {
     return H_OK;
 });
 
+
 REGISTER_OP(Pow, {
     // Входы:
     //   - self (float/double/half/bf16 тензор)
@@ -874,100 +918,94 @@ REGISTER_OP(Pow, {
 });
 
 
-// Остальное
+REGISTER_OP(FastGelu, {
+    // Входы: self (float/double/half/bf16 тензор)
+    // Выходы: result (тот же тип)
+    at::Tensor self, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
 
-REGISTER_OP(LogicalAnd, {
-    if (numInputs != 2 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
-        return H_UNASSERTED;
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
 
-    // LogicalAnd в torch_npu вызывается только для bool
-    if (aclGetTensorDescType(inputDesc[0], false) != ACL_BOOL ||
-        aclGetTensorDescType(inputDesc[1], false) != ACL_BOOL)
-        return H_UNIMPLEMENTED;
+    ASSERT_CODE(at::isFloatingType(self.scalar_type()),
+                H_UNIMPLEMENTED);
 
-    TensorAccessor<bool> inA(inputs[0]->data, inputDesc[0]->dims);
-    TensorAccessor<bool> inB(inputs[1]->data, inputDesc[1]->dims);
-    TensorAccessor<bool> out(outputs[0]->data, outputDesc[0]->dims);
-    broadcastCompareOp<ACL_BOOL>(out, inA, inputDesc[0]->dims,
-                                 inB, inputDesc[1]->dims,
-                                 std::logical_and<bool>{});
+    at::gelu_out(out, self, "tanh");
     return H_OK;
 });
 
-REGISTER_OP(MaskedFill, {
-    if (numInputs != 3 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data ||
-        aclGetTensorDescType(inputDesc[1], false) != ACL_BOOL)
-        return H_UNASSERTED;
-    if (!inputs[2] || !inputDesc[2] || !inputs[2]->data)
-        return H_UNASSERTED;
+REGISTER_OP(Gelu, {
+    // Входы: self (float/double/half/bf16 тензор)
+    // Атрибуты (опционально): approximate (int64) – 0 для erf, 1 для tanh
+    // Выходы: result (тот же тип)
+    at::Tensor self, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
 
-    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
-    switch (inDt) {
-        DISPATCH_MASKED_FILL(ACL_FLOAT)
-        DISPATCH_MASKED_FILL(ACL_DOUBLE)
-        DISPATCH_MASKED_FILL(ACL_FLOAT16)
-        DISPATCH_MASKED_FILL(ACL_BF16)
-        DISPATCH_MASKED_FILL(ACL_INT8)
-        DISPATCH_MASKED_FILL(ACL_UINT8)
-        DISPATCH_MASKED_FILL(ACL_INT16)
-        DISPATCH_MASKED_FILL(ACL_UINT16)
-        DISPATCH_MASKED_FILL(ACL_INT32)
-        DISPATCH_MASKED_FILL(ACL_UINT32)
-        DISPATCH_MASKED_FILL(ACL_INT64)
-        DISPATCH_MASKED_FILL(ACL_UINT64)
-        DISPATCH_MASKED_FILL(ACL_BOOL)
-        default:
-            return H_UNIMPLEMENTED;
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    ASSERT_CODE(at::isFloatingType(self.scalar_type()),
+                H_UNIMPLEMENTED);
+
+    // Определяем режим: по умолчанию erf, если атрибут approximate=1 → tanh
+    bool use_tanh = false;
+    if (attr) {
+        auto it = attr->ints.find("approximate");
+        if (it != attr->ints.end() && it->second == 1)
+            use_tanh = true;
     }
+    at::gelu_out(out, self, use_tanh ? "tanh" : "none");
     return H_OK;
 });
 
-REGISTER_OP(MaskedSelect, {
-    if (numInputs != 2 || numOutputs != 1)
-        return H_UNASSERTED;
-    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
-        return H_UNASSERTED;
-    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
-        return H_UNASSERTED;
+REGISTER_OP(FastGeluGrad, {
+    // Входы: grad (float/double/half/bf16 тензор), self (тот же тип)
+    // Выходы: grad_input (тот же тип)
+    at::Tensor grad, self, grad_input;
+    ASSERT(numInputs == 2 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
 
-    // маска всегда bool
-    if (aclGetTensorDescType(inputDesc[1], false) != ACL_BOOL)
-        return H_UNIMPLEMENTED;
+    TRY(toAtenTensor(inputDesc[0], inputs[0], grad));
+    TRY(toAtenTensor(inputDesc[1], inputs[1], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], grad_input));
 
-    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
-    switch (inDt) {
-        DISPATCH_MASKED_SELECT(ACL_FLOAT)
-        DISPATCH_MASKED_SELECT(ACL_DOUBLE)
-        DISPATCH_MASKED_SELECT(ACL_FLOAT16)
-        DISPATCH_MASKED_SELECT(ACL_BF16)
-        DISPATCH_MASKED_SELECT(ACL_INT8)
-        DISPATCH_MASKED_SELECT(ACL_UINT8)
-        DISPATCH_MASKED_SELECT(ACL_INT16)
-        DISPATCH_MASKED_SELECT(ACL_UINT16)
-        DISPATCH_MASKED_SELECT(ACL_INT32)
-        DISPATCH_MASKED_SELECT(ACL_UINT32)
-        DISPATCH_MASKED_SELECT(ACL_INT64)
-        DISPATCH_MASKED_SELECT(ACL_UINT64)
-        DISPATCH_MASKED_SELECT(ACL_BOOL)
-        default:
-            return H_UNIMPLEMENTED;
-    }
+    ASSERT_CODE(at::isFloatingType(grad.scalar_type()) &&
+                grad.scalar_type() == self.scalar_type(),
+                H_UNIMPLEMENTED);
+
+    grad_input.copy_(at::gelu_backward(grad, self, "tanh"));
     return H_OK;
 });
+
+REGISTER_OP(GeluGrad, {
+    // Входы: grad (float/double/half/bf16 тензор), self (тот же тип)
+    // Выходы: grad_input (тот же тип)
+    at::Tensor grad, self, grad_input;
+    ASSERT(numInputs == 2 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], grad));
+    TRY(toAtenTensor(inputDesc[1], inputs[1], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], grad_input));
+
+    ASSERT_CODE(at::isFloatingType(grad.scalar_type()) &&
+                grad.scalar_type() == self.scalar_type(),
+                H_UNIMPLEMENTED);
+
+    grad_input.copy_(at::gelu_backward(grad, self));
+    return H_OK;
+});
+
+
+// Редукция
 
 REGISTER_OP(ReduceAll, {
     if (numInputs != 2 || numOutputs != 1)
@@ -1404,20 +1442,80 @@ REGISTER_OP(ReduceStdV2Update, {
     return H_OK;
 });
 
-REGISTER_OP(Acos, {
-    // Вход:  self (float/double/half/bf16) – тензор, к которому применяется арккосинус
-    // Выход: result (тот же тип) – тензор с вычисленным acos(self)
-    at::Tensor self, result;
-    ASSERT(numInputs == 1 && numOutputs == 1)
-    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)   // result: тензор плавающего типа
-    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)      // self: тензор плавающего типа
 
-    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
-    TRY(toAtenTensor(outputDesc[0], outputs[0], result));
+// Маски
 
-    at::acos_out(result, self);
+REGISTER_OP(MaskedFill, {
+    if (numInputs != 3 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data ||
+        aclGetTensorDescType(inputDesc[1], false) != ACL_BOOL)
+        return H_UNASSERTED;
+    if (!inputs[2] || !inputDesc[2] || !inputs[2]->data)
+        return H_UNASSERTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    switch (inDt) {
+        DISPATCH_MASKED_FILL(ACL_FLOAT)
+        DISPATCH_MASKED_FILL(ACL_DOUBLE)
+        DISPATCH_MASKED_FILL(ACL_FLOAT16)
+        DISPATCH_MASKED_FILL(ACL_BF16)
+        DISPATCH_MASKED_FILL(ACL_INT8)
+        DISPATCH_MASKED_FILL(ACL_UINT8)
+        DISPATCH_MASKED_FILL(ACL_INT16)
+        DISPATCH_MASKED_FILL(ACL_UINT16)
+        DISPATCH_MASKED_FILL(ACL_INT32)
+        DISPATCH_MASKED_FILL(ACL_UINT32)
+        DISPATCH_MASKED_FILL(ACL_INT64)
+        DISPATCH_MASKED_FILL(ACL_UINT64)
+        DISPATCH_MASKED_FILL(ACL_BOOL)
+        default:
+            return H_UNIMPLEMENTED;
+    }
     return H_OK;
 });
+
+REGISTER_OP(MaskedSelect, {
+    if (numInputs != 2 || numOutputs != 1)
+        return H_UNASSERTED;
+    if (!outputs[0] || !outputDesc[0] || !outputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
+        return H_UNASSERTED;
+    if (!inputs[1] || !inputDesc[1] || !inputs[1]->data)
+        return H_UNASSERTED;
+
+    // маска всегда bool
+    if (aclGetTensorDescType(inputDesc[1], false) != ACL_BOOL)
+        return H_UNIMPLEMENTED;
+
+    aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
+    switch (inDt) {
+        DISPATCH_MASKED_SELECT(ACL_FLOAT)
+        DISPATCH_MASKED_SELECT(ACL_DOUBLE)
+        DISPATCH_MASKED_SELECT(ACL_FLOAT16)
+        DISPATCH_MASKED_SELECT(ACL_BF16)
+        DISPATCH_MASKED_SELECT(ACL_INT8)
+        DISPATCH_MASKED_SELECT(ACL_UINT8)
+        DISPATCH_MASKED_SELECT(ACL_INT16)
+        DISPATCH_MASKED_SELECT(ACL_UINT16)
+        DISPATCH_MASKED_SELECT(ACL_INT32)
+        DISPATCH_MASKED_SELECT(ACL_UINT32)
+        DISPATCH_MASKED_SELECT(ACL_INT64)
+        DISPATCH_MASKED_SELECT(ACL_UINT64)
+        DISPATCH_MASKED_SELECT(ACL_BOOL)
+        default:
+            return H_UNIMPLEMENTED;
+    }
+    return H_OK;
+});
+
+
+// Остальное
 
 REGISTER_OP(BroadcastTo, {
     if (numInputs != 2 || numOutputs != 1)
@@ -1448,6 +1546,7 @@ REGISTER_OP(BroadcastTo, {
     }
     return H_OK;
 });
+
 
 REGISTER_OP(ConcatD, {
     // Входы:  N тензоров одного типа
@@ -1490,6 +1589,7 @@ REGISTER_OP(Pack, {
     at::stack_out(out_tensor, tensors, axis);
     return H_OK;
 });
+
 
 REGISTER_OP(Sort, {
     // Вход:  self (любой тип)
@@ -1545,6 +1645,7 @@ REGISTER_OP(SortV2, {
     return H_OK;
 });
 
+
 REGISTER_OP(OneHot, {
     // Входы: self (float/int, будет приведён к Long), depth (int), on_value (скаляр), off_value (скаляр)
     // Выход: one‑hot тензор (тип совпадает с self? в тестах – Long)
@@ -1590,6 +1691,182 @@ REGISTER_OP(OneHotD, {
         out.copy_(result);  // нет one_hot_out
     return H_OK;
 });
+
+
+REGISTER_OP(Slice, {
+    // Входы: self (любой тензор), offsets (int64 тензор), size (int64 тензор)
+    // Выходы: result (тот же тип, форма = size)
+    at::Tensor self, offsets, sizes, out;
+    ASSERT(numInputs == 3 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
+    ASSERT(inputs[2] && inputDesc[2] && inputs[2]->data)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(inputDesc[1], inputs[1], offsets));
+    TRY(toAtenTensor(inputDesc[2], inputs[2], sizes));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    ASSERT_CODE(offsets.scalar_type() == at::kLong &&
+                sizes.scalar_type() == at::kLong &&
+                offsets.dim() == 1 && sizes.dim() == 1 &&
+                offsets.size(0) == self.dim(),
+                H_UNASSERTED);
+
+    // Эмуляция через последовательное narrow
+    at::Tensor sliced = self;
+    auto offsets_acc = offsets.accessor<int64_t, 1>();
+    auto sizes_acc   = sizes.accessor<int64_t, 1>();
+    for (int64_t d = 0; d < self.dim(); ++d) {
+        sliced = sliced.narrow(d, offsets_acc[d], sizes_acc[d]);
+    }
+    out.copy_(sliced);
+    return H_OK;
+});
+
+REGISTER_OP(StridedSlice, {
+    // Входы: self (любой тензор), begin (int64 вектор), end (int64 вектор), strides (int64 вектор)
+    // Атрибуты: begin_mask, end_mask, ellipsis_mask, new_axis_mask, shrink_axis_mask (int64)
+    // Выходы: result (форма определяется согласно правилам StridedSlice)
+    at::Tensor self, begin, end, strides, out;
+    ASSERT(numInputs == 4 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
+    ASSERT(inputs[2] && inputDesc[2] && inputs[2]->data)
+    ASSERT(inputs[3] && inputDesc[3] && inputs[3]->data)
+    ASSERT(attr)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(inputDesc[1], inputs[1], begin));
+    TRY(toAtenTensor(inputDesc[2], inputs[2], end));
+    TRY(toAtenTensor(inputDesc[3], inputs[3], strides));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    ASSERT_CODE(begin.scalar_type() == at::kLong &&
+                end.scalar_type() == at::kLong &&
+                strides.scalar_type() == at::kLong,
+                H_UNASSERTED);
+
+    int64_t begin_mask, end_mask, ellipsis_mask, new_axis_mask, shrink_axis_mask;
+    ASSERT(try_get_attr<int64_t>(attr, "begin_mask", begin_mask));
+    ASSERT(try_get_attr<int64_t>(attr, "end_mask", end_mask));
+    ASSERT(try_get_attr<int64_t>(attr, "ellipsis_mask", ellipsis_mask));
+    ASSERT(try_get_attr<int64_t>(attr, "new_axis_mask", new_axis_mask));
+    ASSERT(try_get_attr<int64_t>(attr, "shrink_axis_mask", shrink_axis_mask));
+
+    auto begin_acc = begin.accessor<int64_t, 1>();
+    auto end_acc   = end.accessor<int64_t, 1>();
+    auto strides_acc = strides.accessor<int64_t, 1>();
+
+    int64_t num_specified = begin.size(0);          // число заданных осей в begin/end/strides
+    int64_t num_new_axes = __builtin_popcountll(new_axis_mask);
+    int64_t num_shrink_axes = __builtin_popcountll(shrink_axis_mask);
+    // Итоговое количество измерений, которое должно получиться:
+    // исходный ранг self + new_axes - shrink_axes.
+    // При наличии эллипсиса недостающие оси заполняются из self, но здесь всё учтено.
+
+    // Восстанавливаем полные списки для каждой оси (после эллипсиса)
+    std::vector<int64_t> full_begin, full_end, full_strides;
+    std::vector<bool> is_new_axis, is_shrink_axis;
+
+    int64_t spec_idx = 0;       // индекс в массивах begin/end/strides
+    int64_t self_axis = 0;      // текущая ось self, на которую проецируется спецификация
+    bool ellipsis_seen = false;
+    int64_t self_rank = self.dim();
+    int64_t total_axes_after_ellipsis = self_rank + num_new_axes - num_shrink_axes;
+
+    // Парсим спецификацию, обрабатывая эллипсис
+    for (int64_t i = 0; i < num_specified; ++i) {
+        if (ellipsis_mask & (1ULL << i)) {
+            // Вставляем эллипсис: добавляем все оставшиеся оси self
+            while (self_axis < self_rank) {
+                full_begin.push_back(0);
+                full_end.push_back(self.size(self_axis));
+                full_strides.push_back(1);
+                is_new_axis.push_back(false);
+                is_shrink_axis.push_back(false);
+                ++self_axis;
+            }
+            ellipsis_seen = true;
+            continue;
+        }
+        if (new_axis_mask & (1ULL << i)) {
+            // new axis
+            full_begin.push_back(0);
+            full_end.push_back(1);
+            full_strides.push_back(1);
+            is_new_axis.push_back(true);
+            is_shrink_axis.push_back(false);
+            // не увеличиваем self_axis
+        } else {
+            // обычная или shrink ось
+            bool shrink = (shrink_axis_mask & (1ULL << i));
+            // Проверка выхода за границы self_rank
+            if (self_axis >= self_rank) return H_UNASSERTED;
+            int64_t dim_size = self.size(self_axis);
+            int64_t b = (begin_mask & (1ULL << i)) ? 0 : begin_acc[i];
+            int64_t e = (end_mask & (1ULL << i)) ? dim_size : end_acc[i];
+            int64_t s = strides_acc[i];
+            // Корректируем отрицательные индексы
+            if (b < 0) b += dim_size;
+            if (e < 0) e += dim_size;
+            // При отрицательном stride меняем b и e местами, чтобы выполнялось b < e для slice
+            // PyTorch slice поддерживает отрицательные stride, корректировка не обязательна,
+            // но для единообразия и безопасности оставим.
+            if (s < 0) {
+                if (b == dim_size) b = dim_size - 1;
+                if (e == -1) e = 0;
+                // дополнительно ничего не меняем, slice обработает
+            }
+            full_begin.push_back(b);
+            full_end.push_back(e);
+            full_strides.push_back(s);
+            is_new_axis.push_back(false);
+            is_shrink_axis.push_back(shrink);
+            ++self_axis;
+        }
+    }
+    // Если эллипсис не встречался, но остались нераспределённые оси self
+    if (!ellipsis_seen && self_axis < self_rank)
+        while (self_axis < self_rank) {
+            full_begin.push_back(0);
+            full_end.push_back(self.size(self_axis));
+            full_strides.push_back(1);
+            is_new_axis.push_back(false);
+            is_shrink_axis.push_back(false);
+            ++self_axis;
+        }
+
+    // Теперь формируем список индексов для оператора []
+    std::vector<at::indexing::TensorIndex> indices;
+    int64_t res_axis = 0;  // ось в результирующем тензоре (после применения всех операций)
+    int64_t full_len = full_begin.size();
+    for (int64_t i = 0; i < full_len; ++i)
+        if (is_new_axis[i])
+            indices.push_back(at::indexing::None);
+        else if (is_shrink_axis[i])
+            // shrink: выбираем конкретный элемент (индекс из begin)
+            // begin уже скорректирован с учётом отрицательных значений
+            indices.push_back(full_begin[i]);
+        else
+            // обычный slice
+            indices.push_back(at::indexing::Slice(full_begin[i], full_end[i], full_strides[i]));
+
+    at::Tensor sliced;
+    try {
+        sliced = self.index(indices);
+    } catch (const std::exception& e) {
+        log_output(std::string("StridedSlice failed: ") + e.what(), true);
+        return H_UNASSERTED;
+    }
+
+    // shrink_axis уже убрал размерность, new_axis добавил – должно совпасть с outputDesc
+    out.copy_(sliced);
+    return H_OK;
+});
+
 
 REGISTER_OP(Dummy, {
     return H_OK;
