@@ -173,8 +173,8 @@ def NPU_bitwise_right_shift(res_a, res_b):
 @pytest.mark.parametrize("dtype", ALL_INT_DTYPES + (torch.uint8,))
 def test_accuracy_bitwise_right_shift(shapes, dtype):
     shape_a, shape_b = shapes
-    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device="cpu").to(device)
-    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device="cpu").to(device)
+    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device=device)
+    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device=device)
     ref_a = to_reference(res_a)
     ref_b = to_reference(res_b)
 
@@ -197,8 +197,8 @@ INPLACE_BITWISE_SHAPES = [
 @pytest.mark.parametrize("dtype", ALL_INT_DTYPES + (torch.uint8,))
 def test_accuracy_bitwise_left_shift_(shapes, dtype):
     shape_a, shape_b = shapes
-    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device="cpu").to(device)
-    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device="cpu").to(device)
+    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device=device)
+    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device=device)
     ref_a = to_reference(res_a.clone())
     ref_b = to_reference(res_b)
 
@@ -212,11 +212,140 @@ def test_accuracy_bitwise_left_shift_(shapes, dtype):
 @pytest.mark.parametrize("dtype", ALL_INT_DTYPES + (torch.uint8,))
 def test_accuracy_bitwise_right_shift_(shapes, dtype):
     shape_a, shape_b = shapes
-    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device="cpu").to(device)
-    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device="cpu").to(device)
+    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device=device)
+    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device=device)
     ref_a = to_reference(res_a.clone())
     ref_b = to_reference(res_b)
 
     ref_a.bitwise_right_shift_(ref_b)
     res_a = res_a >> res_b  # res_a.bitwise_right_shift_(res_b)
     assert_close(res_a, ref_a, dtype)
+
+
+@pytest.mark.bitwise_not
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", INT_DTYPES + BOOL_TYPES)
+def test_accuracy_bitwisenot(shape, dtype):
+    if dtype in BOOL_TYPES:
+        inp = torch.randint(0, 2, size=shape, dtype=dtype, device=device)
+    else:
+        inp = torch.randint(-0x7FFF, 0x7FFF, size=shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.bitwise_not(ref_inp)
+    res_out = torch.bitwise_not(inp)
+
+    assert_equal(res_out, ref_out)
+
+
+@pytest.mark.inplace
+@pytest.mark.bitwise_not_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", INT_DTYPES + BOOL_TYPES)
+def test_accuracy_bitwisenot_(shape, dtype):
+    if dtype in BOOL_TYPES:
+        res_inp = torch.randint(0, 2, size=shape, dtype=dtype, device=device)
+    else:
+        res_inp = torch.randint(-0x7FFF, 0x7FFF, size=shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp.clone())
+
+    ref_out = ref_inp.bitwise_not_()  # NOTE: there is no torch.bitwse_not_
+    res_out = res_inp.bitwise_not_()
+
+    assert_equal(res_out, ref_out)
+
+
+@pytest.mark.cos
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_cos(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp, True)
+
+    ref_out = torch.cos(ref_inp)
+    res_out = torch.cos(inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.cos_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_cos_(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp.clone(), True)
+
+    ref_out = torch.cos_(ref_inp)
+    res_out = torch.cos_(inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.exp
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_exp(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp, True)
+
+    ref_out = torch.exp(ref_inp)
+    res_out = torch.exp(inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.exp_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_exp_(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp.clone(), True)
+
+    ref_out = torch.exp_(ref_inp)
+    res_out = torch.exp_(inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.exp
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_exp_out(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp, True)
+
+    ref_out = torch.empty_like(ref_inp)
+    torch.exp(ref_inp, out=ref_out)
+    res_out = torch.empty_like(inp)
+    torch.exp(inp, out=res_out)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.exp2
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_exp2(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp, True)
+
+    ref_out = torch.exp2(ref_inp)
+    res_out = torch.exp2(inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.exp2_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_exp2_(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp.clone(), True)
+
+    ref_out = torch.exp2_(ref_inp)
+    res_out = torch.exp2_(inp)
+
+    assert_close(res_out, ref_out, dtype)

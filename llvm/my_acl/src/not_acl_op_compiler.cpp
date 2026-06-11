@@ -741,6 +741,138 @@ REGISTER_OP(RightShift, {
     return H_OK;
 });
 
+REGISTER_OP(Invert, {
+    // Входы: self (целочисленный тензор)
+    // Выходы: result (тот же тип)
+    at::Tensor self, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    ASSERT_CODE(at::isIntegralType(self.scalar_type(), /*includeBool=*/false),
+                H_UNIMPLEMENTED);
+
+    at::bitwise_not_out(out, self);
+    return H_OK;
+});
+
+REGISTER_OP(LogicalNot, {
+    // Входы: self (bool тензор)
+    // Выходы: result (bool тензор)
+    at::Tensor self, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    ASSERT_CODE(self.scalar_type() == at::kBool &&
+                out.scalar_type() == at::kBool,
+                H_UNIMPLEMENTED);
+
+    at::logical_not_out(out, self);
+    return H_OK;
+});
+
+REGISTER_OP(Cos, {
+    // Входы: self (float/double/half/bf16 тензор)
+    // Выходы: result (тот же тип)
+    at::Tensor self, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    ASSERT_CODE(at::isFloatingType(self.scalar_type()),
+                H_UNIMPLEMENTED);
+
+    at::cos_out(out, self);
+    return H_OK;
+});
+
+REGISTER_OP(Cosh, {
+    // Входы: self (float/double/half/bf16 тензор)
+    // Выходы: result (тот же тип)
+    at::Tensor self, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    ASSERT_CODE(at::isFloatingType(self.scalar_type()),
+                H_UNIMPLEMENTED);
+
+    at::cosh_out(out, self);
+    return H_OK;
+});
+
+REGISTER_OP(Exp, {
+    // Входы: self (float/double/half/bf16 тензор)
+    // Выходы: result (тот же тип)
+    at::Tensor self, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    ASSERT_CODE(at::isFloatingType(self.scalar_type()),
+                H_UNIMPLEMENTED);
+
+    at::exp_out(out, self);
+    return H_OK;
+});
+
+REGISTER_OP(Expm1, {
+    // Входы: self (float/double/half/bf16 тензор)
+    // Выходы: result (тот же тип)
+    at::Tensor self, out;
+    ASSERT(numInputs == 1 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    ASSERT_CODE(at::isFloatingType(self.scalar_type()),
+                H_UNIMPLEMENTED);
+
+    at::expm1_out(out, self);
+    return H_OK;
+});
+
+REGISTER_OP(Pow, {
+    // Входы:
+    //   - self (float/double/half/bf16 тензор)
+    //   - exp  (float/double/half/bf16 тензор или скаляр, переданный как тензор размера [1])
+    // Выходы: result (тип определяется через at::result_type(self, exp))
+    at::Tensor self, exp, out;
+    ASSERT(numInputs == 2 && numOutputs == 1)
+    ASSERT(outputs[0] && outputDesc[0] && outputs[0]->data)
+    ASSERT(inputs[0] && inputDesc[0] && inputs[0]->data)
+    ASSERT(inputs[1] && inputDesc[1] && inputs[1]->data)
+
+    TRY(toAtenTensor(inputDesc[0], inputs[0], self));
+    TRY(toAtenTensor(inputDesc[1], inputs[1], exp));
+    TRY(toAtenTensor(outputDesc[0], outputs[0], out));
+
+    ASSERT_CODE(at::isFloatingType(self.scalar_type()) &&
+                at::isFloatingType(exp.scalar_type()),
+                H_UNIMPLEMENTED);
+
+    at::pow_out(out, self, exp);
+    return H_OK;
+});
+
 
 // Остальное
 

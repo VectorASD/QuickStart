@@ -223,10 +223,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/Conv3dBackwardKernelNpu.cpp:41:    cmd.Name("Conv3DBackpropInput")
     Conv3DTranspose
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ConvTranspose2dBackwardKernelNpu.cpp:176:    cmd.Name("Conv3DTranspose").Input(sizeVec, at::kInt).Input(input).Input(weight);
-    Cos
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/CosKernelNpu.cpp:28:  cmd.Name("Cos")
-    Cosh
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/CoshKernelNpu.cpp:27:    cmd.Name("Cosh")
     CropAndResizeV2
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/CropAndResizeKernelNpu.cpp:36:    cmd.Name("CropAndResizeV2")
     Cross
@@ -306,10 +302,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ErfcKernelNpu.cpp:27:    cmd.Name("Erfc")
     Erfinv
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ErfinvKernelNpu.cpp:27:    cmd.Name("Erfinv")
-    Exp
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ExpKernelNpu.cpp:27:    cmd.Name("Exp")
-    Expm1
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/Expm1KernelNpu.cpp:27:    cmd.Name("Expm1")
     FastGelu
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FastGeluKernelNpu.cpp:45:    cmd.Name("FastGelu")
     FastGeluGrad
@@ -396,8 +388,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/IndexPutKernelNpu.cpp:174:    cmd.Name("IndexPutV2")
     InplaceIndexAdd
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/IndexAddKernelNpu.cpp:44:    cmd.Name("InplaceIndexAdd")
-    Invert
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BitwiseNotKernelNpu.cpp:26:    string real_op_name = (self.dtype() == at::kBool) ? "LogicalNot" : "Invert";
     Iou
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/IouKernelNpu.cpp:48:    cmd.Name("Iou")
     IsClose
@@ -444,9 +434,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/utils/custom_functions/aclops/LogSoftmaxKernelNpu.cpp:26:    cmd.Name("LogSoftmaxV2")
     LogSpaceD
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LogSpaceKernelNpu.cpp:53:    cmd.Name("LogSpaceD")
-    LogicalNot
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BitwiseNotKernelNpu.cpp:26:    string real_op_name = (self.dtype() == at::kBool) ? "LogicalNot" : "Invert";
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LogicalNotKernelNpu.cpp:27:  cmd.Name("LogicalNot")
     LogicalOr
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BitwiseOrKernelNpu.cpp:26:    string real_op_name = (self.dtype() == at::kBool) ? "LogicalOr" : "BitwiseOr";
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BitwiseOrKernelNpu.cpp:40:        string real_op_name = (self.dtype() == at::kBool) ? "LogicalOr" : "BitwiseOr";
@@ -573,11 +560,6 @@ done
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ReplicationPad2dBackwardKernelNpu.cpp:55:    cmd.Name("PadV3Grad")
     Pdist
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/PdistKernelNpu.cpp:30:    cmd.Name("Pdist")
-    Pow
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/Exp2KernelNpu.cpp:28:    cmd.Name("Pow")
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/PowKernelNpu.cpp:29:    cmd.Name("Pow")
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/PowKernelNpu.cpp:48:        cmd.Name("Pow")
-~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/PowKernelNpu.cpp:61:    cmd.Name("Pow")
     Qr
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LinalgQrKernelNpu.cpp:75:    cmd.Name("Qr")
     QuantConv2D
@@ -863,6 +845,10 @@ C
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/CeilKernelNpu.cpp:26:    cmd.Name("Ceil").Input(self).Output(result).Run();
     ConcatD
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/CatKernelNpu.cpp:63:    cmd.Name("ConcatD");
+    Cos
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/CosKernelNpu.cpp:28:  cmd.Name("Cos")
+    Cosh
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/CoshKernelNpu.cpp:27:    cmd.Name("Cosh")
 D
 E
     Equal
@@ -870,6 +856,10 @@ E
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EqKernelNpu.cpp:46:    cmd.Name("Equal")
     Eye
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/EyeKernelNpu.cpp:28:    cmd.Name("Eye")
+    Exp
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/ExpKernelNpu.cpp:27:    cmd.Name("Exp")
+    Expm1
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/Expm1KernelNpu.cpp:27:    cmd.Name("Expm1")
 F
     Fill
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/FillKernelNpu.cpp:27:    cmd.Name("Fill");
@@ -883,6 +873,8 @@ G
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/GeKernelNpu.cpp:39:  cmd.Name("GreaterEqual")
 H
 I
+    Invert
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BitwiseNotKernelNpu.cpp:26:    string real_op_name = (self.dtype() == at::kBool) ? "LogicalNot" : "Invert";
     IsFinite
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/IsfiniteKernelNpu.cpp:37:    cmd.Name("IsFinite")
 J
@@ -904,6 +896,9 @@ L
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BitwiseAndKernelNpu.cpp:40:        string real_op_name = (self.dtype() == at::kBool) ? "LogicalAnd" : "BitwiseAnd";
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LogicalAndKernelNpu.cpp:29:    cmd.Name("LogicalAnd").Input(self_copy).Input(other, self_copy.scalar_type()).Output(result).Run();
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LogicalAndKernelNpu.cpp:46:        cmd.Name("LogicalAnd").Input(self_copy).Input(other_copy).Output(result).Run();
+    LogicalNot
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/BitwiseNotKernelNpu.cpp:26:    string real_op_name = (self.dtype() == at::kBool) ? "LogicalNot" : "Invert";
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/LogicalNotKernelNpu.cpp:27:  cmd.Name("LogicalNot")
 M
     MaskedFill
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/MaskedFillKernelNpu.cpp:43:    cmd.Name("MaskedFill")
@@ -929,6 +924,11 @@ O
 P
     Pack
 ~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/StackKernelNpu.cpp:50:    cmd.Name("Pack");
+    Pow
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/Exp2KernelNpu.cpp:28:    cmd.Name("Pow")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/PowKernelNpu.cpp:29:    cmd.Name("Pow")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/PowKernelNpu.cpp:48:        cmd.Name("Pow")
+~/tmp/pytorch/third_party/op-plugin/op_plugin/ops/aclops/PowKernelNpu.cpp:61:    cmd.Name("Pow")
 Q
 R
     RealDiv
