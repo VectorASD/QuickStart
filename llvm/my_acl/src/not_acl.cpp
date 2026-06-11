@@ -1592,7 +1592,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrBool(aclopAttr *attr, const char *attrN
         return ACL_ERROR_INVALID_PARAM;
     }
 
-    attr->bools[attrName] = attrValue;
+    attr->values[attrName] = attrValue;
 
  // log << "\n    stored bool: " << attrName << "=" << (int)attrValue;
  // log_output(log);
@@ -1612,7 +1612,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrDataType(aclopAttr *attr, const char *a
         return ACL_ERROR_INVALID_PARAM;
     }
 
-    attr->dtypes[attrName] = attrValue;
+    attr->values[attrName] = attrValue;
 
  // log << "\n    stored dtype: " << attrName << "=" << static_cast<int>(attrValue);
  // log_output(log);
@@ -1632,7 +1632,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrFloat(aclopAttr *attr, const char *attr
         return ACL_ERROR_INVALID_PARAM;
     }
 
-    attr->floats[attrName] = attrValue;
+    attr->values[attrName] = attrValue;
 
  // log << "\n    stored float: " << attrName << "=" << attrValue;
  // log_output(log);
@@ -1652,7 +1652,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrInt(aclopAttr *attr, const char *attrNa
         return ACL_ERROR_INVALID_PARAM;
     }
 
-    attr->ints[attrName] = attrValue;
+    attr->values[attrName] = attrValue;
 
  // log << "\n    stored int: " << attrName << "=" << attrValue;
  // log_output(log);
@@ -1674,13 +1674,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListBool(aclopAttr *attr, const char *a
         return ACL_ERROR_INVALID_PARAM;
     }
 
-    std::vector<uint8_t> out;
-    out.reserve(numValues);
-
-    for (int i = 0; i < numValues; i++)
-        out.push_back(values[i]);
-
-    attr->list_bools[attrName] = std::move(out);
+    attr->values[attrName] = std::vector<uint8_t>(values, values + numValues);
 
  // log << "\n    stored list<uint8_t>: " << attrName
  //     << " size=" << numValues;
@@ -1703,13 +1697,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListFloat(aclopAttr *attr, const char *
         return ACL_ERROR_INVALID_PARAM;
     }
 
-    std::vector<float> out;
-    out.reserve(numValues);
-
-    for (int i = 0; i < numValues; i++)
-        out.push_back(values[i]);
-
-    attr->list_floats[attrName] = std::move(out);
+    attr->values[attrName] = std::vector<float>(values, values + numValues);
 
  // log << "\n    stored list<float>: " << attrName
  //     << " size=" << numValues;
@@ -1732,13 +1720,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListInt(aclopAttr *attr, const char *at
         return ACL_ERROR_INVALID_PARAM;
     }
 
-    std::vector<int64_t> out;
-    out.reserve(numValues);
-
-    for (int i = 0; i < numValues; i++)
-        out.push_back(values[i]);
-
-    attr->list_ints[attrName] = std::move(out);
+    attr->values[attrName] = std::vector<int64_t>(values, values + numValues);
 
  // log << "\n    stored list<int64_t>: " << attrName
  //     << " size=" << numValues;
@@ -1768,27 +1750,18 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrListListInt(aclopAttr *attr,
     std::vector<std::vector<int64_t>> out;
     out.reserve(numLists);
 
-    for (int i = 0; i < numLists; i++) {
+    for (int i = 0; i < numLists; ++i) {
         int n = numValues[i];
-        const int64_t *src = values[i];
-
+        const int64_t* src = values[i];
         if (!src || n < 0) {
             log << "\n    invalid inner list → ACL_ERROR_INVALID_PARAM";
             log_output(log, true);
             return ACL_ERROR_INVALID_PARAM;
         }
-
-        std::vector<int64_t> inner;
-        inner.reserve(n);
-
-        for (int j = 0; j < n; j++) {
-            inner.push_back(src[j]);
-        }
-
-        out.push_back(std::move(inner));
+        out.emplace_back(src, values[i] + n);
     }
 
-    attr->list_list_ints[attrName] = std::move(out);
+    attr->values[attrName] = std::move(out);
 
  // log << "\n    stored list<list<int64_t>>: " << attrName
  //     << " lists=" << numLists;
@@ -1809,7 +1782,7 @@ ACL_FUNC_VISIBILITY aclError aclopSetAttrString(aclopAttr *attr, const char *att
         return ACL_ERROR_INVALID_PARAM;
     }
 
-    attr->strings[attrName] = attrValue;
+    attr->values[attrName] = std::string(attrValue);
 
  // log << "\n    stored string: " << attrName
  //     << "=\"" << attrValue << "\"";

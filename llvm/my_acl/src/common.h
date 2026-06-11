@@ -10,6 +10,7 @@
 #include <mutex>          // std::lock_guard, std::mutex
 #include <sstream>        // std::ostringstream
 #include <algorithm>      // std::sort
+#include <variant>        // std::variant
 
 #if defined(_MSC_VER)
     #ifdef FUNC_VISIBILITY
@@ -233,18 +234,86 @@ struct aclTensorDesc {
 
 #define ACL_UNKNOWN_RANK 0xFFFFFFFFFFFFFFFE
 
-struct aclopAttr {
-    std::unordered_map<std::string, uint8_t> bools;
-    std::unordered_map<std::string, int64_t> ints;
-    std::unordered_map<std::string, float> floats;
-    std::unordered_map<std::string, std::string> strings;
-    std::unordered_map<std::string, aclDataType> dtypes;
 
-    std::unordered_map<std::string, std::vector<uint8_t>> list_bools;
-    std::unordered_map<std::string, std::vector<int64_t>> list_ints;
-    std::unordered_map<std::string, std::vector<float>> list_floats;
-    std::unordered_map<std::string, std::vector<std::vector<int64_t>>> list_list_ints;
+using AttrValue = std::variant<
+    uint8_t,
+    int64_t,
+    float,
+    std::string,
+    aclDataType,
+    std::vector<uint8_t>,
+    std::vector<int64_t>,
+    std::vector<float>,
+    std::vector<std::vector<int64_t>>
+>;
+
+struct aclopAttr {
+    std::unordered_map<std::string, AttrValue> values;
 };
+
+static void formatAclOpAttr(const aclopAttr* attr, std::ostringstream &oss) {
+    if (!attr) {
+        oss << "null";
+        return;
+    }
+    oss << '{';
+    bool first = true;
+    for (const auto& [key, val] : attr->values) {
+        if (first)
+            first = false;
+        else
+            oss << ", ";
+        oss << key << " = ";
+        std::visit([&oss](const auto& v) {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (std::is_same_v<T, uint8_t>)
+                oss << (int)v << ": bool";
+            else if constexpr (std::is_same_v<T, int64_t>)
+                oss << v << ": int";
+            else if constexpr (std::is_same_v<T, float>)
+                oss << v << ": float";
+            else if constexpr (std::is_same_v<T, std::string>)
+                oss << '"' << v << '"'; // без указания типа
+            else if constexpr (std::is_same_v<T, aclDataType>)
+                oss << static_cast<int>(v) << ": dtype";
+            else if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {
+                oss << '[';
+                for (size_t i = 0; i < v.size(); ++i) {
+                    if (i) oss << ", ";
+                    oss << (int)v[i];
+                }
+                oss << "]: bool";
+            } else if constexpr (std::is_same_v<T, std::vector<int64_t>>) {
+                oss << '[';
+                for (size_t i = 0; i < v.size(); ++i) {
+                    if (i) oss << ", ";
+                    oss << v[i];
+                }
+                oss << "]: int";
+            } else if constexpr (std::is_same_v<T, std::vector<float>>) {
+                oss << '[';
+                for (size_t i = 0; i < v.size(); ++i) {
+                    if (i) oss << ", ";
+                    oss << v[i];
+                }
+                oss << "]: float";
+            } else if constexpr (std::is_same_v<T, std::vector<std::vector<int64_t>>>) {
+                oss << '[';
+                for (size_t i = 0; i < v.size(); ++i) {
+                    if (i) oss << ", ";
+                    oss << '[';
+                    for (size_t j = 0; j < v[i].size(); ++j) {
+                        if (j) oss << ", ";
+                        oss << v[i][j];
+                    }
+                    oss << ']';
+                }
+                oss << ']';
+            }
+        }, val);
+    }
+    oss << '}';
+}
 
 
 // безопасное логирование

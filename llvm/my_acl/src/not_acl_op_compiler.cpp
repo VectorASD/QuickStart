@@ -953,11 +953,8 @@ REGISTER_OP(Gelu, {
 
     // Определяем режим: по умолчанию erf, если атрибут approximate=1 → tanh
     bool use_tanh = false;
-    if (attr) {
-        auto it = attr->ints.find("approximate");
-        if (it != attr->ints.end() && it->second == 1)
-            use_tanh = true;
-    }
+    try_get_attr<bool>(attr, "approximate", use_tanh);
+
     at::gelu_out(out, self, use_tanh ? "tanh" : "none");
     return H_OK;
 });
@@ -1151,10 +1148,6 @@ REGISTER_OP(ArgMaxWithValue, {
     if (!attr)
         return H_UNASSERTED;
 
-    // Проверяем, что атрибут dimension присутствует
-    if (attr->ints.find("dimension") == attr->ints.end())
-        return H_UNASSERTED;
-
     aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
     switch (inDt) {
         DISPATCH_ARG_MAX_WITH_VALUE(ACL_FLOAT)
@@ -1185,8 +1178,6 @@ REGISTER_OP(ArgMinWithValue, {
     if (!inputs[0] || !inputDesc[0] || !inputs[0]->data)
         return H_UNASSERTED;
     if (!attr)
-        return H_UNASSERTED;
-    if (attr->ints.find("dimension") == attr->ints.end())
         return H_UNASSERTED;
 
     aclDataType inDt = aclGetTensorDescType(inputDesc[0], false);
@@ -1365,24 +1356,14 @@ REGISTER_OP(ReduceStdV2Update, {
     if (!attr)
         return H_UNASSERTED;  // атрибуты обязательны
 
-    // Извлекаем атрибуты
-    // dim – список осей (int64_t)
-    const auto& dims_attr = attr->list_ints.find("dim");
-    if (dims_attr == attr->list_ints.end() || dims_attr->second.empty())
-        return H_UNASSERTED;  // оси не заданы
-    const std::vector<int64_t>& dims = dims_attr->second;
+    std::vector<int64_t> dims;
+    ASSERT(try_get_attr<std::vector<int64_t>>(attr, "dim", dims) && !dims.empty());
 
-    // unbiased – bool
     bool unbiased = true;
-    auto unbiased_it = attr->bools.find("unbiased");
-    if (unbiased_it != attr->bools.end())
-        unbiased = unbiased_it->second;
+    try_get_attr<bool>(attr, "unbiased", unbiased);
 
-    // correction – int64_t
     int64_t correction = 1;
-    auto correction_it = attr->ints.find("correction");
-    if (correction_it != attr->ints.end())
-        correction = correction_it->second;
+    try_get_attr<int64_t>(attr, "correction", correction);
 
     // keepdim – bool (но выход уже имеет размерность без учёта keepdim или с ней? в эмуляции можно игнорировать, т.к. форма выхода уже задана)
     // if_std – bool (0 – дисперсия, 1 – станд.отклонение, но мы пока делаем дисперсию)
@@ -1877,16 +1858,18 @@ REGISTER_OP(Dummy, {
 ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
         int numInputs, const aclTensorDesc *const inputDesc[], const aclDataBuffer *const inputs[],
         int numOutputs, const aclTensorDesc *const outputDesc[], aclDataBuffer *const outputs[],
-        const aclopAttr *attr, aclopEngineType engineType, aclopCompileType compileFlag,
+        const aclopAttr *attrs, aclopEngineType engineType, aclopCompileType compileFlag,
         const char *opPath, aclrtStream stream) {
         std::ostringstream log;
 
     log << "[aclopCompileAndExecute] opType=" << (opType ? opType : "(null)")
         << " opPath=" << (opPath ? opPath : "(null)") << " stream=" << stream
         << "\n    opts: " << logCompileOpts()
-        << "\n    numInputs=" << numInputs << " numOutputs=" << numOutputs
-    << formatTensorList("input", inputDesc, inputs, numInputs, PRINT_ALL)
-    << formatTensorList("output", outputDesc, outputs, numOutputs, PRINT_DESC);
+     // << "\n    numInputs=" << numInputs << " numOutputs=" << numOutputs
+        << "\n attrs=";
+    formatAclOpAttr(attrs, log);
+    log << formatTensorList("input", inputDesc, inputs, numInputs, PRINT_ALL)
+        << formatTensorList("output", outputDesc, outputs, numOutputs, PRINT_DESC);
     try {
 
         auto t_start = std::chrono::steady_clock::now();
@@ -1894,7 +1877,7 @@ ACL_FUNC_VISIBILITY aclError aclopCompileAndExecute(const char *opType,
         OpHandler handler;
         exitCode code = H_UNKNOWN_OP;
         if (opType && OpRegistry::try_find(opType, handler))
-            code = handler(numInputs, inputDesc, inputs, numOutputs, outputDesc, outputs, attr);
+            code = handler(numInputs, inputDesc, inputs, numOutputs, outputDesc, outputs, attrs);
 
         auto t_end = std::chrono::steady_clock::now();
         double elapsed_us = std::chrono::duration<double, std::micro>(t_end - t_start).count();

@@ -360,7 +360,7 @@ using OpHandler = exitCode (*)(int numInputs, const aclTensorDesc* const inputDe
                                const aclDataBuffer* const inputs[],
                                int numOutputs, const aclTensorDesc* const outputDesc[],
                                aclDataBuffer* const outputs[],
-                               const aclopAttr* attr);
+                               const aclopAttr* attrs);
 
 struct OpRegistry {
     static std::unordered_map<std::string, OpHandler>& map() {
@@ -437,59 +437,45 @@ template<typename T>
 static inline bool try_get_attr(const aclopAttr* attr, const std::string& key, T& value) {
     if (!attr)
         return false;
+    auto it = attr->values.find(key);
+    if (it == attr->values.end())
+        return false;
+
     if constexpr (std::is_same_v<T, int>) {
-        auto it = attr->ints.find(key);
-        if (it == attr->ints.end())
-            return false;
-        value = static_cast<int>(it->second);
-    } else if constexpr (std::is_same_v<T, int64_t>) {
-        auto it = attr->ints.find(key);
-        if (it == attr->ints.end())
-            return false;
-        value = it->second;
+        const int64_t* p = std::get_if<int64_t>(&it->second);
+        if (p) {
+            value = static_cast<int>(*p);
+            return true;
+        }
+        return false;
     } else if constexpr (std::is_same_v<T, bool>) {
-        auto it = attr->bools.find(key);
-        if (it == attr->bools.end())
-            return false;
-        value = it->second;
-    } else if constexpr (std::is_same_v<T, float>) {
-        auto it = attr->floats.find(key);
-        if (it == attr->floats.end())
-            return false;
-        value = it->second;
-    } else if constexpr (std::is_same_v<T, std::string>) {
-        auto it = attr->strings.find(key);
-        if (it == attr->strings.end())
-            return false;
-        value = it->second;
-    } else if constexpr (std::is_same_v<T, aclDataType>) {
-        auto it = attr->dtypes.find(key);
-        if (it == attr->dtypes.end())
-            return false;
-        value = it->second;
-    } else if constexpr (std::is_same_v<T, std::vector<int64_t>>) {
-        auto it = attr->list_ints.find(key);
-        if (it == attr->list_ints.end())
-            return false;
-        value = it->second;
-    } else if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {
-        auto it = attr->list_bools.find(key);
-        if (it == attr->list_bools.end())
-            return false;
-        value = it->second;
-    } else if constexpr (std::is_same_v<T, std::vector<float>>) {
-        auto it = attr->list_floats.find(key);
-        if (it == attr->list_floats.end())
-            return false;
-        value = it->second;
-    } else if constexpr (std::is_same_v<T, std::vector<std::vector<int64_t>>>) {
-        auto it = attr->list_list_ints.find(key);
-        if (it == attr->list_list_ints.end())
-            return false;
-        value = it->second;
-    } else
-        static_assert(sizeof(T) == 0, "Unsupported attribute type");
-    return true;
+        const uint8_t* p = std::get_if<uint8_t>(&it->second);
+        if (p) {
+            value = (*p != 0);
+            return true;
+        }
+        return false;
+    } else {
+        static_assert(
+            std::disjunction_v<
+                std::is_same<T, int64_t>,
+                std::is_same<T, float>,
+                std::is_same<T, std::string>,
+                std::is_same<T, aclDataType>,
+                std::is_same<T, std::vector<int64_t>>,
+                std::is_same<T, std::vector<uint8_t>>,
+                std::is_same<T, std::vector<float>>,
+                std::is_same<T, std::vector<std::vector<int64_t>>>
+            >,
+            "Unsupported attribute type"
+        );
+        const T* p = std::get_if<T>(&it->second);
+        if (p) {
+            value = *p;
+            return true;
+        }
+        return false;
+    }
 }
 
 static inline exitCode toAtenTensor(const aclTensorDesc* desc, const aclDataBuffer* buffer, at::Tensor& tensor) {
@@ -856,14 +842,12 @@ void broadcastCompareOp(TensorAccessor<bool>& out,
         TensorAccessor<int32_t> out_idx(outputs[0]->data, outputDesc[0]->dims); \
         TensorAccessor<T> out_vals(outputs[1]->data, outputDesc[1]->dims); \
         \
-        const auto& dim_attr = attr->ints.find("dimension"); \
-        if (dim_attr == attr->ints.end()) return H_UNASSERTED; \
-        int64_t axis = dim_attr->second; \
+        int64_t axis; \
+        ASSERT(try_get_attr<int64_t>(attr, "dimension", axis)) \
         if (axis < 0) axis += in.dims().size(); \
         \
         bool keepdim = false; \
-        auto keep_attr = attr->bools.find("keep_dims"); \
-        if (keep_attr != attr->bools.end()) keepdim = keep_attr->second; \
+        try_get_attr<bool>(attr, "keep_dims", keepdim); /* необязательный атрибут, по умолчанию false */ \
         \
         std::vector<int64_t> outDims = in.dims(); \
         outDims.erase(outDims.begin() + axis); \
@@ -907,14 +891,12 @@ void broadcastCompareOp(TensorAccessor<bool>& out,
         TensorAccessor<int32_t> out_idx(outputs[0]->data, outputDesc[0]->dims); \
         TensorAccessor<T> out_vals(outputs[1]->data, outputDesc[1]->dims); \
         \
-        const auto& dim_attr = attr->ints.find("dimension"); \
-        if (dim_attr == attr->ints.end()) return H_UNASSERTED; \
-        int64_t axis = dim_attr->second; \
+        int64_t axis; \
+        ASSERT(try_get_attr<int64_t>(attr, "dimension", axis)) \
         if (axis < 0) axis += in.dims().size(); \
         \
         bool keepdim = false; \
-        auto keep_attr = attr->bools.find("keep_dims"); \
-        if (keep_attr != attr->bools.end()) keepdim = keep_attr->second; \
+        try_get_attr<bool>(attr, "keep_dims", keepdim); /* необязательный атрибут, по умолчанию false */ \
         \
         std::vector<int64_t> outDims = in.dims(); \
         outDims.erase(outDims.begin() + axis); \
@@ -1024,14 +1006,12 @@ void broadcastCompareOp(TensorAccessor<bool>& out,
         TensorAccessor<T> out(outputs[0]->data, outputDesc[0]->dims); \
         \
         /* Извлекаем оси из атрибутов */ \
-        const auto& axes_attr = attr->list_ints.find("axes"); \
-        if (axes_attr == attr->list_ints.end()) return H_UNASSERTED; \
-        const std::vector<int64_t>& axes = axes_attr->second; \
+        std::vector<int64_t> axes; \
+        ASSERT(try_get_attr<std::vector<int64_t>>(attr, "axes", axes)) \
         \
         /* keep_dims (опционально) */ \
         bool keep_dims = false; \
-        auto keep_attr = attr->bools.find("keep_dims"); \
-        if (keep_attr != attr->bools.end()) keep_dims = keep_attr->second; \
+        try_get_attr<bool>(attr, "keep_dims", keep_dims); /* необязательный атрибут, по умолчанию false */ \
         \
         /* Нормализуем оси */ \
         std::vector<int64_t> norm_axes; \
