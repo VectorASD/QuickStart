@@ -10,208 +10,31 @@
 
 #include "common.h"      // log_output, ...
 #include "not_acl.cpp"   // aclCreateDataBuffer, aclCreateTensorDesc
-#include "helpers.cpp"   // aclDataTypeToString, aclFormatToString, tensorDataToString
-#include "op_profiler.h" // record_op_timing
-
-#include <cstdint>      // int32_t, int64_t, uint64_t
-
+#include "not_opapi_base.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct aclOpExecutor {};
-struct aclIntArray {};
-struct aclFloatArray {};
-struct aclBoolArray {};
-struct aclTensorList {};
-struct aclScalarList {};
-
-typedef int32_t aclnnStatus;
-constexpr aclnnStatus OK = 0;
-constexpr aclnnStatus UNIMPLEMENTED = 1;
-constexpr aclnnStatus INVALID_PARAM = 2;
-constexpr aclnnStatus UNASSERTED    = 3;
-
-
-
-#undef ASSERT_CODE
-#undef ASSERT
-
-struct AclnnException {
-    aclnnStatus status;
-    std::string message;
-    AclnnException(aclnnStatus s, const std::string& msg) : status(s), message(msg) {}
-};
-
-#define ASSERT_CODE(cond, code) \
-    do { \
-        if (!(cond)) { \
-            std::ostringstream _log; \
-            _log << "Error: " << __func__ << " assertion '" #cond "' failed"; \
-            log_output(_log, true); \
-            throw AclnnException((code), _log.str()); \
-        } \
-    } while (0);
-
-#define ASSERT(cond) ASSERT_CODE(cond, UNASSERTED)
-
-#define LOAD_TENSOR(tensor_var, acl_tensor_ptr)                                 \
-    do {                                                                        \
-        auto _tensor = (acl_tensor_ptr);                                        \
-        if (!(acl_tensor_ptr) || !_tensor->desc || !_tensor->buffer) {          \
-            throw AclnnException(UNIMPLEMENTED,                                 \
-                                 "LOAD_TENSOR: null aclTensor or desc/buffer"); \
-        }                                                                       \
-        at::ScalarType type;                                                    \
-        if (!try_toAtenType(_tensor->desc->dtype, type)) {                      \
-            throw AclnnException(UNIMPLEMENTED,                                 \
-                                 "LOAD_TENSOR: unsupported data type");         \
-        }                                                                       \
-        auto opts = at::TensorOptions().dtype(type).device(at::kCPU);           \
-        std::vector<int64_t> dims = _tensor->desc->dims;                        \
-        std::vector<int64_t> strides = _tensor->strides;                        \
-        int64_t offset = _tensor->offset;                                       \
-        size_t elemSize = aclDataTypeBytes(_tensor->desc->dtype);               \
-        tensor_var = at::from_blob(                                             \
-            (char*)_tensor->buffer->data + offset * elemSize,                   \
-            dims, strides, opts);                                               \
-    } while (0)
-
-#define DEFINE_ACLNN_OP(NAME, EXECUTOR_TYPE, ...)                \
-    __attribute__((visibility("default")))                       \
-    aclnnStatus NAME(void *workspace,                            \
-                     uint64_t workspaceSize,                     \
-                     aclOpExecutor *executor,                    \
-                     aclrtStream stream) {                       \
-        auto t_start = std::chrono::steady_clock::now();         \
-        auto *exec = reinterpret_cast<EXECUTOR_TYPE*>(executor); \
-        ASSERT(exec)                                             \
-        std::ostringstream log;                                  \
-        exec->start(#NAME, log);                                 \
-        aclnnStatus _ret = OK;                                   \
-        try {                                                    \
-            __VA_ARGS__                                          \
-            exec->end(log);                                      \
-        } catch (const AclnnException& e) {                      \
-            _ret = e.status;                                     \
-            log << "\n!!! " << e.message;                        \
-        } catch (const std::exception& e) {                      \
-            _ret = UNASSERTED;                                   \
-            log << "\n!!! C++ exception: " << e.what();          \
-        } catch (...) {                                          \
-            _ret = UNASSERTED;                                   \
-            log << "\n!!! unknown exception";                    \
-        }                                                        \
-        log_output(log, true);                                   \
-        delete exec;                                             \
-        auto t_end = std::chrono::steady_clock::now();           \
-        double elapsed_us = std::chrono::duration<double, std::micro>(t_end - t_start).count(); \
-        record_op_timing(#NAME, elapsed_us);                     \
-        return _ret;                                             \
-    }
-
-
-
-struct aclTensor {
-    aclTensorDesc* desc;
-    aclDataBuffer* buffer;
-    std::vector<int64_t> strides;
-    int64_t offset;
-};
-
-struct aclScalar {};
-
-static std::string tensorDataToString(const aclTensor* tensor) {
-    return tensorDataToString(tensor->desc, tensor->buffer, tensor->strides, tensor->offset);
-}
-
-
-
-// ~~~ общие компоненты ~~~
-
-struct InplaceNormalExecutor {
-    const aclTensor* selfRef;
-    float mean;
-    float std;
-    int64_t seed;
-    int64_t offset;
-
-    void start(const char* opName, std::ostringstream& log) const {
-        log << "[EXEC " << opName << "] mean=" << mean << " std=" << std << " seed=" << seed << " offset=" << offset;
-    }
-    void end(std::ostringstream& log) {
-        log << "\nselfRef:\n" << tensorDataToString(selfRef);
-    }
-};
-
-struct UnaryExecutor {
-    const aclTensor* x;
-    const aclTensor* out;
-
-    void start(const char* opName, std::ostringstream& log) const {
-        log << "[EXEC " << opName << ']'
-            << "\nx:\n" << tensorDataToString(x);
-    }
-    void end(std::ostringstream& log) {
-        log << "\nout:\n" << tensorDataToString(out);
-    }
-};
 
 
 // ~~~ основной привод операций ~~~
 
-__attribute__((visibility("default")))
-aclnnStatus aclnnInplaceNormalGetWorkspaceSize(const aclTensor* selfRef, float mean, float std, int64_t seed, int64_t offset, uint64_t* workspaceSize,
-                                               aclOpExecutor** executor) {
-    ASSERT_CODE(workspaceSize && executor, INVALID_PARAM)
-    ASSERT(selfRef)
+#define MAKE_OP(...)
 
-    InplaceNormalExecutor* exec = new InplaceNormalExecutor{selfRef, mean, std, seed, offset};
-    *workspaceSize = 0;
-    *executor = reinterpret_cast<aclOpExecutor*>(exec);
-
-    return OK;
-}
-
-DEFINE_ACLNN_OP(aclnnInplaceNormal, InplaceNormalExecutor, {
-    ASSERT_CODE(!workspace && !workspaceSize && stream, INVALID_PARAM)
-
-    at::Tensor self_tensor;
-    LOAD_TENSOR(self_tensor, exec->selfRef);
-
-    uint64_t effective_seed = static_cast<uint64_t>(exec->seed) + static_cast<uint64_t>(exec->offset);
+MAKE_OP(aclnnInplaceNormal(out const aclTensor* selfRef, float mean, float std, int64_t seed, int64_t offset,
+                           uint64_t* workspaceSize, aclOpExecutor** executor) {
     auto gen = at::detail::getDefaultCPUGenerator();
-    gen.set_current_seed(effective_seed);
-
-    self_tensor.normal_(exec->mean, exec->std, gen);
+    gen.set_current_seed(static_cast<uint64_t>(seed) + static_cast<uint64_t>(offset));
+    selfRef.normal_(mean, std, gen);
 })
 
-
-__attribute__((visibility("default")))
-aclnnStatus aclnnAngleV2GetWorkspaceSize(const aclTensor *x,
-                                         const aclTensor *out,
-                                         uint64_t *workspaceSize,
-                                         aclOpExecutor **executor) {
-    ASSERT_CODE(workspaceSize && executor, INVALID_PARAM)
-    ASSERT(x && out)
-
-    UnaryExecutor* exec = new UnaryExecutor{x, out};
-    *workspaceSize = 0;
-    *executor = reinterpret_cast<aclOpExecutor*>(exec);
-
-    return OK;
-}
-
-DEFINE_ACLNN_OP(aclnnAngleV2, UnaryExecutor, {
-    ASSERT_CODE(!workspace && !workspaceSize && stream, INVALID_PARAM)
-
-    at::Tensor x_tensor, out_tensor;
-    LOAD_TENSOR(x_tensor, exec->x);
-    LOAD_TENSOR(out_tensor, exec->out);
-
-    at::angle_out(out_tensor, x_tensor);
+MAKE_OP(aclnnAngleV2(const aclTensor *x, out const aclTensor *out,
+                     uint64_t *workspaceSize, aclOpExecutor **executor) {
+    at::angle_out(out, x);
 })
+
+#include "not_opapi_gen.cpp"
 
 
 
@@ -241,13 +64,26 @@ aclTensor* aclCreateTensor(const int64_t* viewDims, uint64_t viewDimsNum, aclDat
         log << (i ? ", " : "") << storageDims[i];
     if (!storageDimsNum) log << '-';
 
-    size_t totalElements = 1;
-    for (uint64_t i = 0; i < viewDimsNum; ++i)
-        totalElements *= viewDims[i];
+ // size_t totalElements = 1;
+    size_t maxOffset = offset;
+    bool negOffset = offset < 0;
+    for (uint64_t i = 0; i < viewDimsNum; ++i) {
+     // totalElements *= viewDims[i];
+        size_t localOffset = (viewDims[i] - 1) * stride[i];
+        if (localOffset > 0)
+            maxOffset += localOffset;
+        negOffset |= localOffset < 0;
+    }
     size_t size = aclDataTypeBytes(dataType);
 
-    if (storageDimsNum != 1 || storageDims[0] != totalElements) {
-        log << "\nError: strange storageDims";
+    if (storageDimsNum != 1 || maxOffset + 1 > storageDims[0]) {
+        log << "\nError: storage size too small: maxOffset=" << maxOffset
+            << " >= storageDims[0]=" << (storageDimsNum ? storageDims[0] : '?');
+        log_output(log, true);
+        return nullptr;
+    }
+    if (negOffset) {
+        log << "\nError: neg offset?!";
         log_output(log, true);
         return nullptr;
     }

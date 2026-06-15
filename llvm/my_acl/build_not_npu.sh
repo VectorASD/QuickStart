@@ -104,6 +104,22 @@ build_obj() {
     fi
 }
 
+generate_code() {
+    local script="$1"
+    local output="$2"
+    echo -n "gen $output... "
+
+    python "$SRC/$script"
+
+    local ret=$?
+    if [[ $ret -eq 0 ]]; then
+        echo "DONE"
+    else
+        echo "FAILED"
+        exit $ret
+    fi
+}
+
 CC="gcc"
 CXX="g++"
 MOLD_FLAGS="-fuse-ld=mold"
@@ -117,6 +133,8 @@ build_obj $CC not_acl_tdt_channel.c not_acl_tdt_channel.o
 build_obj $CXX not_acl.cpp             not_acl.o
 build_obj $CXX op_profiler.cpp         op_profiler.o
 build_obj $CXX not_acl_op_compiler.cpp not_acl_op_compiler.o "${TORCH_COMPILE_FLAGS[@]}"
+
+generate_code not_opapi_gen.py         not_opapi_gen.cpp
 build_obj $CXX not_opapi.cpp           not_opapi.o "${TORCH_COMPILE_FLAGS[@]}"
 
 # 2. Линковка разделяемых библиотек (mold ускоряет)

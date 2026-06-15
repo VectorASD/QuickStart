@@ -85,25 +85,32 @@ template <typename T>
 static std::string formatFloatValue(T val) {
     std::ostringstream oss;
     if constexpr (std::is_same_v<T, float>) {
-        if (std::abs(val) >= 1e-4f && std::abs(val) < 1e4f)
-            oss << std::fixed << std::setprecision(4) << val;
-        else
+        if (std::abs(val - std::round(val)) < 0.00005f)
+            oss << std::fixed << std::setprecision(0) << val << '.';
+        else if (std::abs(val) < 1e-4f || std::abs(val) > 1e8f)
             oss << std::scientific << std::setprecision(4) << val;
+        else
+            oss << std::fixed << std::setprecision(4) << val;
     } else {
-        if (std::abs(val) >= 1e-4 && std::abs(val) < 1e4)
-            oss << std::fixed << std::setprecision(4) << val;
-        else
+        if (std::abs(val - std::round(val)) < 0.00005)
+            oss << std::fixed << std::setprecision(0) << val << '.';
+        else if (std::abs(val) < 1e-4 || std::abs(val) > 1e8)
             oss << std::scientific << std::setprecision(4) << val;
+        else
+            oss << std::fixed << std::setprecision(4) << val;
     }
     return oss.str();
+}
+static inline std::string formatFloat(float val) {
+    return formatFloatValue(val);
+}
+static inline std::string formatDouble(double val) {
+    return formatFloatValue(val);
 }
 
 // Преобразует один элемент тензора в строку по его типу
 static std::string aclElementToString(aclDataType dtype, const void* elemPtr) {
     if (!elemPtr) return "?";
-
-    auto formatFloat = [](float val) { return formatFloatValue(val); };
-    auto formatDouble = [](double val) { return formatFloatValue(val); };
 
     switch (dtype) {
         case ACL_FLOAT:   return formatFloat(*static_cast<const float*>(elemPtr));
