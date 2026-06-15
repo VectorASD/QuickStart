@@ -119,25 +119,21 @@ static inline std::string tensorDataToString(const aclTensor* tensor) {
 
 
 struct aclTensorList {
-    const aclTensor* const* data;   // массив указателей на aclTensor
-    size_t n;                       // количество тензоров
+    std::vector<const aclTensor*> data; 
+    int n;
     mutable std::vector<at::Tensor> cached; // кэш загруженных тензоров
     mutable bool loaded = false;
 
-    aclTensorList(const aclTensor* const* tensors, size_t count)
-        : data(tensors), n(count) {}
+    aclTensorList(const aclTensor* const* ptrs, size_t count)
+        : data(ptrs, ptrs + count), n(count) {}
+            // Прямое хранение ptrs опасно для жизни программы (сразу отлетает segmentation fault при вызове toString)
 
-    size_t size() const { return n; }
-
-    // Возвращаем ArrayRef, ссылающийся на кэшированные тензоры
     at::TensorList aten_tensors() const {
         if (!loaded) {
             cached.reserve(n);
-            for (size_t i = 0; i < n; ++i) {
-                const aclTensor* t = data[i];
-                if (!t) {
+            for (const aclTensor* t : data) {
+                if (!t)
                     throw AclnnException(UNIMPLEMENTED, "null aclTensor in list");
-                }
                 at::Tensor tensor;
                 LOAD_TENSOR(tensor, t);   // используем существующий макрос
                 cached.push_back(tensor);
@@ -149,12 +145,12 @@ struct aclTensorList {
 
     static void toString(const aclTensorList* list, std::ostringstream& oss) {
         if (!list) {
-            oss << "\naclTensorList null\n";
+            oss << "\n    aclTensorList null\n";
             return;
         }
-        oss << "aclTensorList(" << list->n << "):";
+        oss << "\n    aclTensorList(" << list->n << "):";
         for (size_t i = 0; i < list->n; ++i)
-            oss << "\n  [" << i << "]:\n" << tensorDataToString(list->data[i]);
+            oss << "\n      [" << i << "]:\n" << tensorDataToString(list->data[i]);
     }
 };
 

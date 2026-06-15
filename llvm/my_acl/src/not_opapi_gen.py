@@ -120,7 +120,7 @@ def make_printer(func_name: str, need_out: bool, signature, write):
             first = False
         else:
             write("\n           ")
-        write(rf' << "\n{name}:\n" << tensorDataToString({name})')
+        write(rf' << "\n    {name}:\n" << tensorDataToString({name})')
 
     write(';');
 

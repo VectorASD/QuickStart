@@ -16,6 +16,8 @@
 extern "C" {
 #endif
 
+#define LOG_MEMORY 0
+
 
 
 // ~~~ основной привод операций ~~~
@@ -116,12 +118,59 @@ aclTensor* aclCreateTensor(const int64_t* viewDims, uint64_t viewDimsNum, aclDat
  // log << "\n" << tensorDataToString(tensor);
  // log_output(log, true);
 
-    std::ostringstream log2;
-    log2 << "[NEW TENSOR] addr=" << tensor << " dataType=" << aclDataTypeToString(tensor->desc->dtype);
-    log_output(log2, true);
+    #if LOG_MEMORY
+        std::ostringstream log2;
+        log2 << "[NEW TENSOR] addr=" << tensor << " dataType=" << aclDataTypeToString(tensor->desc->dtype);
+        log_output(log2, true);
+    #endif  // LOG_MEMORY
 
     return tensor;
 }
+
+aclnnStatus aclDestroyTensor(const aclTensor* tensor) {
+    #if LOG_MEMORY
+        std::ostringstream log;
+        log << "[aclDestroyTensor] addr=" << tensor << " dataType=" << aclDataTypeToString(tensor->desc->dtype);
+        log_output(log, true);
+    #endif  // LOG_MEMORY
+
+    if (tensor) {
+        if (tensor->desc)
+            aclDestroyTensorDesc(tensor->desc);
+        if (tensor->buffer)
+            aclDestroyDataBuffer(tensor->buffer);
+        delete tensor;
+    }
+    return OK;
+}
+
+
+aclTensorList* aclCreateTensorList(const aclTensor* const* value, uint64_t size) {
+    #if LOG_MEMORY
+        std::ostringstream log;
+        log << "[aclCreateTensorList] tensors=[";
+        for (int i = 0; i < size; i++)
+            log << (i ? ", " : "") << value[i];
+        log << ']';
+        log_output(log, true);
+    #endif  // LOG_MEMORY
+
+    if (!value && size > 0)
+        return nullptr;
+    return new aclTensorList(value, size);
+}
+
+aclnnStatus aclDestroyTensorList(const aclTensorList* array) {
+    #if LOG_MEMORY
+        std::ostringstream log;
+        log << "[aclDestroyTensorList] array=" << static_cast<const void*>(array);
+        log_output(log, true);
+    #endif  // LOG_MEMORY
+
+    delete array;
+    return OK;
+}
+
 
 aclScalar* aclCreateScalar(void* value, aclDataType dataType) {
     std::ostringstream log;
@@ -159,19 +208,6 @@ aclBoolArray* aclCreateBoolArray(const bool* value, uint64_t size) {
     return nullptr;
 }
 
-aclTensorList* aclCreateTensorList(const aclTensor* const* value, uint64_t size) {
-    std::ostringstream log;
-    log << "[aclCreateTensorList] tensors=[";
-    for (int i = 0; i < size; i++)
-        log << (i ? ", " : "") << value[i];
-    log << ']';
-    log_output(log, true);
-
-    if (!value && size > 0)
-        return nullptr;
-    return new aclTensorList(value, size);
-}
-
 aclScalarList* aclCreateScalarList(const aclScalar* const* value, uint64_t size) {
     std::ostringstream log;
     log << "[aclCreateScalarList] value=" << static_cast<const void*>(value)
@@ -179,20 +215,6 @@ aclScalarList* aclCreateScalarList(const aclScalar* const* value, uint64_t size)
         << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return nullptr;
-}
-
-aclnnStatus aclDestroyTensor(const aclTensor* tensor) {
- // std::ostringstream log;
- // log << "[aclDestroyTensor] tensor=" << static_cast<const void*>(tensor);
- // log_output(log, true);
-    if (tensor) {
-        if (tensor->desc)
-            aclDestroyTensorDesc(tensor->desc);
-        if (tensor->buffer)
-            aclDestroyDataBuffer(tensor->buffer);
-        delete tensor;
-    }
-    return OK;
 }
 
 aclnnStatus aclDestroyScalar(const aclScalar* scalar) {
@@ -225,15 +247,6 @@ aclnnStatus aclDestroyBoolArray(const aclBoolArray* array) {
         << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
-}
-
-aclnnStatus aclDestroyTensorList(const aclTensorList* array) {
-    std::ostringstream log;
-    log << "[aclDestroyTensorList] array=" << static_cast<const void*>(array);
-    log_output(log, true);
-
-    delete array;
-    return OK;
 }
 
 aclnnStatus aclDestroyScalarList(const aclScalarList* array) {
