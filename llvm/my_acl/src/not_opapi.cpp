@@ -29,6 +29,10 @@ MAKE_OP(aclnnInplaceNormal(out const aclTensor* selfRef, float mean, float std, 
     selfRef.normal_(mean, std, gen);
 })
 
+MAKE_OP(aclnnCat(const aclTensorList* tensors, int64_t dim, out aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::cat_out(out, tensors->aten_tensors(), dim);
+})
+
 MAKE_OP(aclnnAngleV2(const aclTensor *x, out const aclTensor *out,
                      uint64_t *workspaceSize, aclOpExecutor **executor) {
     at::angle_out(out, x);
@@ -74,7 +78,6 @@ aclTensor* aclCreateTensor(const int64_t* viewDims, uint64_t viewDimsNum, aclDat
             maxOffset += localOffset;
         negOffset |= localOffset < 0;
     }
-    size_t size = aclDataTypeBytes(dataType);
 
     if (storageDimsNum != 1 || maxOffset + 1 > storageDims[0]) {
         log << "\nError: storage size too small: maxOffset=" << maxOffset
@@ -88,8 +91,11 @@ aclTensor* aclCreateTensor(const int64_t* viewDims, uint64_t viewDimsNum, aclDat
         return nullptr;
     }
 
+    size_t elemSize = aclDataTypeBytes(dataType);
+    size_t totalSize = storageDims[0] * elemSize;
+
     aclTensorDesc* desc = aclCreateTensorDesc(dataType, static_cast<int>(viewDimsNum), viewDims, format);
-    aclDataBuffer* buffer = aclCreateDataBuffer(tensorData, size);
+    aclDataBuffer* buffer = aclCreateDataBuffer(tensorData, totalSize);
 
     aclTensor* tensor = new aclTensor();
     tensor->desc = desc;
@@ -110,13 +116,18 @@ aclTensor* aclCreateTensor(const int64_t* viewDims, uint64_t viewDimsNum, aclDat
  // log << "\n" << tensorDataToString(tensor);
  // log_output(log, true);
 
+    std::ostringstream log2;
+    log2 << "[NEW TENSOR] addr=" << tensor << " dataType=" << aclDataTypeToString(tensor->desc->dtype);
+    log_output(log2, true);
+
     return tensor;
 }
 
 aclScalar* aclCreateScalar(void* value, aclDataType dataType) {
     std::ostringstream log;
     log << "[aclCreateScalar] value=" << value
-        << " dataType=" << dataType;
+        << " dataType=" << dataType
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return nullptr;   // заглушка
 }
@@ -124,7 +135,8 @@ aclScalar* aclCreateScalar(void* value, aclDataType dataType) {
 aclIntArray* aclCreateIntArray(const int64_t* value, uint64_t size) {
     std::ostringstream log;
     log << "[aclCreateIntArray] value=" << static_cast<const void*>(value)
-        << " size=" << size;
+        << " size=" << size
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return nullptr;
 }
@@ -132,7 +144,8 @@ aclIntArray* aclCreateIntArray(const int64_t* value, uint64_t size) {
 aclFloatArray* aclCreateFloatArray(const float* value, uint64_t size) {
     std::ostringstream log;
     log << "[aclCreateFloatArray] value=" << static_cast<const void*>(value)
-        << " size=" << size;
+        << " size=" << size
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return nullptr;
 }
@@ -140,23 +153,30 @@ aclFloatArray* aclCreateFloatArray(const float* value, uint64_t size) {
 aclBoolArray* aclCreateBoolArray(const bool* value, uint64_t size) {
     std::ostringstream log;
     log << "[aclCreateBoolArray] value=" << static_cast<const void*>(value)
-        << " size=" << size;
+        << " size=" << size
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return nullptr;
 }
 
 aclTensorList* aclCreateTensorList(const aclTensor* const* value, uint64_t size) {
     std::ostringstream log;
-    log << "[aclCreateTensorList] value=" << static_cast<const void*>(value)
-        << " size=" << size;
+    log << "[aclCreateTensorList] tensors=[";
+    for (int i = 0; i < size; i++)
+        log << (i ? ", " : "") << value[i];
+    log << ']';
     log_output(log, true);
-    return nullptr;
+
+    if (!value && size > 0)
+        return nullptr;
+    return new aclTensorList(value, size);
 }
 
 aclScalarList* aclCreateScalarList(const aclScalar* const* value, uint64_t size) {
     std::ostringstream log;
     log << "[aclCreateScalarList] value=" << static_cast<const void*>(value)
-        << " size=" << size;
+        << " size=" << size
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return nullptr;
 }
@@ -177,28 +197,32 @@ aclnnStatus aclDestroyTensor(const aclTensor* tensor) {
 
 aclnnStatus aclDestroyScalar(const aclScalar* scalar) {
     std::ostringstream log;
-    log << "[aclDestroyScalar] scalar=" << static_cast<const void*>(scalar);
+    log << "[aclDestroyScalar] scalar=" << static_cast<const void*>(scalar)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
 
 aclnnStatus aclDestroyIntArray(const aclIntArray* array) {
     std::ostringstream log;
-    log << "[aclDestroyIntArray] array=" << static_cast<const void*>(array);
+    log << "[aclDestroyIntArray] array=" << static_cast<const void*>(array)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
 
 aclnnStatus aclDestroyFloatArray(const aclFloatArray* array) {
     std::ostringstream log;
-    log << "[aclDestroyFloatArray] array=" << static_cast<const void*>(array);
+    log << "[aclDestroyFloatArray] array=" << static_cast<const void*>(array)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
 
 aclnnStatus aclDestroyBoolArray(const aclBoolArray* array) {
     std::ostringstream log;
-    log << "[aclDestroyBoolArray] array=" << static_cast<const void*>(array);
+    log << "[aclDestroyBoolArray] array=" << static_cast<const void*>(array)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -207,12 +231,15 @@ aclnnStatus aclDestroyTensorList(const aclTensorList* array) {
     std::ostringstream log;
     log << "[aclDestroyTensorList] array=" << static_cast<const void*>(array);
     log_output(log, true);
-    return UNIMPLEMENTED;
+
+    delete array;
+    return OK;
 }
 
 aclnnStatus aclDestroyScalarList(const aclScalarList* array) {
     std::ostringstream log;
-    log << "[aclDestroyScalarList] array=" << static_cast<const void*>(array);
+    log << "[aclDestroyScalarList] array=" << static_cast<const void*>(array)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -221,7 +248,8 @@ aclnnStatus aclGetViewShape(const aclTensor* tensor, int64_t** viewDims, uint64_
     std::ostringstream log;
     log << "[aclGetViewShape] tensor=" << static_cast<const void*>(tensor)
         << " viewDims=" << static_cast<void*>(viewDims)
-        << " viewDimsNum=" << static_cast<void*>(viewDimsNum);
+        << " viewDimsNum=" << static_cast<void*>(viewDimsNum)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -229,7 +257,8 @@ aclnnStatus aclGetViewShape(const aclTensor* tensor, int64_t** viewDims, uint64_
 aclnnStatus aclGetDataType(const aclTensor* tensor, aclDataType* dataType) {
     std::ostringstream log;
     log << "[aclGetDataType] tensor=" << static_cast<const void*>(tensor)
-        << " dataType=" << static_cast<void*>(dataType);
+        << " dataType=" << static_cast<void*>(dataType)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -238,7 +267,8 @@ aclnnStatus aclGetStorageShape(const aclTensor* tensor, int64_t** storageDims, u
     std::ostringstream log;
     log << "[aclGetStorageShape] tensor=" << static_cast<const void*>(tensor)
         << " storageDims=" << static_cast<void*>(storageDims)
-        << " storageDimsNum=" << static_cast<void*>(storageDimsNum);
+        << " storageDimsNum=" << static_cast<void*>(storageDimsNum)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -247,7 +277,8 @@ aclnnStatus aclGetViewStrides(const aclTensor* tensor, int64_t** stridesValue, u
     std::ostringstream log;
     log << "[aclGetViewStrides] tensor=" << static_cast<const void*>(tensor)
         << " stridesValue=" << static_cast<void*>(stridesValue)
-        << " stridesNum=" << static_cast<void*>(stridesNum);
+        << " stridesNum=" << static_cast<void*>(stridesNum)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -255,7 +286,8 @@ aclnnStatus aclGetViewStrides(const aclTensor* tensor, int64_t** stridesValue, u
 aclnnStatus aclGetViewOffset(const aclTensor* tensor, int64_t* offset) {
     std::ostringstream log;
     log << "[aclGetViewOffset] tensor=" << static_cast<const void*>(tensor)
-        << " offset=" << static_cast<void*>(offset);
+        << " offset=" << static_cast<void*>(offset)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -263,7 +295,8 @@ aclnnStatus aclGetViewOffset(const aclTensor* tensor, int64_t* offset) {
 aclnnStatus aclGetFormat(const aclTensor* tensor, aclFormat* format) {
     std::ostringstream log;
     log << "[aclGetFormat] tensor=" << static_cast<const void*>(tensor)
-        << " format=" << static_cast<void*>(format);
+        << " format=" << static_cast<void*>(format)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -271,7 +304,8 @@ aclnnStatus aclGetFormat(const aclTensor* tensor, aclFormat* format) {
 aclnnStatus aclGetIntArraySize(const aclIntArray* array, uint64_t* size) {
     std::ostringstream log;
     log << "[aclGetIntArraySize] array=" << static_cast<const void*>(array)
-        << " size=" << static_cast<void*>(size);
+        << " size=" << static_cast<void*>(size)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -279,7 +313,8 @@ aclnnStatus aclGetIntArraySize(const aclIntArray* array, uint64_t* size) {
 aclnnStatus aclGetFloatArraySize(const aclFloatArray* array, uint64_t* size) {
     std::ostringstream log;
     log << "[aclGetFloatArraySize] array=" << static_cast<const void*>(array)
-        << " size=" << static_cast<void*>(size);
+        << " size=" << static_cast<void*>(size)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -287,7 +322,8 @@ aclnnStatus aclGetFloatArraySize(const aclFloatArray* array, uint64_t* size) {
 aclnnStatus aclGetBoolArraySize(const aclBoolArray* array, uint64_t* size) {
     std::ostringstream log;
     log << "[aclGetBoolArraySize] array=" << static_cast<const void*>(array)
-        << " size=" << static_cast<void*>(size);
+        << " size=" << static_cast<void*>(size)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -295,7 +331,8 @@ aclnnStatus aclGetBoolArraySize(const aclBoolArray* array, uint64_t* size) {
 aclnnStatus aclGetTensorListSize(const aclTensorList* tensorList, uint64_t* size) {
     std::ostringstream log;
     log << "[aclGetTensorListSize] tensorList=" << static_cast<const void*>(tensorList)
-        << " size=" << static_cast<void*>(size);
+        << " size=" << static_cast<void*>(size)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -303,7 +340,8 @@ aclnnStatus aclGetTensorListSize(const aclTensorList* tensorList, uint64_t* size
 aclnnStatus aclGetScalarListSize(const aclScalarList* scalarList, uint64_t* size) {
     std::ostringstream log;
     log << "[aclGetScalarListSize] scalarList=" << static_cast<const void*>(scalarList)
-        << " size=" << static_cast<void*>(size);
+        << " size=" << static_cast<void*>(size)
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -322,21 +360,24 @@ aclnnStatus aclInitTensor(aclTensor* tensor, const int64_t* viewDims, uint64_t v
         << "\n    format=" << format
         << " storageDims=" << static_cast<const void*>(storageDims)
         << " storageDimsNum=" << storageDimsNum
-        << " tensorDataAddr=" << tensorDataAddr;
+        << " tensorDataAddr=" << tensorDataAddr
+        << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
 
 aclnnStatus aclSetAclOpExecutorRepeatable(aclOpExecutor* executor) {
     std::ostringstream log;
-    log << "[aclSetAclOpExecutorRepeatable] executor=" << static_cast<const void*>(executor);
+    log << "[aclSetAclOpExecutorRepeatable] executor=" << static_cast<const void*>(executor)
+        << "\nError: UNIMPLEMENTED BaseOP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
 
 aclnnStatus aclDestroyAclOpExecutor(aclOpExecutor* executor) {
     std::ostringstream log;
-    log << "[aclDestroyAclOpExecutor] executor=" << static_cast<const void*>(executor);
+    log << "[aclDestroyAclOpExecutor] executor=" << static_cast<const void*>(executor)
+        << "\nError: UNIMPLEMENTED BaseOP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -348,7 +389,8 @@ aclnnStatus name(aclOpExecutor* executor, const size_t index, aclTensor* tensor,
     log << "[" #name "] executor=" << static_cast<const void*>(executor) \
         << " index=" << index \
         << " tensor=" << static_cast<const void*>(tensor) \
-        << " addr=" << addr; \
+        << " addr=" << addr \
+        << "\nError: UNIMPLEMENTED BaseOP"; \
     log_output(log, true); \
     return UNIMPLEMENTED; \
 }
@@ -368,7 +410,8 @@ aclnnStatus AclSetDynamicInputTensorAddr(aclOpExecutor* executor, size_t irIndex
         << " irIndex=" << irIndex
         << " relativeIndex=" << relativeIndex
         << " tensors=" << static_cast<const void*>(tensors)
-        << " addr=" << addr;
+        << " addr=" << addr \
+        << "\nError: UNIMPLEMENTED BaseOP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -381,7 +424,8 @@ aclnnStatus AclSetDynamicOutputTensorAddr(aclOpExecutor* executor, size_t irInde
         << " irIndex=" << irIndex
         << " relativeIndex=" << relativeIndex
         << " tensors=" << static_cast<const void*>(tensors)
-        << " addr=" << addr;
+        << " addr=" << addr \
+        << "\nError: UNIMPLEMENTED BaseOP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -394,7 +438,8 @@ aclnnStatus aclSetDynamicInputTensorAddr(aclOpExecutor* executor, size_t irIndex
         << " irIndex=" << irIndex
         << " relativeIndex=" << relativeIndex
         << " tensors=" << static_cast<const void*>(tensors)
-        << " addr=" << addr;
+        << " addr=" << addr \
+        << "\nError: UNIMPLEMENTED BaseOP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -407,7 +452,8 @@ aclnnStatus aclSetDynamicOutputTensorAddr(aclOpExecutor* executor, size_t irInde
         << " irIndex=" << irIndex
         << " relativeIndex=" << relativeIndex
         << " tensors=" << static_cast<const void*>(tensors)
-        << " addr=" << addr;
+        << " addr=" << addr \
+        << "\nError: UNIMPLEMENTED BaseOP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -415,7 +461,8 @@ aclnnStatus aclSetDynamicOutputTensorAddr(aclOpExecutor* executor, size_t irInde
 aclnnStatus aclSetRawTensorAddr(aclTensor* tensor, void* addr) {
     std::ostringstream log;
     log << "[aclSetRawTensorAddr] tensor=" << static_cast<const void*>(tensor)
-        << " addr=" << addr;
+        << " addr=" << addr \
+        << "\nError: UNIMPLEMENTED BaseOP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -423,7 +470,8 @@ aclnnStatus aclSetRawTensorAddr(aclTensor* tensor, void* addr) {
 aclnnStatus aclGetRawTensorAddr(const aclTensor* tensor, void** addr) {
     std::ostringstream log;
     log << "[aclGetRawTensorAddr] tensor=" << static_cast<const void*>(tensor)
-        << " addr=" << static_cast<void*>(addr);
+        << " addr=" << static_cast<void*>(addr) \
+        << "\nError: UNIMPLEMENTED BaseOP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -436,7 +484,8 @@ aclnnStatus aclDumpOpTensors(const char* opType, const char* opName, aclTensor**
         << " tensors=" << static_cast<const void*>(tensors)
         << " inputTensorNum=" << inputTensorNum
         << " outputTensorNum=" << outputTensorNum
-        << " stream=" << stream;
+        << " stream=" << stream \
+        << "\nError: UNIMPLEMENTED BaseOP";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -455,11 +504,13 @@ where_op aclnnGelu
 */
 
 #define DEFINE_UNIMPLEMENTED_ACLNN(name, ...)                          \
-    __attribute__((visibility("default")))                             \
+    __attribute__((visibility("default"), weak))                       \
     aclnnStatus name(__VA_ARGS__) {                                    \
         log_output("[" #name "]\nError: UNIMPLEMENTED " #name, true);  \
         return UNIMPLEMENTED;                                          \
     };
+// ТАК ВОТ ЗАЧЕМ РАЗРАБОТЧИКИ ОРИГИНАЛЬНОГО ACLNN ИСПОЛЬЗОВАЛИ __attribute__!!!
+// Ставим weak в заглушку и она перестаёт конфликтовать с нормальными реализациями!!!
 
 DEFINE_UNIMPLEMENTED_ACLNN(aclStftGetWorkspaceSize,
                            const aclTensor* self, const aclTensor* windowOptional, aclTensor* out, int64_t nFft, int64_t hopLength,
@@ -1171,11 +1222,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnCastGetWorkspaceSize,
                            const aclTensor* self, const aclDataType dtype, aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnCast,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnCatGetWorkspaceSize,
-                           const aclTensorList* tensors, int64_t dim, aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnCat,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, const aclrtStream stream)
 
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnCdistGetWorkspaceSize,
                            const aclTensor* x1, const aclTensor* x2,

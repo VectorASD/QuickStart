@@ -211,6 +211,7 @@ typedef enum {
 
 static const char* aclDataTypeToString(aclDataType dtype) {
     switch (dtype) {
+        case ACL_DT_UNDEFINED:    return "undefined";
         case ACL_FLOAT:           return "float32";
         case ACL_FLOAT16:         return "float16";
         case ACL_INT8:            return "int8";
@@ -239,7 +240,7 @@ static const char* aclDataTypeToString(aclDataType dtype) {
         case ACL_FLOAT4_E2M1:     return "float4_e2m1";
         case ACL_FLOAT4_E1M2:     return "float4_e1m2";
         case ACL_HIFLOAT4:        return "hifloat4";
-        default:                  return "unknown";
+        default:                  return "?unknown?";
     }
 }
 

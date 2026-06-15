@@ -37,6 +37,7 @@ SIGNATURE_RE = re.compile(r'(?:const\s*)?([a-zA-Z_]\w*(?:\s+\*+|\**)|,)')
 
 known_types = {
     "aclTensor*":      "t",
+    "aclTensorList*":  "Lt",
     "float":           "f",
     "double":          "d",
     "int64_t":         "i",
@@ -75,11 +76,14 @@ def parse_signature(signature: str):
 
 def make_printer(func_name: str, need_out: bool, signature, write):
     tensors = []
+    tensor_lists = []
     common = []
     for is_out, _type, name in signature:
         if is_out == need_out:
             if _type == "aclTensor*":
                 tensors.append(name)
+            elif _type == "aclTensorList*":
+                tensor_lists.append(name)
             else:
                 common.append((_type, name))
 
@@ -88,7 +92,8 @@ def make_printer(func_name: str, need_out: bool, signature, write):
         write("const char* opName, ")
     write("std::ostringstream& log) const {")
 
-    write("\n        log")
+    if not need_out or common or tensors:
+        write("\n        log")
     if not need_out:
         write(' << "[EXEC] " << opName')
 
@@ -115,9 +120,13 @@ def make_printer(func_name: str, need_out: bool, signature, write):
             first = False
         else:
             write("\n           ")
-        write(f' << "\\n{name}:\\n" << tensorDataToString({name})')
+        write(rf' << "\n{name}:\n" << tensorDataToString({name})')
 
-    write(";\n    }")
+    write(';');
+
+    for name in tensor_lists:
+        write(f"\n       aclTensorList::toString({name}, log);")
+    write("\n    }")
 
 exe_cache = {}
 custon_names = {

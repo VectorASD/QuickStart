@@ -11,7 +11,6 @@ struct aclOpExecutor {};
 struct aclIntArray {};
 struct aclFloatArray {};
 struct aclBoolArray {};
-struct aclTensorList {};
 struct aclScalarList {};
 
 typedef int32_t aclnnStatus;
@@ -52,8 +51,11 @@ struct AclnnException {
         }                                                                       \
         at::ScalarType type;                                                    \
         if (!try_toAtenType(_tensor->desc->dtype, type)) {                      \
-            throw AclnnException(UNIMPLEMENTED,                                 \
-                                 "LOAD_TENSOR: unsupported data type");         \
+            std::ostringstream log;                                             \
+            log << "LOAD_TENSOR (" << acl_tensor_ptr                            \
+                << ") unsupported data type '"                                  \
+                << aclDataTypeToString(_tensor->desc->dtype) << '\'';           \
+            throw AclnnException(UNIMPLEMENTED, log.str());                     \
         }                                                                       \
         auto opts = at::TensorOptions().dtype(type).device(at::kCPU);           \
         std::vector<int64_t> dims = _tensor->desc->dims;                        \
@@ -113,5 +115,48 @@ struct aclScalar {};
 static inline std::string tensorDataToString(const aclTensor* tensor) {
     return tensorDataToString(tensor->desc, tensor->buffer, tensor->strides, tensor->offset);
 }
+
+
+
+struct aclTensorList {
+    const aclTensor* const* data;   // массив указателей на aclTensor
+    size_t n;                       // количество тензоров
+    mutable std::vector<at::Tensor> cached; // кэш загруженных тензоров
+    mutable bool loaded = false;
+
+    aclTensorList(const aclTensor* const* tensors, size_t count)
+        : data(tensors), n(count) {}
+
+    size_t size() const { return n; }
+
+    // Возвращаем ArrayRef, ссылающийся на кэшированные тензоры
+    at::TensorList aten_tensors() const {
+        if (!loaded) {
+            cached.reserve(n);
+            for (size_t i = 0; i < n; ++i) {
+                const aclTensor* t = data[i];
+                if (!t) {
+                    throw AclnnException(UNIMPLEMENTED, "null aclTensor in list");
+                }
+                at::Tensor tensor;
+                LOAD_TENSOR(tensor, t);   // используем существующий макрос
+                cached.push_back(tensor);
+            }
+            loaded = true;
+        }
+        return at::TensorList(cached);
+    }
+
+    static void toString(const aclTensorList* list, std::ostringstream& oss) {
+        if (!list) {
+            oss << "\naclTensorList null\n";
+            return;
+        }
+        oss << "aclTensorList(" << list->n << "):";
+        for (size_t i = 0; i < list->n; ++i)
+            oss << "\n  [" << i << "]:\n" << tensorDataToString(list->data[i]);
+    }
+};
+
 
 #endif // NOT_OPAPI_BASE_H
