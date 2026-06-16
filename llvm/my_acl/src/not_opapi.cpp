@@ -191,7 +191,6 @@ MAKE_OP(aclnnMaxN(const aclTensorList* tensors, sync aclTensor* out,
     at::Tensor stacked = at::stack(tensors, 0);
     out.copy_(std::get<0>(at::max(stacked, 0)));
 })
-
 MAKE_OP(aclnnMaximum(const aclTensor* self, const aclTensor* other, out aclTensor* out,
                      uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::maximum_out(out, self, other);
@@ -300,7 +299,6 @@ aclTensor* aclCreateTensor(const int64_t* viewDims, uint64_t viewDimsNum, aclDat
 
     return tensor;
 }
-
 aclnnStatus aclDestroyTensor(const aclTensor* tensor) {
     #if LOG_MEMORY
         std::ostringstream log;
@@ -343,7 +341,6 @@ aclScalar* aclCreateScalar(void* value, aclDataType dataType) {
         .dtype = dataType,
     };
 }
-
 aclnnStatus aclDestroyScalar(const aclScalar* scalar) {
  // std::ostringstream log;
  // log << "[aclDestroyScalar] scalar=" << static_cast<const void*>(scalar);
@@ -368,7 +365,6 @@ aclTensorList* aclCreateTensorList(const aclTensor* const* value, uint64_t size)
         return nullptr;
     return new aclTensorList(value, size);
 }
-
 aclnnStatus aclDestroyTensorList(const aclTensorList* array) {
     #if LOG_MEMORY
         std::ostringstream log;
@@ -379,75 +375,213 @@ aclnnStatus aclDestroyTensorList(const aclTensorList* array) {
     delete array;
     return OK;
 }
+aclnnStatus aclGetTensorListSize(const aclTensorList* array, uint64_t* size) {
+    std::ostringstream log;
+    log << "[aclGetTensorListSize] array=" << static_cast<const void*>(array)
+        << " size=" << static_cast<void*>(size);
+
+    if (!array || !size) {
+        log << "\nError: invalid param 'array' or 'size'";
+        log_output(log, true);
+        return INVALID_PARAM;
+    }
+    log_output(log);
+
+    *size = array->data.size();
+    return OK;
+}
 
 
 aclIntArray* aclCreateIntArray(const int64_t* value, uint64_t size) {
     std::ostringstream log;
     log << "[aclCreateIntArray] value=" << static_cast<const void*>(value)
-        << " size=" << size
-        << "\nError: UNIMPLEMENTED BASE OP";
-    log_output(log, true);
-    return nullptr;
+        << " size=" << size;
+
+    if (!value) {
+        log << "\nError: invalid param 'value'";
+        log_output(log, true);
+        return nullptr;
+    }
+    log_output(log);
+
+    auto* arr = new aclIntArray;
+    arr->data.assign(value, value + size);
+    return arr;
 }
+aclnnStatus aclDestroyIntArray(const aclIntArray* array) {
+    std::ostringstream log;
+    log << "[aclDestroyIntArray] array=" << static_cast<const void*>(array);
+
+    if (!array) {
+        log << "\nError: invalid param 'array'";
+        log_output(log, true);
+        return INVALID_PARAM;
+    }
+    log_output(log);
+
+    delete array;
+    return OK;
+}
+aclnnStatus aclGetIntArraySize(const aclIntArray* array, uint64_t* size) {
+    std::ostringstream log;
+    log << "[aclGetIntArraySize] array=" << static_cast<const void*>(array)
+        << " size=" << static_cast<void*>(size);
+
+    if (!array || !size) {
+        log << "\nError: invalid param 'array' or 'size'";
+        log_output(log, true);
+        return INVALID_PARAM;
+    }
+    log_output(log);
+
+    *size = array->data.size();
+    return OK;
+}
+
 
 aclFloatArray* aclCreateFloatArray(const float* value, uint64_t size) {
     std::ostringstream log;
     log << "[aclCreateFloatArray] value=" << static_cast<const void*>(value)
-        << " size=" << size
-        << "\nError: UNIMPLEMENTED BASE OP";
-    log_output(log, true);
-    return nullptr;
+        << " size=" << size;
+
+    if (!value) {
+        log << "\nError: invalid param 'value'";
+        log_output(log, true);
+        return nullptr;
+    }
+    log_output(log);
+
+    auto* arr = new aclFloatArray;
+    arr->data.assign(value, value + size);
+    return arr;
 }
+aclnnStatus aclDestroyFloatArray(const aclFloatArray* array) {
+    std::ostringstream log;
+    log << "[aclDestroyFloatArray] array=" << static_cast<const void*>(array);
+
+    if (!array) {
+        log << "\nError: invalid param 'array'";
+        log_output(log, true);
+        return INVALID_PARAM;
+    }
+    log_output(log);
+
+    delete array;
+    return OK;
+}
+aclnnStatus aclGetFloatArraySize(const aclFloatArray* array, uint64_t* size) {
+    std::ostringstream log;
+    log << "[aclGetFloatArraySize] array=" << static_cast<const void*>(array)
+        << " size=" << static_cast<void*>(size);
+
+    if (!array || !size) {
+        log << "\nError: invalid param 'array' or 'size'";
+        log_output(log, true);
+        return INVALID_PARAM;
+    }
+    log_output(log);
+
+    *size = array->data.size();
+    return OK;
+}
+
 
 aclBoolArray* aclCreateBoolArray(const bool* value, uint64_t size) {
     std::ostringstream log;
     log << "[aclCreateBoolArray] value=" << static_cast<const void*>(value)
-        << " size=" << size
-        << "\nError: UNIMPLEMENTED BASE OP";
-    log_output(log, true);
-    return nullptr;
+        << " size=" << size;
+
+    if (!value) {
+        log << "\nError: invalid param 'value'";
+        log_output(log, true);
+        return nullptr;
+    }
+    log_output(log);
+
+    auto* arr = new aclBoolArray;
+    arr->data.assign(value, value + size);
+    return arr;
 }
+aclnnStatus aclDestroyBoolArray(const aclBoolArray* array) {
+    std::ostringstream log;
+    log << "[aclDestroyBoolArray] array=" << static_cast<const void*>(array);
+
+    if (!array) {
+        log << "\nError: invalid param 'array'";
+        log_output(log, true);
+        return INVALID_PARAM;
+    }
+    log_output(log);
+
+    delete array;
+    return OK;
+}
+aclnnStatus aclGetBoolArraySize(const aclBoolArray* array, uint64_t* size) {
+    std::ostringstream log;
+    log << "[aclGetBoolArraySize] array=" << static_cast<const void*>(array)
+        << " size=" << static_cast<void*>(size);
+
+    if (!array || !size) {
+        log << "\nError: invalid param 'array' or 'size'";
+        log_output(log, true);
+        return INVALID_PARAM;
+    }
+    log_output(log);
+
+    *size = array->data.size();
+    return OK;
+}
+
+
+// TODO: Не совсем понятно, зачем этот aclScalarList,
+// если у нас таких операций-то нет, что используют его...
 
 aclScalarList* aclCreateScalarList(const aclScalar* const* value, uint64_t size) {
     std::ostringstream log;
     log << "[aclCreateScalarList] value=" << static_cast<const void*>(value)
-        << " size=" << size
-        << "\nError: UNIMPLEMENTED BASE OP";
-    log_output(log, true);
-    return nullptr;
-}
+        << " size=" << size;
 
-aclnnStatus aclDestroyIntArray(const aclIntArray* array) {
-    std::ostringstream log;
-    log << "[aclDestroyIntArray] array=" << static_cast<const void*>(array)
-        << "\nError: UNIMPLEMENTED BASE OP";
-    log_output(log, true);
-    return UNIMPLEMENTED;
-}
+    if (!value) {
+        log << "\nError: invalid param 'value'";
+        log_output(log, true);
+        return nullptr;
+    }
+    log_output(log);
 
-aclnnStatus aclDestroyFloatArray(const aclFloatArray* array) {
-    std::ostringstream log;
-    log << "[aclDestroyFloatArray] array=" << static_cast<const void*>(array)
-        << "\nError: UNIMPLEMENTED BASE OP";
-    log_output(log, true);
-    return UNIMPLEMENTED;
+    auto* list = new aclScalarList;
+    list->scalars.assign(value, value + size);
+    return list;
 }
-
-aclnnStatus aclDestroyBoolArray(const aclBoolArray* array) {
-    std::ostringstream log;
-    log << "[aclDestroyBoolArray] array=" << static_cast<const void*>(array)
-        << "\nError: UNIMPLEMENTED BASE OP";
-    log_output(log, true);
-    return UNIMPLEMENTED;
-}
-
 aclnnStatus aclDestroyScalarList(const aclScalarList* array) {
     std::ostringstream log;
-    log << "[aclDestroyScalarList] array=" << static_cast<const void*>(array)
-        << "\nError: UNIMPLEMENTED BASE OP";
-    log_output(log, true);
-    return UNIMPLEMENTED;
+    log << "[aclDestroyScalarList] array=" << static_cast<const void*>(array);
+
+    if (!array) {
+        log << "\nError: invalid param 'array'";
+        log_output(log, true);
+        return INVALID_PARAM;
+    }
+    log_output(log);
+
+    delete array;
+    return OK;
 }
+aclnnStatus aclGetScalarListSize(const aclScalarList* scalarList, uint64_t* size) {
+    std::ostringstream log;
+    log << "[aclGetScalarListSize] scalarList=" << static_cast<const void*>(scalarList)
+        << " size=" << static_cast<void*>(size);
+
+    if (!scalarList || !size) {
+        log << "\nError: invalid param 'scalarList' or 'size'";
+        log_output(log, true);
+        return INVALID_PARAM;
+    }
+    log_output(log);
+
+    *size = scalarList->scalars.size();
+    return OK;
+}
+
 
 aclnnStatus aclGetViewShape(const aclTensor* tensor, int64_t** viewDims, uint64_t* viewDimsNum) {
     std::ostringstream log;
@@ -480,7 +614,7 @@ aclnnStatus aclGetViewShape(const aclTensor* tensor, int64_t** viewDims, uint64_
     log << "\n    dims: ";
     for (size_t i = 0; i < dims.size(); ++i)
         log << (i ? ", " : "") << dims[i];
-    log_output(log, true);
+    log_output(log);
 
     return OK;
 }
@@ -527,51 +661,6 @@ aclnnStatus aclGetFormat(const aclTensor* tensor, aclFormat* format) {
     std::ostringstream log;
     log << "[aclGetFormat] tensor=" << static_cast<const void*>(tensor)
         << " format=" << static_cast<void*>(format)
-        << "\nError: UNIMPLEMENTED BASE OP";
-    log_output(log, true);
-    return UNIMPLEMENTED;
-}
-
-aclnnStatus aclGetIntArraySize(const aclIntArray* array, uint64_t* size) {
-    std::ostringstream log;
-    log << "[aclGetIntArraySize] array=" << static_cast<const void*>(array)
-        << " size=" << static_cast<void*>(size)
-        << "\nError: UNIMPLEMENTED BASE OP";
-    log_output(log, true);
-    return UNIMPLEMENTED;
-}
-
-aclnnStatus aclGetFloatArraySize(const aclFloatArray* array, uint64_t* size) {
-    std::ostringstream log;
-    log << "[aclGetFloatArraySize] array=" << static_cast<const void*>(array)
-        << " size=" << static_cast<void*>(size)
-        << "\nError: UNIMPLEMENTED BASE OP";
-    log_output(log, true);
-    return UNIMPLEMENTED;
-}
-
-aclnnStatus aclGetBoolArraySize(const aclBoolArray* array, uint64_t* size) {
-    std::ostringstream log;
-    log << "[aclGetBoolArraySize] array=" << static_cast<const void*>(array)
-        << " size=" << static_cast<void*>(size)
-        << "\nError: UNIMPLEMENTED BASE OP";
-    log_output(log, true);
-    return UNIMPLEMENTED;
-}
-
-aclnnStatus aclGetTensorListSize(const aclTensorList* tensorList, uint64_t* size) {
-    std::ostringstream log;
-    log << "[aclGetTensorListSize] tensorList=" << static_cast<const void*>(tensorList)
-        << " size=" << static_cast<void*>(size)
-        << "\nError: UNIMPLEMENTED BASE OP";
-    log_output(log, true);
-    return UNIMPLEMENTED;
-}
-
-aclnnStatus aclGetScalarListSize(const aclScalarList* scalarList, uint64_t* size) {
-    std::ostringstream log;
-    log << "[aclGetScalarListSize] scalarList=" << static_cast<const void*>(scalarList)
-        << " size=" << static_cast<void*>(size)
         << "\nError: UNIMPLEMENTED BASE OP";
     log_output(log, true);
     return UNIMPLEMENTED;

@@ -38,11 +38,18 @@ SIGNATURE_RE = re.compile(r'(?:const\s*)?([a-zA-Z_]\w*(?:\s+\*+|\**)|,)')
 known_types = {
     "aclTensor*":      "t",
     "aclTensorList*":  "Lt",
-    "aclScalar*":      "s",
+
     "float":           "f",
     "double":          "d",
     "int64_t":         "i",
     "bool":            "b",
+
+    "aclScalar*":      "s",
+    "aclIntArray*":    "@i",
+    "aclFloatArray*":  "@f",
+    "aclBoolArray*":   "@b",
+    "aclScalarList*":  "@s",
+
     "uint64_t*":       "i*",
     "aclOpExecutor**": "E",
 }
@@ -118,12 +125,10 @@ def make_printer(func_name: str, need_out: bool, signature, write):
             write(f' {name}=" << formatFloat({name})')
         elif _type == "double":
             write(f' {name}=" << formatDouble({name})')
-        elif _type == "int64_t":
-            write(f' {name}=" << {name}')
         elif _type == "bool":
             write(f' {name}=" << ({name} ? "true" : "false")')
-        elif _type == "aclScalar*":
-            write(f' {name}=" << {name}->toString()')
+        elif _type in ("int64_t", "aclScalar*", "aclIntArray*", "aclFloatArray*", "aclBoolArray*", "aclScalarList*"):
+            write(f' {name}=" << {name}')
         else:
             raise RuntimeError(f"unknown printer type: {_type!r}")
     if not need_out and first and tensors:
@@ -227,6 +232,10 @@ def make_GWS(op_name: str, exe_name: str, signature, body: str, write):
             write(f"\n    const at::TensorList& {name} = exec->{name}->aten_tensors();")
         elif _type in ("float", "double", "int64_t", "bool"):
             scalar_names.append(name)
+        elif _type == "aclIntArray*":   write(f"\n    const std::vector<int64_t>& {name} = exec->{name}->data;")
+        elif _type == "aclFloatArray*": write(f"\n    const std::vector<float>& {name} = exec->{name}->data;")
+        elif _type == "aclBoolArray*":  write(f"\n    const std::vector<uint8_t>& {name} = exec->{name}->data;")
+        elif _type == "aclScalarList*": write(f"\n    const std::vector<const aclScalar*>& {name} = exec->{name}->data;")
         else:
             raise RuntimeError(f"unknown user type: {_type!r}")
 

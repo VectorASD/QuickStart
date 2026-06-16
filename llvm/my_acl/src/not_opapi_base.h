@@ -8,10 +8,6 @@
 #define NOT_OPAPI_BASE_H
 
 struct aclOpExecutor {};
-struct aclIntArray {};
-struct aclFloatArray {};
-struct aclBoolArray {};
-struct aclScalarList {};
 
 typedef int32_t aclnnStatus;
 constexpr aclnnStatus OK = 0;
@@ -131,12 +127,83 @@ struct aclScalar {
     at::Tensor tensor;
     aclDataType dtype;
 
-    std::string toString() const {
-        const void* ptr = tensor.const_data_ptr();
-        return aclElementToString(dtype, ptr);
+    friend std::ostream& operator<<(std::ostream& os, const aclScalar& scalar) {
+        const void* ptr = scalar.tensor.const_data_ptr();
+        return os << aclElementToString(scalar.dtype, ptr);
+    }
+    friend std::ostream& operator<<(std::ostream& os, const aclScalar* scalar) {
+        if (scalar)
+            return os << *scalar;
+        return os << "null";
     }
 };
 
+
+struct aclIntArray {
+    std::vector<int64_t> data;
+
+    friend std::ostream& operator<<(std::ostream& os, const aclIntArray& arr) {
+        os << '[';
+        for (size_t i = 0; i < arr.data.size(); ++i)
+            os << (i ? ", " : "") << arr.data[i];
+        return os << ']';
+    }
+    friend std::ostream& operator<<(std::ostream& os, const aclIntArray* arr) {
+        if (arr)
+            return os << *arr;
+        return os << "null";
+    }
+};
+
+struct aclFloatArray {
+    std::vector<float> data;
+
+    friend std::ostream& operator<<(std::ostream& os, const aclFloatArray& arr) {
+        os << '[';
+        for (size_t i = 0; i < arr.data.size(); ++i)
+            os << (i ? ", " : "") << formatFloat(arr.data[i]);
+        return os << ']';
+    }
+    friend std::ostream& operator<<(std::ostream& os, const aclFloatArray* arr) {
+        if (arr)
+            return os << *arr;
+        return os << "null";
+    }
+};
+
+
+struct aclBoolArray {
+    std::vector<uint8_t> data;  // 0|1
+
+    friend std::ostream& operator<<(std::ostream& os, const aclBoolArray& arr) {
+        os << '[';
+        for (size_t i = 0; i < arr.data.size(); ++i)
+            os << (i ? ", " : "") << (arr.data[i] ? "true" : "false");
+        return os << ']';
+    }
+    friend std::ostream& operator<<(std::ostream& os, const aclBoolArray* arr) {
+        if (arr)
+            return os << *arr;
+        return os << "null";
+    }
+};
+
+
+struct aclScalarList {
+    std::vector<const aclScalar*> scalars;
+
+    friend std::ostream& operator<<(std::ostream& os, const aclScalarList& list) {
+        os << "Scalar[";
+        for (size_t i = 0; i < list.scalars.size(); ++i)
+            os << (i ? ", " : "") << list.scalars[i];
+        return os << ']';
+    }
+    friend std::ostream& operator<<(std::ostream& os, const aclScalarList* list) {
+        if (list)
+            return os << *list;
+        return os << "null";
+    }
+};
 
 
 struct aclTensorList {
