@@ -18,6 +18,7 @@ constexpr aclnnStatus OK = 0;
 constexpr aclnnStatus UNIMPLEMENTED = 1;
 constexpr aclnnStatus INVALID_PARAM = 2;
 constexpr aclnnStatus UNASSERTED    = 3;
+constexpr aclnnStatus MEMORY_FAULT  = 4;
 
 
 
@@ -101,6 +102,16 @@ struct AclnnException {
         return _ret;                                             \
     }
 
+#define SYNC_AFTER_MUTATION(acl_tensor_ptr, at_tensor) \
+    do { \
+        auto _t = (acl_tensor_ptr);                                     \
+        auto& _at = (at_tensor);                                        \
+        _t->desc->dims.assign(_at.sizes().begin(), _at.sizes().end());  \
+        _t->strides.assign(_at.strides().begin(), _at.strides().end()); \
+        /* offset остаётся 0, т.к. после операции тензор непрерывен */  \
+        _t->offset = 0;                                                 \
+    } while (0);
+
 
 
 struct aclTensor {
@@ -110,11 +121,21 @@ struct aclTensor {
     int64_t offset;
 };
 
-struct aclScalar {};
-
 static inline std::string tensorDataToString(const aclTensor* tensor) {
     return tensorDataToString(tensor->desc, tensor->buffer, tensor->strides, tensor->offset);
 }
+
+
+
+struct aclScalar {
+    at::Tensor tensor;
+    aclDataType dtype;
+
+    std::string toString() const {
+        const void* ptr = tensor.const_data_ptr();
+        return aclElementToString(dtype, ptr);
+    }
+};
 
 
 
