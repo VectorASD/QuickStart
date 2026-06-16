@@ -53,7 +53,7 @@ from .accuracy_utils import (
 )
 
 # pytest test_tensor_constructor_ops.py -m rand -sv
-# pytest test_tensor_constructor_ops.py --count-100 --log
+# pytest test_tensor_constructor_ops.py --count=100 --log
 
 
 
