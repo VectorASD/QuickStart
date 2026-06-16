@@ -46,6 +46,7 @@ known_types = {
     "uint64_t":        "u",
     "bool":            "b",
     "aclDataType":     "a",
+    "char*":           "c",
 
     "aclScalar*":      "s",
     "aclIntArray*":    "@i",
@@ -134,6 +135,8 @@ def make_printer(func_name: str, need_out: bool, signature, write):
             write(f' {name}=" << aclDataTypeToString({name})')
         elif _type in ("int", "int64_t", "uint64_t", "aclScalar*", "aclIntArray*", "aclFloatArray*", "aclBoolArray*", "aclScalarList*"):
             write(f' {name}=" << {name}')
+        elif _type == "char*":
+            write(fr' {name}=\"" << {name} << "\""')
         else:
             raise RuntimeError(f"unknown printer type: {_type!r}")
     if not need_out and first and tensors:
@@ -237,6 +240,8 @@ def make_GWS(op_name: str, exe_name: str, signature, body: str, write):
             write(f"\n    const at::TensorList& {name} = exec->{name}->aten_tensors();")
         elif _type == "aclDataType":
             write(f"\n    const OptionalScalarType {name} = toAtenType(exec->{name});")
+        elif _type == "char*":
+            write(f"\n    const std::string& {name} = exec->{name};")
         elif _type in ("float", "double", "int", "int64_t", "uint64_t", "bool"):
             scalar_names.append(name)
         elif _type == "aclIntArray*":   write(f"\n    const std::vector<int64_t>& {name} = exec->{name}->data;")

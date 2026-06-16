@@ -336,7 +336,6 @@ def test_accuracy_exp2_(shape, dtype):
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_geglu(shape, dtype):
-    device.log_it()
     if len(shape) == 0:
         pytest.skip("GEGLU does not support 0-dim scalar tensors.")
 

@@ -22,7 +22,9 @@ warnings.filterwarnings("ignore", category=PytestUnknownMarkWarning)
 class _Device(str):
     @staticmethod
     def log_it():
-        del os.environ["NOT_NPU_QUIET"]
+        try:
+            del os.environ["NOT_NPU_QUIET"]
+        except KeyError: pass
 device = _Device("npu")
 os.environ["NOT_NPU_QUIET"] = '1'
 

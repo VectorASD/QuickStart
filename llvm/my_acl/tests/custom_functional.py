@@ -64,21 +64,18 @@ def dgeglu_torch(grad_output: torch.Tensor, input_tensor: torch.Tensor) -> torch
           input_tensor исходный вход geglu.
     Выход: градиент по input_tensor.
     """
+    # Прямой проход: geglu(x) = gelu(a) * b, где a, b = x.chunk(2, dim=-1)
     a, b = input_tensor.chunk(2, dim=-1)
-    # Прямой проход для GELU и сохранение промежуточных значений
-    # (можно вычислить заново или использовать autograd, здесь ручной расчёт)
-    alpha = 0.79788456
-    beta  = 0.044715
-    tanh_in = alpha * (a + beta * a.pow(3))
-    tanh_out = torch.tanh(tanh_in)
-    gelu_a = 0.5 * a * (1.0 + tanh_out)
-    # Производная GELU по a
-    sech2 = 1.0 - tanh_out.pow(2)
-    dgelu_a = 0.5 * (1.0 + tanh_out) + 0.5 * a * sech2 * alpha * (1.0 + 3.0 * beta * a.pow(2))
+    a = a.requires_grad_(True)
+    gelu_a = F.gelu(a, approximate='tanh')
+    y = gelu_a * b
 
-    grad_a = grad_output * b * dgelu_a
+    # Обратный проход: считаем градиент 'a' через autograd (aclnnGeluBackwardV2, сделанный через at::gelu_backward)
+    grad_a = torch.autograd.grad(outputs=y, inputs=a, grad_outputs=grad_output, retain_graph=False)[0]
     grad_b = grad_output * gelu_a
-    return torch.cat([grad_a, grad_b], dim=-1)
+
+    result = torch.cat((grad_a, grad_b), dim=-1)
+    return result
 
 torch.geglu = geglu_torch
 torch.dgeglu = dgeglu_torch
