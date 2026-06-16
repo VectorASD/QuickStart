@@ -164,7 +164,9 @@ static std::string aclElementToString(aclDataType dtype, const void* elemPtr) {
     }
 }
 
-static std::string tensorDataToString(const aclTensorDesc* desc, const aclDataBuffer* buf, const std::vector<int64_t>& strides, int64_t offset) {
+static std::string tensorDataToString(const aclTensorDesc* desc, const aclDataBuffer* buf,
+                                      const std::vector<int64_t>& strides, const int64_t offset,
+                                      const int baseIndent = 8) {
     if (!desc || !buf || !buf->data || buf->size == 0)
         return "(no data)";
 
@@ -172,7 +174,6 @@ static std::string tensorDataToString(const aclTensorDesc* desc, const aclDataBu
     if (numElements == 0) return "(no elements)";
 
     const std::vector<int64_t>& dims = desc->dims;
-    const int baseIndent = 8;
     const int edgeItems = 3;          // сколько элементов показывать с краёв при сокращении
     const size_t threshold = 1000;    // порог общего числа элементов для включения сокращения
     bool doTruncate = numElements > threshold;

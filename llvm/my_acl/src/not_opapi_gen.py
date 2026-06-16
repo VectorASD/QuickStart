@@ -43,6 +43,7 @@ known_types = {
     "double":          "d",
     "int64_t":         "i",
     "bool":            "b",
+    "aclDataType":     "a",
 
     "aclScalar*":      "s",
     "aclIntArray*":    "@i",
@@ -127,6 +128,8 @@ def make_printer(func_name: str, need_out: bool, signature, write):
             write(f' {name}=" << formatDouble({name})')
         elif _type == "bool":
             write(f' {name}=" << ({name} ? "true" : "false")')
+        elif _type == "aclDataType":
+            write(f' {name}=" << aclDataTypeToString({name})')
         elif _type in ("int64_t", "aclScalar*", "aclIntArray*", "aclFloatArray*", "aclBoolArray*", "aclScalarList*"):
             write(f' {name}=" << {name}')
         else:
@@ -140,7 +143,7 @@ def make_printer(func_name: str, need_out: bool, signature, write):
             first = False
         else:
             write("\n           ")
-        write(rf' << "\n    {name}:\n" << tensorDataToString({name})')
+        write(rf' << "\n    {name}: {" " * (8 - len(name))}" << {name}')
 
     write(';');
 
@@ -230,6 +233,8 @@ def make_GWS(op_name: str, exe_name: str, signature, body: str, write):
             write(f"\n    const at::Tensor& {name} = exec->{name}->tensor;")
         elif _type == "aclTensorList*":
             write(f"\n    const at::TensorList& {name} = exec->{name}->aten_tensors();")
+        elif _type == "aclDataType":
+            write(f"\n    const OptionalScalarType {name} = toAtenType(exec->{name});")
         elif _type in ("float", "double", "int64_t", "bool"):
             scalar_names.append(name)
         elif _type == "aclIntArray*":   write(f"\n    const std::vector<int64_t>& {name} = exec->{name}->data;")

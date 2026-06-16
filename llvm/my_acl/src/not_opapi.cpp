@@ -95,6 +95,11 @@ MAKE_OP(aclnnCeil(const aclTensor* self, out aclTensor* out,
     at::ceil_out(out, self);
 })
 
+MAKE_OP(aclnnIsFinite(const aclTensor* self, out aclTensor* out,
+                      uint64_t* workspaceSize, aclOpExecutor** executor) {
+    out.copy_(at::isfinite(self));
+})
+
 MAKE_OP(aclnnAngleV2(const aclTensor *x, out const aclTensor *out,
                      uint64_t *workspaceSize, aclOpExecutor **executor) {
     at::angle_out(out, x);
@@ -158,20 +163,17 @@ MAKE_OP(aclnnMin(const aclTensor* self, out aclTensor* out,
                  uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::min_out(out, self);
 })
-
 MAKE_OP(aclnnMinDim(const aclTensor* self, int64_t dim, bool keepdim,
                     out aclTensor* out, out aclTensor* indices,
                     uint64_t* workspaceSize, aclOpExecutor** executor) {
     // indices — выходной тензор индексов (int64)
     at::min_out(out, indices, self, dim, keepdim);
 })
-
 MAKE_OP(aclnnMinN(const aclTensorList* tensors, out aclTensor* out,
                   uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::Tensor stacked = at::stack(tensors, 0);
     out.copy_(std::get<0>(at::min(stacked, 0)));
 })
-
 MAKE_OP(aclnnMinimum(const aclTensor* self, const aclTensor* other, out aclTensor* out,
                      uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::minimum_out(out, self, other);
@@ -195,17 +197,136 @@ MAKE_OP(aclnnMaximum(const aclTensor* self, const aclTensor* other, out aclTenso
                      uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::maximum_out(out, self, other);
 })
+MAKE_OP(aclnnMaxV2(const aclTensor* self, const aclIntArray* dims, bool keepDims, bool noopWithEmptyDims,
+                   sync aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    if (noopWithEmptyDims && dims.empty())
+        out.copy_(self);
+    else
+        at::amax_out(out, self, dims, keepDims);
+})
+
+
+MAKE_OP(aclnnAll(const aclTensor* self, const aclIntArray* dim, bool keepdim, sync aclTensor* out,
+                 uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::all_out(out, self, dim, keepdim);
+})
+
+MAKE_OP(aclnnAny(const aclTensor* self, const aclIntArray* dim, bool keepdim, sync aclTensor* out,
+                 uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::any_out(out, self, dim, keepdim);
+})
+
+MAKE_OP(aclnnLogSumExp(const aclTensor* self, const aclIntArray* dim, bool keepDim, sync aclTensor* out,
+                       uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::logsumexp_out(out, self, dim, keepDim);
+})
+
+
+MAKE_OP(aclnnAmax(const aclTensor* self, const aclIntArray* dim, bool keepDim, sync aclTensor* out,
+                  uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::amax_out(out, self, dim, keepDim);
+})
+
+MAKE_OP(aclnnAmin(const aclTensor* self, const aclIntArray* dim, bool keepDim, sync aclTensor* out,
+                  uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::amin_out(out, self, dim, keepDim);
+})
+
+MAKE_OP(aclnnAminmax(const aclTensor* self, const aclIntArray* dim, bool keepDim,
+                     sync aclTensor* minOut, sync aclTensor* maxOut,
+                     uint64_t* workspaceSize, aclOpExecutor** executor) {
+    // Не нашёл способ использовать множественные оси в aten для Aminmax
+    at::amin_out(minOut, self, dim, keepDim);
+    at::amax_out(maxOut, self, dim, keepDim);
+})
+
+MAKE_OP(aclnnAminmaxAll(const aclTensor* self, sync aclTensor* minOut, sync aclTensor* maxOut,
+                        uint64_t* workspaceSize, aclOpExecutor** executor) {
+    auto result = at::aminmax(self);
+    minOut.copy_(std::get<0>(result));
+    maxOut.copy_(std::get<1>(result));
+})
+
+MAKE_OP(aclnnAminmaxDim(const aclTensor* self, const int64_t dim, bool keepDim,
+                        sync aclTensor* minOut, sync aclTensor* maxOut,
+                        uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::aminmax_out(minOut, maxOut, self, dim, keepDim);
+})
+
+
+MAKE_OP(aclnnMean(const aclTensor* self, const aclIntArray* dim, bool keepDim, aclDataType dtype,
+                  sync aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    if (dtype != self.scalar_type()) {
+        if (!dtype)
+            return INVALID_PARAM;
+        out.copy_(at::mean(self.to(dtype), dim, keepDim));
+    } else
+        at::mean_out(out, self, dim, keepDim);
+})
+MAKE_OP(aclnnMeanV2(const aclTensor* self, const aclIntArray* dim, bool keepDim, bool noopWithEmptyAxes,
+                    sync aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    if (noopWithEmptyAxes && dim.empty())
+        out.copy_(self);
+    else
+        at::mean_out(out, self, dim, keepDim);
+})
+
+MAKE_OP(aclnnReduceLogSum(const aclTensor* data, const aclIntArray* axes, bool keepDims,
+                           bool noopWithEmptyAxes, sync aclTensor* reduce,
+                           uint64_t* workspaceSize, aclOpExecutor** executor) {
+    if (noopWithEmptyAxes && axes.empty())
+        reduce.copy_(data);
+    else
+        at::logsumexp_out(reduce, data, axes, keepDims);
+})
+
+MAKE_OP(aclnnReduceNansum(const aclTensor* self, const aclIntArray* dim, bool keepDim,
+                          aclDataType dtype, sync aclTensor* out,
+                          uint64_t* workspaceSize, aclOpExecutor** executor) {
+    if (dtype)
+        at::nansum_out(out, self, dim, keepDim, dtype);
+    else
+        at::nansum_out(out, self, dim, keepDim);
+})
+
+MAKE_OP(aclnnReduceSum(const aclTensor* self, const aclIntArray* dims, bool keepDims,
+                       aclDataType dtype, sync aclTensor* out,
+                       uint64_t* workspaceSize, aclOpExecutor** executor) {
+    if (dtype)
+        at::sum_out(out, self, dims, keepDims, dtype);
+    else
+        at::sum_out(out, self, dims, keepDims);
+})
+
+MAKE_OP(aclnnVar(const aclTensor* self, const aclIntArray* dim, bool unbiased, bool keepdim,
+                 sync aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::var_out(out, self, dim, unbiased, keepdim);
+})
+MAKE_OP(aclnnVarCorrection(const aclTensor* self, const aclIntArray* dim, int64_t correction, bool keepdim,
+                           sync aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::var_out(out, self, dim, correction, keepdim);
+})
+MAKE_OP(aclnnVarMean(const aclTensor* self, const aclIntArray* dim, int64_t correction, bool keepdim,
+                     sync aclTensor* varOut, sync aclTensor* meanOut,
+                     uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::var_mean_out(varOut, meanOut, self, dim, correction, keepdim);
+})
+
+MAKE_OP(aclnnStd(const aclTensor* self, const aclIntArray* dim, const int64_t correction,
+                 bool keepdim, sync aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::std_out(out, self, dim, correction, keepdim);
+})
+MAKE_OP(aclnnStdMeanCorrection(const aclTensor* self, const aclIntArray* dim,
+                               int64_t correction, bool keepdim, sync aclTensor* stdOut, sync aclTensor* meanOut,
+                               uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::std_mean_out(stdOut, meanOut, self, dim, correction, keepdim);
+})
 
 
 // ~~~ arg-операции ~~~
 
 
 // ~~~ операции с маской ~~~
-
-MAKE_OP(aclnnIsFinite(const aclTensor* self, out aclTensor* out,
-                      uint64_t* workspaceSize, aclOpExecutor** executor) {
-    out.copy_(at::isfinite(self));
-})
 
 MAKE_OP(aclnnMaskedSelect(const aclTensor* self, const aclTensor* mask, sync aclTensor* out,
                           uint64_t* workspaceSize, aclOpExecutor** executor) {
@@ -397,7 +518,7 @@ aclIntArray* aclCreateIntArray(const int64_t* value, uint64_t size) {
     log << "[aclCreateIntArray] value=" << static_cast<const void*>(value)
         << " size=" << size;
 
-    if (!value) {
+    if (size && !value) {
         log << "\nError: invalid param 'value'";
         log_output(log, true);
         return nullptr;
@@ -405,7 +526,8 @@ aclIntArray* aclCreateIntArray(const int64_t* value, uint64_t size) {
     log_output(log);
 
     auto* arr = new aclIntArray;
-    arr->data.assign(value, value + size);
+    if (size)
+        arr->data.assign(value, value + size);
     return arr;
 }
 aclnnStatus aclDestroyIntArray(const aclIntArray* array) {
@@ -444,7 +566,7 @@ aclFloatArray* aclCreateFloatArray(const float* value, uint64_t size) {
     log << "[aclCreateFloatArray] value=" << static_cast<const void*>(value)
         << " size=" << size;
 
-    if (!value) {
+    if (size && !value) {
         log << "\nError: invalid param 'value'";
         log_output(log, true);
         return nullptr;
@@ -452,7 +574,8 @@ aclFloatArray* aclCreateFloatArray(const float* value, uint64_t size) {
     log_output(log);
 
     auto* arr = new aclFloatArray;
-    arr->data.assign(value, value + size);
+    if (size)
+        arr->data.assign(value, value + size);
     return arr;
 }
 aclnnStatus aclDestroyFloatArray(const aclFloatArray* array) {
@@ -491,7 +614,7 @@ aclBoolArray* aclCreateBoolArray(const bool* value, uint64_t size) {
     log << "[aclCreateBoolArray] value=" << static_cast<const void*>(value)
         << " size=" << size;
 
-    if (!value) {
+    if (size && !value) {
         log << "\nError: invalid param 'value'";
         log_output(log, true);
         return nullptr;
@@ -499,7 +622,8 @@ aclBoolArray* aclCreateBoolArray(const bool* value, uint64_t size) {
     log_output(log);
 
     auto* arr = new aclBoolArray;
-    arr->data.assign(value, value + size);
+    if (size)
+        arr->data.assign(value, value + size);
     return arr;
 }
 aclnnStatus aclDestroyBoolArray(const aclBoolArray* array) {
@@ -541,7 +665,7 @@ aclScalarList* aclCreateScalarList(const aclScalar* const* value, uint64_t size)
     log << "[aclCreateScalarList] value=" << static_cast<const void*>(value)
         << " size=" << size;
 
-    if (!value) {
+    if (size && !value) {
         log << "\nError: invalid param 'value'";
         log_output(log, true);
         return nullptr;
@@ -549,7 +673,8 @@ aclScalarList* aclCreateScalarList(const aclScalar* const* value, uint64_t size)
     log_output(log);
 
     auto* list = new aclScalarList;
-    list->scalars.assign(value, value + size);
+    if (size)
+        list->scalars.assign(value, value + size);
     return list;
 }
 aclnnStatus aclDestroyScalarList(const aclScalarList* array) {
@@ -1050,12 +1175,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnAffineGrid,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
                            aclrtStream stream)
 
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnAllGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dim, bool keepdim, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnAll,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, const aclrtStream stream)
-
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnAllGatherMatmulGetWorkspaceSize,
                            const aclTensor* x1, const aclTensor* x2,
                            const aclTensor* bias, const char* group,
@@ -1105,47 +1224,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnAlltoAllvGroupedMatMulGetWorkspaceSize,
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnAlltoAllvGroupedMatMul,
                            void* workspace, uint64_t workspaceSize,
                            aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnAmaxGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dim, bool keepDim, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnAmax,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnAminGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dim, bool keepDim,
-                           aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnAmin,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnAminmaxGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dim, bool keepDim,
-                           aclTensor* minOut, aclTensor* maxOut, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnAminmax,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnAminmaxAllGetWorkspaceSize,
-                           const aclTensor* self, aclTensor* minOut, aclTensor* maxOut,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnAminmaxAll,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnAminmaxDimGetWorkspaceSize,
-                           const aclTensor* self, const int64_t dim, bool keepDim,
-                           aclTensor* minOut, aclTensor* maxOut, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnAminmaxDim,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnAnyGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dim, bool keepdim, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnAny,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, const aclrtStream stream)
 
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnApplyAdamWGetWorkspaceSize,
                            aclTensor* varRef, aclTensor* mRef, aclTensor* vRef,
@@ -3841,13 +3919,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogSpaceGetWorkspaceSize,
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogSpace,
                            void *workspace, uint64_t workspaceSize, aclOpExecutor *executor, aclrtStream stream)
 
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogSumExpGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dim, bool keepDim,
-                           aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogSumExp,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogdetGetWorkspaceSize,
                            const aclTensor* self, aclTensor* out, uint64_t* workspaceSize,
                            aclOpExecutor** executor)
@@ -4083,24 +4154,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnMaxUnpool3dBackwardGetWorkspaceSize,
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnMaxUnpool3dBackward,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
                            aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnMaxV2GetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dims, bool keepDims, bool noopWithEmptyDims, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnMaxV2,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnMeanGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dim, bool keepDim, aclDataType dtype, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnMean,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnMeanV2GetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dim, bool keepDim, bool noopWithEmptyAxes, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnMeanV2,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
 
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnMedianGetWorkspaceSize,
                            const aclTensor* self, aclTensor* valuesOut, uint64_t* workspaceSize,
@@ -4791,17 +4844,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnPreluBackward,
                            void* workspace, uint64_t workspace_size, aclOpExecutor* executor,
                            aclrtStream stream)
 
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnProdGetWorkspaceSize,
-                           const aclTensor* self, const aclDataType dtype, aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnProd,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnProdDimGetWorkspaceSize,
-                           const aclTensor* self, int64_t dim, bool keepDim, const aclDataType dtype, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnProdDim,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnQkvRmsNormRopeCacheGetWorkspaceSize,
                            const aclTensor* qkv, const aclTensor* qGamma, const aclTensor* kGamma, const aclTensor* cos, const aclTensor* sin,
                            const aclTensor* index, aclTensor* qOut, aclTensor* kCache, aclTensor* vCache, const aclTensor* kScaleOptional, const aclTensor* vScaleOptional,
@@ -5072,26 +5114,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnRecurrentGatedDeltaRuleGetWorkspaceSize,
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnRecurrentGatedDeltaRule,
                            void *workspace, uint64_t workspaceSize, aclOpExecutor *executor,
                            aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnReduceLogSumGetWorkspaceSize,
-                           const aclTensor* data, const aclIntArray* axes, bool keepDims,
-                           bool noopWithEmptyAxes, aclTensor* reduce, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnReduceLogSum,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnReduceNansumGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dim, bool keepDim, aclDataType dtype, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnReduceNansum,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnReduceSumGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dims, bool keepDims, aclDataType dtype, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnReduceSum,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
 
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnReflectionPad1dGetWorkspaceSize,
                            const aclTensor* self, const aclIntArray* padding,
@@ -5720,23 +5742,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnSquareGetWorkspaceSize,
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnSquare,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, const aclrtStream stream)
 
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnStdGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dim, const int64_t correction,
-                           bool keepdim, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnStd,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           const aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnStdMeanCorrectionGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dim,
-                           int64_t correction, bool keepdim, aclTensor* stdOut,
-                           aclTensor* meanOut, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnStdMeanCorrection,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           const aclrtStream stream)
-
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnStridedSliceGetWorkspaceSize,
                            const aclTensor* self, const aclIntArray* begin, const aclIntArray* end, const aclIntArray* strides,
                            int64_t beginMask, int64_t endMask, int64_t ellipsisMask, int64_t newAxisMask, int64_t shrinkAxisMask,
@@ -6160,29 +6165,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnUpsampleTrilinear3dBackwardGetWorkspaceSize,
                            aclOpExecutor** executor)
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnUpsampleTrilinear3dBackward,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnVarGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dim, bool unbiased,
-                           bool keepdim, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnVar,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnVarCorrectionGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dim,
-                           int64_t correction, bool keepdim, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnVarCorrection,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnVarMeanGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* dim, int64_t correction,
-                           bool keepdim, aclTensor* varOut, aclTensor* meanOut,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnVarMean,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
 
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnWeightQuantBatchMatmulGetWorkspaceSize,
                            const aclTensor* x1, const aclTensor* x2, const aclTensor* diagonalMatrix, const aclTensor* deqOffset,

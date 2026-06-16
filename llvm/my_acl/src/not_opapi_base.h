@@ -27,6 +27,14 @@ struct AclnnException {
     AclnnException(aclnnStatus s, const std::string& msg) : status(s), message(msg) {}
 };
 
+struct OptionalScalarType {
+    at::ScalarType value = at::ScalarType::Undefined;
+    OptionalScalarType() = default;
+    OptionalScalarType(at::ScalarType v) : value(v) {}
+    operator bool() const { return value != at::ScalarType::Undefined; }
+    operator at::ScalarType() const { return value; }
+};
+
 #define ASSERT_CODE(cond, code) \
     do { \
         if (!(cond)) { \
@@ -90,7 +98,7 @@ struct AclnnException {
             _ret = UNASSERTED;                                   \
             log << "\n!!! unknown exception";                    \
         }                                                        \
-        log_output(log, true);                                   \
+        log_output(log, _ret != OK);                             \
         delete exec;                                             \
         auto t_end = std::chrono::steady_clock::now();           \
         double elapsed_us = std::chrono::duration<double, std::micro>(t_end - t_start).count(); \
@@ -117,8 +125,25 @@ struct aclTensor {
     int64_t offset;
 };
 
-static inline std::string tensorDataToString(const aclTensor* tensor) {
-    return tensorDataToString(tensor->desc, tensor->buffer, tensor->strides, tensor->offset);
+static inline std::string tensorDataToString(const aclTensor* tensor, const int baseIndent = 8) {
+    return tensorDataToString(tensor->desc, tensor->buffer, tensor->strides, tensor->offset, baseIndent);
+}
+
+// тот случай, когда его невозможно сделать friend :)
+inline std::ostream& operator<<(std::ostream& os, const aclTensor& tensor) {
+    const auto& dims = tensor.desc->dims;
+    bool small = dims.empty() ||
+                 (dims.size() >= 1 &&
+                  dims.back() <= 42 &&
+                  std::all_of(dims.begin(), dims.end() - 1, [](int64_t d) { return d == 1; }));
+    if (small)
+        return os << tensorDataToString(&tensor, 0);
+    return os << '\n' << tensorDataToString(&tensor, 8);
+}
+inline std::ostream& operator<<(std::ostream& os, const aclTensor* tensor) {
+    if (!tensor)
+        return os << "(null)";
+    return os << *tensor;
 }
 
 
