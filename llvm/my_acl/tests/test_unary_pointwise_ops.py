@@ -503,3 +503,656 @@ def test_accuracy_swiglu_backward(shape: tuple[int, ...], dtype: torch.dtype):
         ref_out = torch.cpu_swiglu_backward    (ref_grad_output, ref_inp, dim)
         res_out = torch_npu.npu_swiglu_backward(    grad_output,     inp, dim)
         assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.isinf
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_isinf(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    inp = torch.masked_fill(inp, inp > 1.0, -float("inf"))
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.isinf(ref_inp)
+    res_out = torch.isinf(inp)
+
+    assert_equal(res_out, ref_out)
+
+
+@pytest.mark.isnan
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_isnan(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    inp = torch.masked_fill(inp, inp > 1.0, float("nan"))
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.isnan(ref_inp)
+    res_out = torch.isnan(inp)
+
+    assert_equal(res_out, ref_out)
+
+
+@pytest.mark.neg
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_neg(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.neg(ref_inp)
+    res_out = torch.neg(inp)
+
+    assert_equal(res_out, ref_out)
+
+
+@pytest.mark.inplace
+@pytest.mark.neg_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_neg_(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.neg_(ref_inp)
+    res_out = torch.neg_(inp)
+
+    assert_equal(res_out, ref_out)
+
+
+@pytest.mark.reciprocal
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_reciprocal(shape, dtype):
+    # reciprocal - поэлементная инверсия (1/x)
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.reciprocal(ref_inp)
+    res_out = torch.reciprocal(inp)
+
+    assert_close(res_out, ref_out, dtype, equal_nan=True)
+
+
+@pytest.mark.inplace
+@pytest.mark.reciprocal_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_reciprocal_(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.reciprocal_(ref_inp)
+    res_out = torch.reciprocal_(inp)
+
+    assert_close(res_out, ref_out, dtype, equal_nan=True)
+
+
+@pytest.mark.elu
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_elu(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    alpha = torch.rand(1).item()
+
+    ref_out = torch.nn.functional.elu(ref_inp, alpha)
+    res_out = torch.nn.functional.elu(inp,     alpha)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.elu_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_elu_(shape, dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp)
+
+    alpha = torch.rand(1).item()
+
+    torch.nn.functional.elu_(ref_inp, alpha)
+    torch.nn.functional.elu_(res_inp, alpha)
+
+    assert_close(res_inp, ref_inp, dtype)
+
+
+@pytest.mark.elu_backward
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+@pytest.mark.parametrize("is_result", (True, False))
+def test_accuracy_elu_backward(shape, dtype, is_result):
+    alpha = torch.rand(1).item()
+    scale = 1.0
+    input_scale = 1.0
+
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    res_grad_out = torch.randn_like(res_inp)
+
+    if is_result:
+        res_self_or_result = torch.ops.aten.elu(res_inp, alpha, scale, input_scale)
+    else:
+        res_self_or_result = res_inp
+
+    ref_grad_out = to_reference(res_grad_out)
+    ref_self_or_result = to_reference(res_self_or_result)
+
+    ref_in_grad = torch.ops.aten.elu_backward(ref_grad_out, alpha, scale, input_scale, is_result, ref_self_or_result)
+    res_in_grad = torch.ops.aten.elu_backward(res_grad_out, alpha, scale, input_scale, is_result, res_self_or_result)
+
+    assert_close(res_in_grad, ref_in_grad, dtype)
+
+
+@pytest.mark.celu
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_celu(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    alpha = torch.rand(1).item()
+
+    ref_out = torch.nn.functional.celu(ref_inp, alpha)
+    res_out = torch.nn.functional.celu(inp, alpha)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.celu_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_celu_(shape, dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp)
+
+    alpha = torch.rand(1).item()
+
+    torch.nn.functional.celu_(ref_inp, alpha)
+    torch.nn.functional.celu_(res_inp, alpha)
+
+    assert_close(res_inp, ref_inp, dtype)
+
+
+@pytest.mark.relu
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_relu(shape, dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp)
+
+    ref_out = torch.relu(ref_inp)
+    res_out = torch.nn.functional.relu(res_inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.relu_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_relu_(shape, dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp)
+
+    ref_out = torch.relu_(ref_inp)
+    res_out = torch.relu_(res_inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.softplus
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_softplus(shape, dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp)
+
+    beta = torch.rand(1).item()
+    threshold = torch.rand(1).item() * 40.0
+
+    ref_out = torch.nn.functional.softplus(ref_inp, beta=beta, threshold=threshold)
+    res_out = torch.nn.functional.softplus(res_inp, beta=beta, threshold=threshold)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.rsqrt
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_rsqrt(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.rsqrt(ref_inp)
+    res_out = torch.rsqrt(inp)
+
+    assert_close(res_out, ref_out, dtype, equal_nan=True)
+
+
+@pytest.mark.inplace
+@pytest.mark.rsqrt_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_rsqrt_(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.rsqrt_(ref_inp)
+    res_out = torch.rsqrt_(inp)
+
+    assert_close(res_out, ref_out, dtype, equal_nan=True)
+
+
+@pytest.mark.sigmoid
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_sigmoid(shape, dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp)
+
+    ref_out = torch.sigmoid(ref_inp)
+    res_out = torch.sigmoid(res_inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.sigmoid
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_sigmoid_backward(shape, dtype):
+    res_out = torch.randn(shape, dtype=dtype, device=device)
+    res_grad = torch.randn_like(res_out)
+
+    ref_out = to_reference(res_out)
+    ref_grad = to_reference(res_grad)
+
+    ref_in_grad = torch.ops.aten.sigmoid_backward(ref_grad, ref_out)
+    res_in_grad = torch.ops.aten.sigmoid_backward(res_grad, res_out)
+
+    assert_close(res_in_grad, ref_in_grad, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.sigmoid_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_sigmoid_(shape, dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp)
+
+    ref_out = torch.sigmoid_(ref_inp)
+    res_out = torch.sigmoid_(res_inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.log_sigmoid
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_log_sigmoid(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    if len(shape) == 1:
+        special_inputs = torch.tensor((float("-inf"), float("inf"), -300), dtype=dtype, device=device)
+        inp = torch.cat((inp, special_inputs))
+    ref_inp = to_reference(inp, True)
+
+    ref_out = torch.nn.functional.logsigmoid(ref_inp)
+    res_out = torch.nn.functional.logsigmoid(inp)
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.silu
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_silu(shape, dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp)
+
+    ref_out = torch.nn.functional.silu(ref_inp)
+    res_out = torch.nn.functional.silu(res_inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.silu
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_silu_backward(shape, dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    res_grad = torch.randn_like(res_inp)
+
+    ref_inp = to_reference(res_inp)
+    ref_grad = to_reference(res_grad)
+
+    ref_in_grad = torch.ops.aten.silu_backward(ref_grad, ref_inp)
+    res_in_grad = torch.ops.aten.silu_backward(res_grad, res_inp)
+
+    assert_close(res_in_grad, ref_in_grad, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.silu_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_silu_(shape, dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp)
+
+    ref_out = torch.nn.functional.silu(ref_inp, inplace=True)
+    res_out = torch.nn.functional.silu(res_inp, inplace=True)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.sin
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_sin(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.sin(ref_inp)
+    res_out = torch.sin(inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.sin_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_sin_(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.sin_(ref_inp)
+    res_out = torch.sin_(inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.tan
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_tan(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.tan(ref_inp)
+    res_out = torch.tan(inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.tan_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_tan_(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.tan_(ref_inp)
+    res_out = torch.tan_(inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.tanh
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_tanh(shape, dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp)
+
+    ref_out = torch.tanh(ref_inp)
+    res_out = torch.tanh(res_inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.tanh
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_tanh_backward(shape, dtype):
+    res_out = torch.randn(shape, dtype=dtype, device=device)
+    res_grad = torch.randn_like(res_out)
+
+    ref_out = to_reference(res_out, True)
+    ref_grad = to_reference(res_grad, True)
+
+    ref_in_grad = torch.ops.aten.tanh_backward(ref_grad, ref_out)
+    res_in_grad = torch.ops.aten.tanh_backward(res_grad, res_out)
+
+    assert_close(res_in_grad, ref_in_grad, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.tanh_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_tanh_(shape, dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp)
+
+    ref_out = torch.tanh_(ref_inp)
+    res_out = torch.tanh_(res_inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+SHAPE_DIAGONAL = tuple(zip(POINTWISE_SHAPES, (-2, -2, -1, 0, 1, 3)))
+
+
+@pytest.mark.triu
+@pytest.mark.parametrize("shape, diagonal", SHAPE_DIAGONAL)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_triu(shape, diagonal, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    inp = unsqueeze_tensor(inp, 2)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.triu(ref_inp, diagonal)
+    res_out = torch.triu(inp, diagonal)
+
+    assert_equal(res_out, ref_out)
+    assert res_out.is_contiguous(), "triu output should be contiguous"
+
+
+@pytest.mark.triu
+@pytest.mark.parametrize("shape, diagonal", SHAPE_DIAGONAL)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_triu_noncontiguous(shape, diagonal, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    inp = unsqueeze_tensor(inp, 2)
+
+    if inp.dim() >= 2:
+        inp = inp.transpose(-2, -1)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.triu(ref_inp, diagonal)
+    res_out = torch.triu(inp, diagonal)
+
+    assert_equal(res_out, ref_out)
+    assert res_out.is_contiguous(), "triu output should always be contiguous"
+
+
+@pytest.mark.triu_
+@pytest.mark.parametrize("shape, diagonal", SHAPE_DIAGONAL)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_triu_(shape, diagonal, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    inp = unsqueeze_tensor(inp, 2)
+
+    ref_inp = to_reference(inp.clone())
+    inp_original = inp.clone().detach()
+
+    original_stride = inp.stride()
+    original_data_ptr = inp.data_ptr()
+
+    ref_inp.triu_(diagonal)
+    res = inp.triu_(diagonal)
+
+    assert_equal(inp, ref_inp)
+
+    assert res is inp, "triu_ should return the input tensor itself to support chaining"
+    assert inp.data_ptr() == original_data_ptr, "triu_ should modify in-place, data pointer should not change"
+    assert inp.stride() == original_stride, f"triu_ should preserve stride. Expected {original_stride}, got {inp.stride()}"
+
+    M, N = inp.shape[-2], inp.shape[-1]
+    should_modify = any(j < i + diagonal for i in range(M) for j in range(N))
+
+    if should_modify:
+        assert not torch.allclose(inp, inp_original), (
+            "triu_ in-place modification not implemented, "
+            "the original tensor remains unchanged!"
+        )
+
+
+@pytest.mark.triu_
+@pytest.mark.parametrize("shape, diagonal", SHAPE_DIAGONAL)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_triu_inplace_noncontiguous(shape, diagonal, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    inp = unsqueeze_tensor(inp, 2)
+
+    if inp.dim() >= 2:
+        inp = inp.transpose(-2, -1)
+
+    ref_inp = to_reference(inp.clone())
+    inp_original = inp.clone().detach()
+
+    original_stride = inp.stride()
+    original_data_ptr = inp.data_ptr()
+
+    ref_inp.triu_(diagonal)
+    res = inp.triu_(diagonal)
+
+    assert_equal(inp, ref_inp)
+
+    assert res is inp, "triu_ should return the input tensor itself to support chaining"
+
+    assert inp.stride() == original_stride, (
+        f"triu_ should preserve stride even for non-contiguous input. "
+        f"Expected {original_stride}, got {inp.stride()}"
+    )
+
+    assert (
+        inp.data_ptr() == original_data_ptr
+    ), "triu_ should modify in-place, data pointer should not change"
+
+    M, N = inp.shape[-2], inp.shape[-1]
+    should_modify = any(j < i + diagonal for i in range(M) for j in range(N))
+
+    if should_modify:
+        assert not torch.allclose(inp, inp_original), "triu_ should modify non-contiguous tensor in-place"
+
+
+@pytest.mark.erf
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_erf(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.erf(ref_inp)
+    res_out = torch.erf(inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.erf_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_erf_(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.erf_(ref_inp)
+    res_out = torch.erf_(inp)
+
+    assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.isfinite
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", ALL_FLOAT_DTYPES)
+def test_accuracy_isfinite(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    inp = torch.masked_fill(inp, inp > 1.0, float("inf"))
+    inp = torch.masked_fill(inp, inp < -1.0, float("-inf"))
+    inp = torch.masked_fill(inp, (inp > -0.1) & (inp < 0.1), float("nan"))
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.isfinite(ref_inp)
+    res_out = torch.isfinite(inp)
+
+    assert_equal(res_out, ref_out)
+
+
+def get_max_ndim(shape, dims):
+    max_ndim = max(len(shape), len(dims))
+    for dim in dims:
+        dim = dim + 1 if dim >= 0 else -dim
+        if dim > max_ndim:
+            max_ndim = dim
+    return max_ndim
+
+FLIP_DIMS = ((0,), (-2,), (2,), (0, 2), (2, 1), (0, -1, 1))
+
+
+@pytest.mark.flip
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+@pytest.mark.parametrize("dims", FLIP_DIMS)
+def test_accuracy_flip_general(shape, dtype, dims):
+    if dtype in ALL_FLOAT_DTYPES:
+        inp = torch.randn(shape, dtype=dtype, device=device)
+    else:
+        inp = torch.randint(-1000, 1000, shape, device=device).to(dtype)
+    max_ndim = get_max_ndim(shape, dims)
+    inp = unsqueeze_tensor(inp, max_ndim)
+    ref_inp = to_reference(inp, False)
+
+    ref_out = torch.flip(ref_inp, dims)
+    res_out = torch.flip(inp, dims)
+
+    assert_equal(res_out, ref_out)
+
+
+@pytest.mark.flip
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES[:-2])
+@pytest.mark.parametrize("dtype", ALL_FLOAT_DTYPES + ALL_INT_DTYPES)
+@pytest.mark.parametrize("dims", FLIP_DIMS)
+def test_accuracy_flip_with_non_dense_input(shape, dtype, dims):
+    max_ndim = get_max_ndim(shape, dims)
+    shape = unsqueeze_tuple(shape, max(max_ndim, 2))
+
+    shape_dialted = tuple(item * 2 for item in shape)
+    if dtype in ALL_FLOAT_DTYPES:
+        inp = torch.randn(shape_dialted, dtype=dtype, device=device)[::2, ::2]
+    else:
+        inp = torch.randint(-1000, 1000, shape_dialted, device=device).to(dtype)[::2, ::2]
+    ref_inp = to_reference(inp)
+
+    res_out = torch.flip(inp, dims)
+    ref_out = torch.flip(ref_inp, dims)
+    assert_equal(res_out, ref_out)
+
+
+@pytest.mark.tile
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dims", ((0,), (2,), (2, 0), (0, 2), (2, 2), (2, 2, 2), (2, 2, 2, 2)))
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_tile(shape, dims, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.tile(ref_inp, dims)
+    res_out = torch.tile(inp, dims)
+
+    assert_close(res_out, ref_out, dtype)

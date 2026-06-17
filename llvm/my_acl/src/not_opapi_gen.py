@@ -228,7 +228,7 @@ def make_GWS(op_name: str, exe_name: str, signature, body: str, write):
     if tensors:
         write(f"\n    at::Tensor {', '.join(tensors)};")
         for name in tensors:
-            write(f"\n    LOAD_TENSOR({name}, exec->{name});")
+            write(f"\n    LOAD_TENSOR({name}, exec->{name}, {'1' if name.endswith('Optional') else '0'});")
 
     scalar_names = []
     for is_out, _type, name in signature:

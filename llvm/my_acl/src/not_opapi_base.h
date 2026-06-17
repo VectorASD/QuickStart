@@ -47,10 +47,14 @@ struct OptionalScalarType {
 
 #define ASSERT(cond) ASSERT_CODE(cond, UNASSERTED)
 
-#define LOAD_TENSOR(tensor_var, acl_tensor_ptr)                                 \
+#define LOAD_TENSOR(tensor_var, acl_tensor_ptr, is_optional)                    \
     do {                                                                        \
         auto _tensor = (acl_tensor_ptr);                                        \
         if (!(acl_tensor_ptr) || !_tensor->desc || !_tensor->buffer) {          \
+            if (is_optional) {                                                  \
+                tensor_var = at::Tensor();                                      \
+                break;                                                          \
+            }                                                                   \
             throw AclnnException(UNIMPLEMENTED,                                 \
                                  "LOAD_TENSOR: null aclTensor or desc/buffer"); \
         }                                                                       \
@@ -123,6 +127,35 @@ struct aclTensor {
     aclDataBuffer* buffer;
     std::vector<int64_t> strides;
     int64_t offset;
+
+    void store(const at::Tensor& src) {
+        if (!desc) throw std::runtime_error("aclTensor::store: desc is null");
+
+        size_t total_bytes = src.nbytes();
+
+        // Если буфера нет или он слишком мал – выделяем новый
+        if (!buffer || buffer->size < total_bytes) {
+            void* new_data = malloc(total_bytes);
+            if (!new_data)
+                throw std::runtime_error("malloc failed in aclTensor::store");
+            if (buffer) {
+                free(buffer->data);
+                buffer->data = new_data;
+                buffer->size = total_bytes;
+            } else
+                buffer = new aclDataBuffer{new_data, total_bytes};
+        }
+
+        // Обновляем метаданные дескриптора (размеры, strides, offset)
+        auto src_sizes = src.sizes();
+        auto src_strides = src.strides();
+        desc->dims.assign(src_sizes.begin(), src_sizes.end());
+        strides.assign(src_strides.begin(), src_strides.end());
+        offset = 0;
+
+        // Копируем сырые данные
+        std::memcpy(buffer->data, src.const_data_ptr(), total_bytes);
+    }
 };
 
 static inline std::string tensorDataToString(const aclTensor* tensor, const int baseIndent = 8) {
@@ -248,7 +281,7 @@ struct aclTensorList {
                 if (!t)
                     throw AclnnException(UNIMPLEMENTED, "null aclTensor in list");
                 at::Tensor tensor;
-                LOAD_TENSOR(tensor, t);   // используем существующий макрос
+                LOAD_TENSOR(tensor, t, 0);   // используем существующий макрос
                 cached.push_back(tensor);
             }
             loaded = true;
