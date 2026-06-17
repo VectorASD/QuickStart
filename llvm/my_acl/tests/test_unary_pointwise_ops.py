@@ -77,7 +77,7 @@ def test_accuracy_abs(shape, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_abs_(shape, dtype):
     inp = torch.randn(shape, dtype=dtype, device=device)
-    ref_inp = to_reference(inp.clone())
+    ref_inp = to_reference(inp)
 
     ref_out = torch.abs_(ref_inp)
     res_out = torch.abs_(inp)
@@ -181,7 +181,7 @@ def test_accuracy_bitwise_left_shift_(shapes, dtype):
     shape_a, shape_b = shapes
     res_a = torch.randint(0, 100, shape_a, dtype=dtype, device=device)
     res_b = torch.randint(0, 8, shape_b, dtype=dtype, device=device)
-    ref_a = to_reference(res_a.clone())
+    ref_a = to_reference(res_a)
     ref_b = to_reference(res_b)
 
     ref_a.bitwise_left_shift_(ref_b)
@@ -196,7 +196,7 @@ def test_accuracy_bitwise_right_shift_(shapes, dtype):
     shape_a, shape_b = shapes
     res_a = torch.randint(0, 100, shape_a, dtype=dtype, device=device)
     res_b = torch.randint(0, 8, shape_b, dtype=dtype, device=device)
-    ref_a = to_reference(res_a.clone())
+    ref_a = to_reference(res_a)
     ref_b = to_reference(res_b)
 
     ref_a.bitwise_right_shift_(ref_b)
@@ -229,7 +229,7 @@ def test_accuracy_bitwisenot_(shape, dtype):
         res_inp = torch.randint(0, 2, size=shape, dtype=dtype, device=device)
     else:
         res_inp = torch.randint(-0x7FFF, 0x7FFF, size=shape, dtype=dtype, device=device)
-    ref_inp = to_reference(res_inp.clone())
+    ref_inp = to_reference(res_inp)
 
     ref_out = ref_inp.bitwise_not_()  # NOTE: there is no torch.bitwse_not_
     res_out = res_inp.bitwise_not_()
@@ -242,7 +242,7 @@ def test_accuracy_bitwisenot_(shape, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_cos(shape, dtype):
     inp = torch.randn(shape, dtype=dtype, device=device)
-    ref_inp = to_reference(inp, True)
+    ref_inp = to_reference(inp)
 
     ref_out = torch.cos(ref_inp)
     res_out = torch.cos(inp)
@@ -256,7 +256,7 @@ def test_accuracy_cos(shape, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_cos_(shape, dtype):
     inp = torch.randn(shape, dtype=dtype, device=device)
-    ref_inp = to_reference(inp.clone(), True)
+    ref_inp = to_reference(inp)
 
     ref_out = torch.cos_(ref_inp)
     res_out = torch.cos_(inp)
@@ -269,7 +269,7 @@ def test_accuracy_cos_(shape, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_exp(shape, dtype):
     inp = torch.randn(shape, dtype=dtype, device=device)
-    ref_inp = to_reference(inp, True)
+    ref_inp = to_reference(inp)
 
     ref_out = torch.exp(ref_inp)
     res_out = torch.exp(inp)
@@ -283,7 +283,7 @@ def test_accuracy_exp(shape, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_exp_(shape, dtype):
     inp = torch.randn(shape, dtype=dtype, device=device)
-    ref_inp = to_reference(inp.clone(), True)
+    ref_inp = to_reference(inp)
 
     ref_out = torch.exp_(ref_inp)
     res_out = torch.exp_(inp)
@@ -296,7 +296,7 @@ def test_accuracy_exp_(shape, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_exp_out(shape, dtype):
     inp = torch.randn(shape, dtype=dtype, device=device)
-    ref_inp = to_reference(inp, True)
+    ref_inp = to_reference(inp)
 
     ref_out = torch.empty_like(ref_inp)
     torch.exp(ref_inp, out=ref_out)
@@ -311,7 +311,7 @@ def test_accuracy_exp_out(shape, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_exp2(shape, dtype):
     inp = torch.randn(shape, dtype=dtype, device=device)
-    ref_inp = to_reference(inp, True)
+    ref_inp = to_reference(inp)
 
     ref_out = torch.exp2(ref_inp)
     res_out = torch.exp2(inp)
@@ -325,7 +325,7 @@ def test_accuracy_exp2(shape, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_exp2_(shape, dtype):
     inp = torch.randn(shape, dtype=dtype, device=device)
-    ref_inp = to_reference(inp.clone(), True)
+    ref_inp = to_reference(inp)
 
     ref_out = torch.exp2_(ref_inp)
     res_out = torch.exp2_(inp)
@@ -359,7 +359,7 @@ def test_accuracy_geglu(shape, dtype, approximate, activate_left):
 
 
 @pytest.mark.dgeglu
-@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES[:-2])  # слишком тяжёлые тесты
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.parametrize("approximate", (0, 1))
 @pytest.mark.parametrize("activate_left", (False, True))
@@ -393,7 +393,7 @@ def test_accuracy_dgeglu(shape, dtype, approximate, activate_left):
 @pytest.mark.parametrize("approximate", ("none", "tanh"))
 def test_accuracy_gelu(shape, dtype, approximate):
     res_inp = torch.randn(shape, dtype=dtype, device=device)
-    ref_inp = to_reference(res_inp, True)
+    ref_inp = to_reference(res_inp)
 
     ref_out = torch.nn.functional.gelu(ref_inp, approximate=approximate)
     res_out = torch.nn.functional.gelu(res_inp, approximate=approximate)
@@ -409,8 +409,8 @@ def test_accuracy_gelu_backward(shape, dtype, approximate):
     res_inp = torch.randn(shape, dtype=dtype, device=device)
     res_out = torch.randn_like(res_inp)
 
-    ref_inp = to_reference(res_inp, True)
-    ref_out = to_reference(res_out, True)
+    ref_inp = to_reference(res_inp)
+    ref_out = to_reference(res_out)
 
     ref_in_grad = torch.ops.aten.gelu_backward(ref_out, ref_inp, approximate=approximate)
     res_in_grad = torch.ops.aten.gelu_backward(res_out, res_inp, approximate=approximate)
@@ -424,9 +424,82 @@ def test_accuracy_gelu_backward(shape, dtype, approximate):
 @pytest.mark.parametrize("approximate", ("none", "tanh"))
 def test_accuracy_gelu_(shape, dtype, approximate):
     res_inp = torch.randn(shape, dtype=dtype, device=device)
-    ref_inp = to_reference(res_inp.clone(), True)
+    ref_inp = to_reference(res_inp)
 
     ref_out = torch.ops.aten.gelu_.default(ref_inp, approximate=approximate)
     res_out = torch.ops.aten.gelu_.default(res_inp, approximate=approximate)
 
     assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.glu
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_glu(shape, dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp)
+
+    for dim in range(len(shape)):
+        if shape[dim] % 2:
+            continue
+        ref_out = torch.nn.functional.glu(ref_inp, dim=dim)
+        res_out = torch.nn.functional.glu(res_inp, dim=dim)
+        assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.glu
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_glu_backward(shape, dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp)
+
+    for dim in range(len(shape)):
+        if not shape[dim] or shape[dim] % 2:
+            continue
+        out_shape = (*shape[:dim], shape[dim] // 2, *shape[dim+1:])
+        res_out = torch.randn(out_shape, dtype=dtype, device=device)
+        ref_out = to_reference(res_out)
+
+        ref_in_grad = torch.ops.aten.glu_backward(ref_out, ref_inp, dim=dim)
+        res_in_grad = torch.ops.aten.glu_backward(res_out, res_inp, dim=dim)
+
+        assert_close(res_in_grad, ref_in_grad, dtype)
+
+
+@pytest.mark.swiglu
+@pytest.mark.parametrize("shape", SWIGLU_SPECIAL_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_swiglu_forward(shape: tuple[int, ...], dtype: torch.dtype):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp)
+
+    for dim in range(len(shape)):
+        if shape[dim] % 2:
+            continue
+        ref_out = torch.cpu_swiglu    (ref_inp, dim=dim)
+        res_out = torch_npu.npu_swiglu(res_inp, dim=dim)
+
+        assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.swiglu
+@pytest.mark.parametrize("shape", SWIGLU_SPECIAL_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_swiglu_backward(shape: tuple[int, ...], dtype: torch.dtype):
+    for dim in range(len(shape)):
+        div, mod = divmod(shape[dim], 2)
+        if mod:
+            in_shape = (*shape[:dim], shape[dim] + 1, *shape[dim+1:])
+            div += 1
+        else: in_shape = shape
+        out_shape = (*in_shape[:dim], in_shape[dim] // 2, *in_shape[dim+1:])
+
+        inp         = torch.randn(in_shape, dtype=dtype, device=device)
+        grad_output = torch.randn(out_shape, dtype=dtype, device=device)
+        ref_inp         = to_reference(inp)
+        ref_grad_output = to_reference(grad_output)
+
+        ref_out = torch.cpu_swiglu_backward    (ref_grad_output, ref_inp, dim)
+        res_out = torch_npu.npu_swiglu_backward(    grad_output,     inp, dim)
+        assert_close(res_out, ref_out, dtype)

@@ -1,7 +1,7 @@
 #include "op_profiler.h" // record_op_timing
 #include "helpers.cpp"   // aclDataTypeToString, aclFormatToString, tensorDataToString
 
-#include <cstdint>      // int32_t, int64_t, uint64_t
+#include <cstdint>      // int32_t, int64_t, uint8_t
 
 
 #ifndef NOT_OPAPI_BASE_H

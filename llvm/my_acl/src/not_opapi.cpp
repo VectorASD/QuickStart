@@ -381,6 +381,44 @@ MAKE_OP(aclnnGeluBackwardV2(const aclTensor* gradOutput, const aclTensor* self, 
 })
 
 
+MAKE_OP(aclnnGlu(const aclTensor* self, int64_t dim, sync aclTensor* out,
+                 uint64_t* workspaceSize, aclOpExecutor** executor) {
+    // auto chunks = self.chunk(2, dim);
+    // out.copy_(chunks[0] * at::sigmoid(chunks[1]));
+    out.copy_(at::glu(self, dim));
+})
+MAKE_OP(aclnnGluBackward(const aclTensor* gradOut, const aclTensor* self, int64_t dim,
+                         out aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    out.copy_(at::glu_backward(gradOut, self, dim));
+})
+
+
+MAKE_OP(aclnnSwiGlu(const aclTensor* self, int64_t dim, sync aclTensor* out,
+                    uint64_t* workspaceSize, aclOpExecutor** executor) {
+    auto chunks = self.chunk(2, dim);
+    auto a = chunks[0], b = chunks[1];
+    out.copy_(at::silu(a) * b);
+})
+MAKE_OP(aclnnSwiGluGrad(const aclTensor* gradOut, const aclTensor* self, int64_t dim,
+                        out aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    auto orig_dtype = gradOut.scalar_type();
+    bool need_cast = (orig_dtype == at::kHalf || orig_dtype == at::kBFloat16);
+    if (need_cast)
+        self = self.to(at::kFloat);
+
+    auto chunks = self.chunk(2, dim);
+    auto a = chunks[0], b = chunks[1];
+    auto sig_a = at::sigmoid(a);
+    auto silu_a = a * sig_a;  // silu(a)
+    auto d_silu = sig_a * (1.0 + a * (1.0 - sig_a));  // производная silu(a) по a
+
+    auto grad_a = gradOut * b * d_silu;
+    auto grad_b = gradOut * silu_a;
+    auto result = at::cat({grad_a, grad_b}, dim);
+    out.copy_(result);  // автоматические приводит тип result (Float) к типу out (Half, BFloat16)
+})
+
+
 MAKE_OP(aclnnGeGlu(const aclTensor* self, int64_t dim, int64_t approximate,
                    sync aclTensor* out, out aclTensor* outGelu,
                    uint64_t* workspaceSize, aclOpExecutor** executor) {
@@ -2750,20 +2788,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnGlobalMaxPoolGetWorkspaceSize,
                            const aclTensor* self, aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnGlobalMaxPool,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, const aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnGluGetWorkspaceSize,
-                           const aclTensor* self, int64_t dim, const aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnGlu,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnGluBackwardGetWorkspaceSize,
-                           const aclTensor* gradOut, const aclTensor* self, int64_t dim,
-                           const aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnGluBackward,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
 
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnGridSampler2DGetWorkspaceSize,
                            const aclTensor *input, const aclTensor *grid,

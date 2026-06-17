@@ -93,3 +93,42 @@ torch.cpu_geglu = cpu_geglu
 torch.cpu_geglu_grad = cpu_geglu_grad
 torch.Tensor.cpu_geglu = lambda self: cpu_geglu(self)
 torch.Tensor.cpu_geglu_grad = lambda self, grad_output: cpu_geglu_grad(grad_output, self)
+
+
+
+def cpu_swiglu(input_tensor, dim=-1):
+    """
+    SwiGLU: silu(a) * b, где a,b = chunk(input, 2, dim)
+    """
+    a, b = input_tensor.chunk(2, dim=dim)
+    return F.silu(a) * b
+
+def cpu_swiglu_backward(grad_output, input_tensor, dim=-1):
+    """
+    Градиент SwiGLU (обратный проход).
+    """
+    a, b = input_tensor.chunk(2, dim=dim)
+    a.requires_grad_(True)
+    silu_a = F.silu(a)
+    y = silu_a * b
+    grad_a = torch.autograd.grad(y, a, grad_output, retain_graph=False)[0]
+    grad_b = grad_output * silu_a
+    return torch.cat((grad_a, grad_b), dim=dim)
+
+torch.cpu_swiglu = cpu_swiglu
+torch.cpu_swiglu_backward = cpu_swiglu_backward
+torch.Tensor.cpu_swiglu = lambda self: cpu_swiglu(self)
+torch.Tensor.cpu_swiglu_backward = lambda self, grad_output: cpu_swiglu_backward(grad_output, self)
+
+
+
+"""
+Почему было решено сделать cpu_geglu_backward переиспользующим свой gelu, из-за чего он теперь
+называется cpu_geglu_grad, а cpu_swiglu_backward оставить таким, что он заново использует silu?
+
+SiLU (Sigmoid Linear Unit)        - это x * sigmoid(x), sigmoid - требует вычисления экспоненты и одного деления.
+                                    Это недёшево, но относительно быстро.
+GELU (Gaussian Error Linear Unit) - требует вычисления tanh (или erf) и нескольких умножений, что заметно тяжелее sigmoid,
+                                    поэтому его результат кэшируют на прямом проходе и передают в обратный,
+                                    чтобы избежать повторного счёта.
+"""
