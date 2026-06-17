@@ -46,38 +46,50 @@ torch.Tensor.__irshift__ = lambda self, other: self.copy_(rshift(self, other))
 
 
 
-def geglu_torch(input_tensor: torch.Tensor) -> torch.Tensor:
+def cpu_geglu(input_tensor: torch.Tensor, dim: int = -1, approximate: int = 1, activate_left: bool = False) -> torch.Tensor:
     """
     GELU-Gated Linear Unit.
     Вход: тензор формы [..., 2*H]
     Выход: тензор формы [..., H]
     """
-    # Разделяем на две половины по последней оси
-    a, b = input_tensor.chunk(2, dim=-1)
-    # Применяем GELU (tanh-приближение) к первой половине и умножаем на вторую
-    return F.gelu(a, approximate="tanh") * b
+    if activate_left:
+        a, b = input_tensor.chunk(2, dim=dim)
+    else:
+        b, a = input_tensor.chunk(2, dim=dim)
+    gelu = F.gelu(a, approximate="tanh" if approximate else "none")
+    return gelu * b, gelu
 
-def dgeglu_torch(grad_output: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+def cpu_geglu_grad(grad_output: torch.Tensor,
+                   input_tensor: torch.Tensor,
+                   gelu: torch.Tensor = None,
+                   dim: int = -1,
+                   approximate: int = 1,
+                   activate_left: bool = False) -> torch.Tensor:
     """
-    Обратный проход для geglu.
-    Вход: grad_output той же формы, что выход geglu,
-          input_tensor исходный вход geglu.
-    Выход: градиент по input_tensor.
+    CPU-референс для npu_geglu_grad.
+    Параметры:
+        grad_output: градиент от вышестоящей операции, форма [..., H]
+        input_tensor: исходный вход geglu, форма [..., 2*H]
+        gelu: промежуточный результат GELU (gelu(a)) той же формы, что и grad_output
+        dim: ось, по которой делится input_tensor
+        approximate: 1 для tanh-GELU, иначе 0 для стандартного
+        activate_left: если False, GELU был применён к правой половине (как в npu_geglu по умолчанию)
+    Возвращает: градиент по input_tensor, форма [..., 2*H]
     """
-    # Прямой проход: geglu(x) = gelu(a) * b, где a, b = x.chunk(2, dim=-1)
-    a, b = input_tensor.chunk(2, dim=-1)
-    a = a.requires_grad_(True)
-    gelu_a = F.gelu(a, approximate='tanh')
-    y = gelu_a * b
+    if activate_left:
+        a, b = input_tensor.chunk(2, dim=dim)
+    else:
+        b, a = input_tensor.chunk(2, dim=dim)
 
-    # Обратный проход: считаем градиент 'a' через autograd (aclnnGeluBackwardV2, сделанный через at::gelu_backward)
-    grad_a = torch.autograd.grad(outputs=y, inputs=a, grad_outputs=grad_output, retain_graph=False)[0]
-    grad_b = grad_output * gelu_a
+    # Градиент по a: используем gelu_backward (как в GeGluV3Backward)
+    grad_a = torch.ops.aten.gelu_backward(grad_output * b, a, approximate='tanh' if approximate else 'none')
+    grad_b = grad_output * gelu
 
-    result = torch.cat((grad_a, grad_b), dim=-1)
-    return result
+    if activate_left:
+        return torch.cat((grad_a, grad_b), dim=dim)
+    return torch.cat((grad_b, grad_a), dim=dim)
 
-torch.geglu = geglu_torch
-torch.dgeglu = dgeglu_torch
-torch.Tensor.geglu = lambda self: geglu_torch(self)
-torch.Tensor.dgeglu = lambda self, grad_output: dgeglu_torch(grad_output, self)
+torch.cpu_geglu = cpu_geglu
+torch.cpu_geglu_grad = cpu_geglu_grad
+torch.Tensor.cpu_geglu = lambda self: cpu_geglu(self)
+torch.Tensor.cpu_geglu_grad = lambda self, grad_output: cpu_geglu_grad(grad_output, self)

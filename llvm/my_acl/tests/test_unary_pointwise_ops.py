@@ -34,6 +34,7 @@
 
 import pytest
 import torch
+import torch_npu
 
 from .accuracy_utils import (
     ALL_FLOAT_DTYPES,
@@ -335,43 +336,97 @@ def test_accuracy_exp2_(shape, dtype):
 @pytest.mark.geglu
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
-def test_accuracy_geglu(shape, dtype):
+@pytest.mark.parametrize("approximate", (0, 1))
+@pytest.mark.parametrize("activate_left", (False, True))
+def test_accuracy_geglu(shape, dtype, approximate, activate_left):
     if len(shape) == 0:
         pytest.skip("GEGLU does not support 0-dim scalar tensors.")
 
     if shape[-1] % 2 != 0:
-        shape = list(shape)
-        shape[-1] += 1
-        shape = tuple(shape)
+        shape = (*shape[:-1], shape[-1] + 1)
 
     inp = torch.randn(shape, dtype=dtype, device=device)
     ref_inp = to_reference(inp)
 
-    ref_out = torch.geglu(ref_inp)
-    res_out = torch.geglu(inp)
+    for dim in range(len(shape)):
+        if shape[dim] % 2:
+            continue
+        ref_out, ref_gelu = torch.cpu_geglu(ref_inp, dim, approximate, activate_left)
+        res_out, res_gelu = torch_npu.npu_geglu(inp, dim, approximate, activate_left)  # aclnnGeGluV3
 
-    assert_close(res_out, ref_out, dtype)
+        assert_close(ref_gelu, res_gelu, dtype)
+        assert_close(res_out,  ref_out,  dtype)
 
 
 @pytest.mark.dgeglu
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
-def test_accuracy_dgeglu(shape, dtype):
+@pytest.mark.parametrize("approximate", (0, 1))
+@pytest.mark.parametrize("activate_left", (False, True))
+def test_accuracy_dgeglu(shape, dtype, approximate, activate_left):
     if len(shape) == 0:
         pytest.skip("dgeglu does not support 0-dim scalar tensors.")
 
-    if shape[-1] % 2 != 0:
-        shape = list(shape)
-        shape[-1] += 1
-        shape = tuple(shape)
-    grad_output_shape = list(shape)
-    grad_output_shape[-1] //= 2
+    for dim in range(len(shape)):
+        div, mod = divmod(shape[dim], 2)
+        if mod:
+            in_shape = (*shape[:dim], shape[dim] + 1, *shape[dim+1:])
+            div += 1
+        else: in_shape = shape
+        out_shape = (*in_shape[:dim], in_shape[dim] // 2, *in_shape[dim+1:])
 
-    inp         = torch.randn(shape, dtype=dtype, device=device)
-    grad_output = torch.randn(tuple(grad_output_shape), dtype=dtype, device=device)
-    ref_inp         = to_reference(inp)
-    ref_grad_output = to_reference(grad_output)
+        inp         = torch.randn(in_shape, dtype=dtype, device=device)
+        grad_output = torch.randn(out_shape, dtype=dtype, device=device)
+        gelu        = torch.randn_like(grad_output)
+        ref_inp         = to_reference(inp)
+        ref_grad_output = to_reference(grad_output)
+        ref_gelu        = to_reference(gelu)
 
-    ref_out = torch.dgeglu(ref_grad_output, ref_inp)
-    res_out = torch.dgeglu(grad_output, inp)
+        ref_out = torch.cpu_geglu_grad(ref_grad_output, ref_inp, ref_gelu, dim, approximate, activate_left)
+        res_out = torch_npu.npu_geglu_grad(grad_output,     inp,     gelu, dim, approximate, activate_left)
+        assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.gelu
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+@pytest.mark.parametrize("approximate", ("none", "tanh"))
+def test_accuracy_gelu(shape, dtype, approximate):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp, True)
+
+    ref_out = torch.nn.functional.gelu(ref_inp, approximate=approximate)
+    res_out = torch.nn.functional.gelu(res_inp, approximate=approximate)
+
+    assert_close(res_out, ref_out, dtype, atol=1e-4)
+
+
+@pytest.mark.gelu
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+@pytest.mark.parametrize("approximate", ("none", "tanh"))
+def test_accuracy_gelu_backward(shape, dtype, approximate):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    res_out = torch.randn_like(res_inp)
+
+    ref_inp = to_reference(res_inp, True)
+    ref_out = to_reference(res_out, True)
+
+    ref_in_grad = torch.ops.aten.gelu_backward(ref_out, ref_inp, approximate=approximate)
+    res_in_grad = torch.ops.aten.gelu_backward(res_out, res_inp, approximate=approximate)
+
+    assert_close(res_in_grad, ref_in_grad, dtype)
+
+
+@pytest.mark.gelu_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+@pytest.mark.parametrize("approximate", ("none", "tanh"))
+def test_accuracy_gelu_(shape, dtype, approximate):
+    res_inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(res_inp.clone(), True)
+
+    ref_out = torch.ops.aten.gelu_.default(ref_inp, approximate=approximate)
+    res_out = torch.ops.aten.gelu_.default(res_inp, approximate=approximate)
+
     assert_close(res_out, ref_out, dtype)

@@ -381,6 +381,47 @@ MAKE_OP(aclnnGeluBackwardV2(const aclTensor* gradOutput, const aclTensor* self, 
 })
 
 
+MAKE_OP(aclnnGeGlu(const aclTensor* self, int64_t dim, int64_t approximate,
+                   sync aclTensor* out, out aclTensor* outGelu,
+                   uint64_t* workspaceSize, aclOpExecutor** executor) {
+    auto chunks = self.chunk(2, dim);
+    auto a = chunks[0], b = chunks[1];
+    at::Tensor gelu_a = at::gelu(a, approximate ? "tanh" : "none");
+    out.copy_(gelu_a * b);
+    outGelu.copy_(gelu_a);
+})
+MAKE_OP(aclnnGeGluBackward(const aclTensor* gradOutput, const aclTensor* self, const aclTensor* gelu,
+                           int64_t dim, int64_t approximate, out aclTensor* gradInput,
+                           uint64_t* workspaceSize, aclOpExecutor** executor) {
+    auto chunks = self.chunk(2, dim);
+    auto a = chunks[0], b = chunks[1];
+    at::Tensor grad_a = at::gelu_backward(gradOutput * b, a, approximate ? "tanh" : "none");
+    at::Tensor grad_b = gradOutput * gelu;
+    gradInput.copy_(at::cat({grad_a, grad_b}, dim));
+})
+MAKE_OP(aclnnGeGluV3(const aclTensor* self, int64_t dim, int64_t approximate, bool activateLeft,
+                     sync aclTensor* out, out aclTensor* outGelu,
+                     uint64_t* workspaceSize, aclOpExecutor** executor) {
+    auto chunks = self.chunk(2, dim);
+    auto a = activateLeft ? chunks[0] : chunks[1];
+    auto b = activateLeft ? chunks[1] : chunks[0];
+    at::Tensor gelu_a = at::gelu(a, approximate ? "tanh" : "none");
+    out.copy_(gelu_a * b);
+    outGelu.copy_(gelu_a);
+})
+MAKE_OP(aclnnGeGluV3Backward(const aclTensor* gradOutput, const aclTensor* self, const aclTensor* gelu,
+                             int64_t dim, int64_t approximate, bool activateLeft, out aclTensor* gradInput,
+                             uint64_t* workspaceSize, aclOpExecutor** executor) {
+    auto chunks = self.chunk(2, dim);
+    auto a = activateLeft ? chunks[0] : chunks[1];
+    auto b = activateLeft ? chunks[1] : chunks[0];
+    at::Tensor grad_a = at::gelu_backward(gradOutput * b, a, (approximate == 1) ? "tanh" : "none");
+    at::Tensor grad_b = gradOutput * gelu;
+    gradInput.copy_(at::cat(activateLeft ? std::vector<at::Tensor>{grad_a, grad_b}
+                                         : std::vector<at::Tensor>{grad_b, grad_a}, dim));
+})
+
+
 // ~~~ бинарные операции ~~~
 
 MAKE_OP(aclnnBitwiseAndScalar(const aclTensor* self, const aclScalar* other, out aclTensor* out,
@@ -2666,30 +2707,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnGatherV3,
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnGcdGetWorkspaceSize,
                            const aclTensor* self, const aclTensor* other, aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnGcd,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnGeGluGetWorkspaceSize,
-                           const aclTensor* self, int64_t dim, int64_t approximate, aclTensor* out, aclTensor* outGelu,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnGeGlu,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnGeGluBackwardGetWorkspaceSize,
-                           const aclTensor* gradOutput, const aclTensor* self, const aclTensor* gelu, int64_t dim, int64_t approximate,
-                           aclTensor* gradInput, uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnGeGluBackward,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnGeGluV3GetWorkspaceSize,
-                           const aclTensor* self, int64_t dim, int64_t approximate, bool activateLeft, aclTensor* out, aclTensor* outGelu,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnGeGluV3,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnGeGluV3BackwardGetWorkspaceSize,
-                           const aclTensor* gradOutput, const aclTensor* self, const aclTensor* gelu, int64_t dim, int64_t approximate,
-                           bool activateLeft, aclTensor* gradInput, uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnGeGluV3Backward,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
 
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnGeScalarGetWorkspaceSize,
