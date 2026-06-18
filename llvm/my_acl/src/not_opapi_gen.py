@@ -58,7 +58,9 @@ known_types = {
     "aclOpExecutor**": "E",
 }
 
-def parse_signature(signature: str):
+RESERVED_NAMES = {"start", "end", "log", "opName"}
+
+def parse_signature(op_name: str, signature: str):
   # print("|", signature)
   # print(SIGNATURE_RE.findall(signature))
 
@@ -73,12 +75,14 @@ def parse_signature(signature: str):
         if _type == "sync":
             is_out = "sync"
             _type = next(it).group(1)
-            assert _type == "aclTensor*"
+            assert _type == "aclTensor*", (_type, op_name)
         else:
             is_out = _type == "out"
             if is_out:
                 _type = next(it).group(1)
         name = next(it).group(1)
+        if name in RESERVED_NAMES:
+            name = f"_{name}"
 
         _type = _type.replace(' ', '')
         if is_out == "sync":
@@ -86,7 +90,7 @@ def parse_signature(signature: str):
         else:
             try: simple = known_types[_type]
             except KeyError:
-                raise RuntimeError("Неизвестный тип:", _type) from None
+                raise RuntimeError("Неизвестный тип: {_type} в {op_name}") from None
             if is_out:
                 simple = simple.upper()
         simple_s.append(simple)
@@ -235,7 +239,10 @@ def make_GWS(op_name: str, exe_name: str, signature, body: str, write):
         if _type == "aclTensor*":
             pass
         elif _type == "aclScalar*":
-            write(f"\n    const at::Tensor& {name} = exec->{name}->tensor;")
+            if is_out:  # inplace-скаляр
+                write(f"\n    const at::Tensor& {name} = exec->{name}->tensor;")
+            else:
+                write(f"\n    const at::Scalar& {name} = exec->{name}->item;")
         elif _type == "aclTensorList*":
             write(f"\n    const at::TensorList& {name} = exec->{name}->aten_tensors();")
         elif _type == "aclDataType":
@@ -277,7 +284,7 @@ def generate(log = False):
         op_name = m.group("name")
         raw_signature = m.group("signature").strip()[1:-1]  # убираем '(' и ')'
         body = m.group("body").strip()[1:-1].strip()  # убираем '{' и '}'
-        signature, simple = parse_signature(raw_signature)
+        signature, simple = parse_signature(op_name, raw_signature)
 
         assert signature and signature.pop() == (False, 'aclOpExecutor**', 'executor')
         assert signature and signature.pop() == (False, 'uint64_t*', 'workspaceSize')

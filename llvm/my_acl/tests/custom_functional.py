@@ -122,13 +122,44 @@ torch.Tensor.cpu_swiglu_backward = lambda self, grad_output: cpu_swiglu_backward
 
 
 
+def cpu_reglu(input_tensor, dim=-1):
+    """
+    ReGLU: relu(a) * b, где a,b = chunk(input, 2, dim)
+    """
+    a, b = input_tensor.chunk(2, dim=dim)
+    return F.relu(a) * b
+
+def cpu_reglu_backward(grad_output, input_tensor, dim=-1):
+    """
+    Градиент ReGLU (обратный проход).
+    """
+    a, b = input_tensor.chunk(2, dim=dim)
+    a.requires_grad_(True)
+    relu_a = F.relu(a)
+    y = relu_a * b
+    grad_a = torch.autograd.grad(y, a, grad_output, retain_graph=False)[0]
+    grad_b = grad_output * relu_a
+    return torch.cat((grad_a, grad_b), dim=dim)
+
+torch.cpu_reglu = cpu_reglu
+torch.cpu_reglu_backward = cpu_reglu_backward
+torch.Tensor.cpu_reglu = lambda self: cpu_reglu(self)
+torch.Tensor.cpu_reglu_backward = lambda self, grad_output: cpu_reglu_backward(grad_output, self)
+
+
+
 """
 Почему было решено сделать cpu_geglu_backward переиспользующим свой gelu, из-за чего он теперь
 называется cpu_geglu_grad, а cpu_swiglu_backward оставить таким, что он заново использует silu?
 
 SiLU (Sigmoid Linear Unit)        - это x * sigmoid(x), sigmoid - требует вычисления экспоненты и одного деления.
                                     Это недёшево, но относительно быстро.
+
 GELU (Gaussian Error Linear Unit) - требует вычисления tanh (или erf) и нескольких умножений, что заметно тяжелее sigmoid,
                                     поэтому его результат кэшируют на прямом проходе и передают в обратный,
                                     чтобы избежать повторного счёта.
+
+ReLU (Rectified Linear Unit)      - это max(0, x), самая дешёвая функция активации: одно сравнение и умножение.
+                                    Её повторное вычисление в backward практически бесплатно,
+                                    поэтому отдельный кэш не требуетс
 """

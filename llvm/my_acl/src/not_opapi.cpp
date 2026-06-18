@@ -89,11 +89,11 @@ MAKE_OP(aclnnInplaceOne(out const aclTensor* selfRef,
 
 MAKE_OP(aclnnInplaceFillDiagonal(out aclTensor* selfRef, const aclScalar* fillValue, bool wrap,
                                  uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.fill_diagonal_(fillValue.item(), wrap);
+    selfRef.fill_diagonal_(fillValue, wrap);
 })
 MAKE_OP(aclnnInplaceFillScalar(out aclTensor* selfRef, const aclScalar* value,
                                 uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.fill_(value.item());
+    selfRef.fill_(value);
 })
 MAKE_OP(aclnnInplaceFillTensor(out aclTensor* selfRef, const aclTensor* value,
                                 uint64_t* workspaceSize, aclOpExecutor** executor) {
@@ -140,6 +140,17 @@ MAKE_OP(aclnnSort(const aclTensor* self, bool stable, int64_t dim, bool descendi
     at::sort_out(valuesOut, indicesOut, self, dim, descending);
 })
 
+MAKE_OP(aclnnLogSpace(const aclScalar* start, const aclScalar* end, int64_t steps, double base,
+                      sync aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::logspace_out(out, _start, _end, steps, base);
+})
+
+MAKE_OP(aclnnArange(const aclScalar* start, const aclScalar* end, const aclScalar* step,
+                    sync aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    out.copy_(at::arange(_start, _end, step,
+                         at::device(at::kCPU).dtype(out.scalar_type())));
+})
+
 
 // ~~~ комбинаторы ~~~
 
@@ -176,120 +187,6 @@ MAKE_OP(aclnnIsFinite(const aclTensor* self, out aclTensor* out,
     out.copy_(at::isfinite(self));
 })
 
-MAKE_OP(aclnnIsClose(const aclTensor* self, const aclTensor* other, double rtol, double atol, bool equal_nan,
-                     out aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
-    auto diff = at::abs(self - other);
-    auto tol = atol + rtol * at::abs(other);
-    auto close = diff <= tol;
-
-    if (equal_nan)
-        close |= at::isnan(self) & at::isnan(other);
-
-    out.copy_(close);
-})
-
-
-MAKE_OP(aclnnSin(const aclTensor* self, out aclTensor* out,
-                 uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::sin_out(out, self);
-})
-MAKE_OP(aclnnSinc(const aclTensor* self, out aclTensor* out,
-                  uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::sinc_out(out, self);
-})
-MAKE_OP(aclnnSinh(const aclTensor* self, out aclTensor* out,
-                  uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::sinh_out(out, self);
-})
-MAKE_OP(aclnnInplaceSin(out aclTensor* selfRef,
-                         uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.sin_();
-})
-MAKE_OP(aclnnInplaceSinc(out aclTensor* selfRef,
-                          uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.sinc_();
-})
-MAKE_OP(aclnnInplaceSinh(out aclTensor* selfRef,
-                          uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.sinh_();
-})
-
-MAKE_OP(aclnnAsin(const aclTensor* self, out aclTensor* out,
-                  uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::asin_out(out, self);
-})
-MAKE_OP(aclnnAsinh(const aclTensor* input, out aclTensor* out,
-                   uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::asinh_out(out, input);
-})
-MAKE_OP(aclnnInplaceAsin(out aclTensor* selfRef,
-                          uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.asin_();
-})
-MAKE_OP(aclnnInplaceAsinh(out aclTensor* inputRef,
-                           uint64_t* workspaceSize, aclOpExecutor** executor) {
-    inputRef.asinh_();
-})
-
-
-MAKE_OP(aclnnCos(const aclTensor* input, out aclTensor* out,
-                 uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::cos_out(out, input);
-})
-MAKE_OP(aclnnCosh(const aclTensor* self, out aclTensor* out,
-                  uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::cosh_out(out, self);
-})
-MAKE_OP(aclnnInplaceCos(out aclTensor* inputRef, uint64_t* workspaceSize, aclOpExecutor** executor) {
-    inputRef.cos_();
-})
-MAKE_OP(aclnnInplaceCosh(out aclTensor* selfRef, uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.cosh_();
-})
-
-MAKE_OP(aclnnAcos(const aclTensor* input, out aclTensor* out,
-                  uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::acos_out(out, input);
-})
-MAKE_OP(aclnnAcosh(const aclTensor* self, out aclTensor* out,
-                   uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::acosh_out(out, self);
-})
-MAKE_OP(aclnnInplaceAcos(out aclTensor* inputRef, uint64_t* workspaceSize, aclOpExecutor** executor) {
-    inputRef.acos_();
-})
-MAKE_OP(aclnnInplaceAcosh(out aclTensor* selfRef, uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.acosh_();
-})
-
-
-MAKE_OP(aclnnTan(const aclTensor* self, out aclTensor* out,
-                 uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::tan_out(out, self);
-})
-MAKE_OP(aclnnInplaceTan(out const aclTensor* selfRef,
-                        uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.tan_();
-})
-
-MAKE_OP(aclnnAtan(const aclTensor* input, out aclTensor* out,
-                  uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::atan_out(out, input);
-})
-MAKE_OP(aclnnAtan2(const aclTensor* self, const aclTensor* other, out aclTensor* out,
-                   uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::atan2_out(out, self, other);
-})
-MAKE_OP(aclnnInplaceAtan(out aclTensor* inputRef,
-                         uint64_t* workspaceSize, aclOpExecutor** executor) {
-    inputRef.atan_();
-})
-MAKE_OP(aclnnInplaceAtan2(out aclTensor* selfRef, const aclTensor* other,
-                          uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.atan2_(other);
-})
-
-
 MAKE_OP(aclnnAngleV2(const aclTensor *x, out const aclTensor *out,
                      uint64_t *workspaceSize, aclOpExecutor **executor) {
     at::angle_out(out, x);
@@ -315,31 +212,133 @@ MAKE_OP(aclnnBitwiseNot(const aclTensor* self, out aclTensor* out,
 })
 
 
+MAKE_OP(aclnnSin(const aclTensor* self, out aclTensor* out,
+                 uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::sin_out(out, self);
+})
+MAKE_OP(aclnnInplaceSin(out aclTensor* selfRef,
+                         uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.sin_();
+})
+
+MAKE_OP(aclnnSinc(const aclTensor* self, out aclTensor* out,
+                  uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::sinc_out(out, self);
+})
+MAKE_OP(aclnnInplaceSinc(out aclTensor* selfRef,
+                          uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.sinc_();
+})
+
+MAKE_OP(aclnnSinh(const aclTensor* self, out aclTensor* out,
+                  uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::sinh_out(out, self);
+})
+MAKE_OP(aclnnInplaceSinh(out aclTensor* selfRef,
+                          uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.sinh_();
+})
+
+
+MAKE_OP(aclnnAsin(const aclTensor* self, out aclTensor* out,
+                  uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::asin_out(out, self);
+})
+MAKE_OP(aclnnInplaceAsin(out aclTensor* selfRef,
+                          uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.asin_();
+})
+
+MAKE_OP(aclnnAsinh(const aclTensor* input, out aclTensor* out,
+                   uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::asinh_out(out, input);
+})
+MAKE_OP(aclnnInplaceAsinh(out aclTensor* inputRef,
+                           uint64_t* workspaceSize, aclOpExecutor** executor) {
+    inputRef.asinh_();
+})
+
+
+MAKE_OP(aclnnCos(const aclTensor* input, out aclTensor* out,
+                 uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::cos_out(out, input);
+})
+MAKE_OP(aclnnInplaceCos(out aclTensor* inputRef, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    inputRef.cos_();
+})
+
+MAKE_OP(aclnnCosh(const aclTensor* self, out aclTensor* out,
+                  uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::cosh_out(out, self);
+})
+MAKE_OP(aclnnInplaceCosh(out aclTensor* selfRef, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.cosh_();
+})
+
+
+MAKE_OP(aclnnAcos(const aclTensor* input, out aclTensor* out,
+                  uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::acos_out(out, input);
+})
+MAKE_OP(aclnnInplaceAcos(out aclTensor* inputRef, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    inputRef.acos_();
+})
+
+MAKE_OP(aclnnAcosh(const aclTensor* self, out aclTensor* out,
+                   uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::acosh_out(out, self);
+})
+MAKE_OP(aclnnInplaceAcosh(out aclTensor* selfRef, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.acosh_();
+})
+
+
+MAKE_OP(aclnnTan(const aclTensor* self, out aclTensor* out,
+                 uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::tan_out(out, self);
+})
+MAKE_OP(aclnnInplaceTan(out const aclTensor* selfRef,
+                        uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.tan_();
+})
+
+MAKE_OP(aclnnAtan(const aclTensor* input, out aclTensor* out,
+                  uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::atan_out(out, input);
+})
+MAKE_OP(aclnnInplaceAtan(out aclTensor* inputRef,
+                         uint64_t* workspaceSize, aclOpExecutor** executor) {
+    inputRef.atan_();
+})
+
+
 MAKE_OP(aclnnExp(const aclTensor* self, out aclTensor* out,
                  uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::exp_out(out, self);
 })
-MAKE_OP(aclnnExpm1(const aclTensor* self, out aclTensor* out,
-                   uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::expm1_out(out, self);
-})
-MAKE_OP(aclnnExp2(const aclTensor* self, out aclTensor* out,
-                  uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::exp2_out(out, self);
-})
-
 MAKE_OP(aclnnInplaceExp(out aclTensor* selfRef,
                          uint64_t* workspaceSize, aclOpExecutor** executor) {
     selfRef.exp_();
 })
-MAKE_OP(aclnnInplaceExp2(out aclTensor* selfRef,
-                          uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.copy_(at::exp2(selfRef));
+
+MAKE_OP(aclnnExpm1(const aclTensor* self, out aclTensor* out,
+                   uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::expm1_out(out, self);
 })
 MAKE_OP(aclnnInplaceExpm1(out aclTensor* selfRef,
                            uint64_t* workspaceSize, aclOpExecutor** executor) {
     selfRef.expm1_();
 })
+
+MAKE_OP(aclnnExp2(const aclTensor* self, out aclTensor* out,
+                  uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::exp2_out(out, self);
+})
+MAKE_OP(aclnnInplaceExp2(out aclTensor* selfRef,
+                          uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.copy_(at::exp2(selfRef));
+})
+
 
 MAKE_OP(aclnnNeg(const aclTensor* self, out aclTensor* out,
                  uint64_t* workspaceSize, aclOpExecutor** executor) {
@@ -350,6 +349,7 @@ MAKE_OP(aclnnInplaceNeg(out aclTensor* selfRef,
     selfRef.neg_();
 })
 
+
 MAKE_OP(aclnnReciprocal(const aclTensor* self, out aclTensor* out,
                         uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::reciprocal_out(out, self);
@@ -358,6 +358,7 @@ MAKE_OP(aclnnInplaceReciprocal(out const aclTensor* selfRef,
                                uint64_t* workspaceSize, aclOpExecutor** executor) {
     selfRef.reciprocal_();
 })
+
 
 MAKE_OP(aclnnRsqrt(const aclTensor* self, out aclTensor* out,
                    uint64_t* workspaceSize, aclOpExecutor** executor) {
@@ -368,9 +369,103 @@ MAKE_OP(aclnnInplaceRsqrt(out aclTensor* selfRef,
     selfRef.rsqrt_();
 })
 
+
 MAKE_OP(aclnnFlip(const aclTensor* self, const aclIntArray* dims, out aclTensor* out,
                   uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::flip_out(out, self, dims);
+})
+
+
+MAKE_OP(aclnnRepeat(const aclTensor* self, const aclIntArray* repeats, sync aclTensor* out,
+                    uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::repeat_out(out, self, repeats);
+})
+MAKE_OP(aclnnRepeatInterleave(const aclTensor* self, const aclTensor* repeats, int64_t outputSize,
+                              sync aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    auto output_size = outputSize > 0 ? std::optional<int64_t>(outputSize) : std::nullopt;
+    out.copy_(at::repeat_interleave(self, repeats, /*dim=*/std::nullopt, output_size));
+})
+MAKE_OP(aclnnRepeatInterleaveInt(const aclTensor* self, int64_t repeats, int64_t outputSize,
+                                 sync aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    auto output_size = outputSize > 0 ? std::optional<int64_t>(outputSize) : std::nullopt;
+    out.copy_(at::repeat_interleave(self, repeats, /*dim=*/std::nullopt, output_size));
+})
+MAKE_OP(aclnnRepeatInterleaveIntWithDim(const aclTensor* self, int64_t repeats, int64_t dim,
+                                        int64_t outputSize, sync aclTensor* out, uint64_t* workspaceSize,
+                                        aclOpExecutor** executor) {
+    auto output_size = outputSize > 0 ? std::optional<int64_t>(outputSize) : std::nullopt;
+    out.copy_(at::repeat_interleave(self, repeats, dim, output_size));
+})
+MAKE_OP(aclnnRepeatInterleaveWithDim(const aclTensor* self, const aclTensor* repeats, int64_t dim,
+                                     int64_t outputSize, sync aclTensor* out, uint64_t* workspaceSize,
+                                     aclOpExecutor** executor) {
+    auto output_size = outputSize > 0 ? std::optional<int64_t>(outputSize) : std::nullopt;
+    out.copy_(at::repeat_interleave(self, repeats, dim, output_size));
+})
+MAKE_OP(aclnnRepeatInterleaveTensor(const aclTensor* repeats, int64_t outputSize,
+                                    sync aclTensor* out, uint64_t* workspaceSize,
+                                    aclOpExecutor** executor) {
+    // repeats – 1D тензор с числом повторений для каждого индекса
+    auto r = repeats;
+    int64_t num_elements = r.numel();
+    // Генерируем последовательность [0, 1, 2, ..., num_elements-1]
+    auto indices = at::arange(num_elements, at::device(at::kCPU).dtype(at::kLong));
+    // Повторяем индексы согласно repeats, общая длина = outputSize
+    auto output_size = outputSize > 0 ? std::optional<int64_t>(outputSize) : std::nullopt;
+    auto result = at::repeat_interleave(indices, r, output_size);
+    out.copy_(result);
+})
+
+
+MAKE_OP(aclnnLog(const aclTensor* self, out aclTensor* out,
+                 uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::log_out(out, self);
+})
+MAKE_OP(aclnnInplaceLog(out aclTensor* selfRef,
+                        uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.log_();
+})
+
+MAKE_OP(aclnnLog10(const aclTensor* self, out aclTensor* out,
+                   uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::log10_out(out, self);
+})
+MAKE_OP(aclnnInplaceLog10(out aclTensor* selfRef,
+                         uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.log10_();
+})
+
+MAKE_OP(aclnnLog1p(const aclTensor* self, out aclTensor* out,
+                   uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::log1p_out(out, self);
+})
+MAKE_OP(aclnnInplaceLog1p(out aclTensor* selfRef,
+                         uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.log1p_();
+})
+
+MAKE_OP(aclnnLog2(const aclTensor* self, out aclTensor* out,
+                  uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::log2_out(out, self);
+})
+MAKE_OP(aclnnInplaceLog2(out aclTensor* selfRef,
+                         uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.log2_();
+})
+
+MAKE_OP(aclnnLogdet(const aclTensor* self, out aclTensor* out,
+                    uint64_t* workspaceSize, aclOpExecutor** executor) {
+    out.copy_(at::logdet(self));
+})
+
+
+MAKE_OP(aclnnSqrt(const aclTensor* self, out aclTensor* out,
+                  uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::sqrt_out(out, self);
+})
+MAKE_OP(aclnnInplaceSqrt(out aclTensor* self,
+                         uint64_t* workspaceSize, aclOpExecutor** executor) {
+    self.sqrt_();
 })
 
 
@@ -489,30 +584,29 @@ MAKE_OP(aclnnGeGluV3Backward(const aclTensor* gradOutput, const aclTensor* self,
 MAKE_OP(aclnnElu(const aclTensor* self, const aclScalar* alpha, const aclScalar* scale,
                  const aclScalar* inputScale, sync aclTensor* out,
                  uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::elu_out(out, self, alpha.item(), scale.item(), inputScale.item());
+    at::elu_out(out, self, alpha, scale, inputScale);
 })
 MAKE_OP(aclnnEluBackward(const aclTensor* gradOutput, const aclScalar* alpha,
                          const aclScalar* scale, const aclScalar* inputScale,
                          bool isResult, const aclTensor* selfOrResult,
                          out aclTensor* gradInput, uint64_t* workspaceSize,
                          aclOpExecutor** executor) {
-    gradInput.copy_(at::elu_backward(gradOutput, alpha.item(), scale.item(),
-                                     inputScale.item(), isResult, selfOrResult));
+    gradInput.copy_(at::elu_backward(gradOutput, alpha, scale, inputScale, isResult, selfOrResult));
 })
 MAKE_OP(aclnnInplaceElu(out aclTensor* selfRef, const aclScalar* alpha,
                         const aclScalar* scale, const aclScalar* inputScale,
                         uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::elu_(selfRef, alpha.item(), scale.item(), inputScale.item());
+    at::elu_(selfRef, alpha, scale, inputScale);
 })
 
 
 MAKE_OP(aclnnCelu(const aclTensor* self, const aclScalar* alpha, out aclTensor* out,
                   uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::celu_out(out, self, alpha.item());
+    at::celu_out(out, self, alpha);
 })
 MAKE_OP(aclnnInplaceCelu(out aclTensor* selfRef, const aclScalar* alpha,
                          uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::celu_(selfRef, alpha.item());
+    at::celu_(selfRef, alpha);
 })
 
 
@@ -528,16 +622,16 @@ MAKE_OP(aclnnInplaceRelu(out aclTensor* selfRef,
 
 MAKE_OP(aclnnLeakyRelu(const aclTensor* self, const aclScalar* negativeSlope,
                        out aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::leaky_relu_out(out, self, negativeSlope.item());
+    at::leaky_relu_out(out, self, negativeSlope);
 })
 MAKE_OP(aclnnInplaceLeakyRelu(out aclTensor* selfRef, const aclScalar* negativeSlope,
                               uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::leaky_relu_(selfRef, negativeSlope.item());
+    at::leaky_relu_(selfRef, negativeSlope);
 })
 MAKE_OP(aclnnLeakyReluBackward(const aclTensor* gradOutput, const aclTensor* self,
                                const aclScalar* negativeSlope, bool selfIsResult,
                                out aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
-    out.copy_(at::leaky_relu_backward(gradOutput, self, negativeSlope.item(), selfIsResult));
+    out.copy_(at::leaky_relu_backward(gradOutput, self, negativeSlope, selfIsResult));
 })
 
 
@@ -547,8 +641,7 @@ MAKE_OP(aclnnRReluWithNoise(const aclTensor* self, const aclTensor* noise,
                             out aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
     auto gen = at::detail::getDefaultCPUGenerator();
     gen.set_current_seed(static_cast<uint64_t>(seed + offset));
-    at::rrelu_with_noise_out(out, self, noise, lower.item(), upper.item(),
-                             training, gen);
+    at::rrelu_with_noise_out(out, self, noise, lower, upper, training, gen);
 })
 MAKE_OP(aclnnInplaceRReluWithNoise(out aclTensor* selfRef, const aclTensor* noise,
                                    const aclScalar* lower, const aclScalar* upper,
@@ -556,8 +649,7 @@ MAKE_OP(aclnnInplaceRReluWithNoise(out aclTensor* selfRef, const aclTensor* nois
                                    uint64_t* workspaceSize, aclOpExecutor** executor) {
     auto gen = at::detail::getDefaultCPUGenerator();
     gen.set_current_seed(static_cast<uint64_t>(seed + offset));
-    at::rrelu_with_noise_(selfRef, noise, lower.item(), upper.item(),
-                          training, gen);
+    at::rrelu_with_noise_(selfRef, noise, lower, upper, training, gen);
 })
 
 
@@ -588,24 +680,24 @@ MAKE_OP(aclnnSoftmaxBackward(const aclTensor* gradOutput, const aclTensor* outpu
 MAKE_OP(aclnnSoftplus(const aclTensor* self, const aclScalar* beta,
                       const aclScalar* threshold, out aclTensor* out,
                       uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::softplus_out(out, self, beta.item(), threshold.item());
+    at::softplus_out(out, self, beta, threshold);
 })
 MAKE_OP(aclnnSoftplusBackward(const aclTensor* gradOutput, const aclTensor* self,
                               const aclScalar* beta, const aclScalar* threshold,
                               out aclTensor* gradInput, uint64_t* workspaceSize,
                               aclOpExecutor** executor) {
-    at::softplus_backward_out(gradInput, gradOutput, self, beta.item(), threshold.item());
+    at::softplus_backward_out(gradInput, gradOutput, self, beta, threshold);
 })
 
 
 MAKE_OP(aclnnSoftshrink(const aclTensor* self, const aclScalar* lambd, out aclTensor* out,
                         uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::softshrink_out(out, self, lambd.item());
+    at::softshrink_out(out, self, lambd);
 })
 MAKE_OP(aclnnSoftshrinkBackward(const aclTensor* gradOutput, const aclTensor* self,
                                 const aclScalar* lambda, out aclTensor* gradInput,
                                 uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::softshrink_backward_out(gradInput, gradOutput, self, lambda.item());
+    at::softshrink_backward_out(gradInput, gradOutput, self, lambda);
 })
 
 
@@ -834,16 +926,46 @@ MAKE_OP(aclnnInplaceTril(out aclTensor* selfRef, int64_t diagonal,
 })
 
 
+MAKE_OP(aclnnLogSoftmax(const aclTensor* self, int64_t dim, out aclTensor* out,
+                        uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::log_softmax_out(out, self, dim);
+})
+MAKE_OP(aclnnLogSoftmaxBackward(const aclTensor* gradOutput, const aclTensor* output,
+                                int64_t dim, out aclTensor* out, uint64_t* workspaceSize,
+                                aclOpExecutor** executor) {
+    at::_log_softmax_backward_data_out(out, gradOutput, output, dim, output.scalar_type());
+})
+
+
+MAKE_OP(aclnnThreshold(const aclTensor* self, const aclScalar* threshold,
+                       const aclScalar* value, out aclTensor* out,
+                       uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::threshold_out(out, self, threshold, value);
+})
+MAKE_OP(aclnnInplaceThreshold(out aclTensor* selfRef, const aclScalar* threshold,
+                              const aclScalar* value, uint64_t* workspaceSize,
+                              aclOpExecutor** executor) {
+    at::threshold_(selfRef, threshold, value);
+})
+MAKE_OP(aclnnThresholdBackward(const aclTensor* gradOutput, const aclTensor* self,
+                               const aclScalar* threshold, out aclTensor* out,
+                               uint64_t* workspaceSize, aclOpExecutor** executor) {
+    out.copy_(at::threshold_backward(gradOutput, self, threshold));
+})
+
+
 // ~~~ бинарные операции ~~~
 
 MAKE_OP(aclnnBitwiseAndScalar(const aclTensor* self, const aclScalar* other, out aclTensor* out,
                               uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::bitwise_and_out(out, self, other); // other -> const at::Tensor& (авто-распаковка)
 })
+
 MAKE_OP(aclnnBitwiseAndTensor(const aclTensor* self, const aclTensor* other, out aclTensor* out,
                               uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::bitwise_and_out(out, self, other);
 })
+
 MAKE_OP(aclnnBitwiseAndTensorOut(const aclTensor* self, const aclTensor* other, out aclTensor* out,
                                  uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::bitwise_and_out(out, self, other);
@@ -852,58 +974,63 @@ MAKE_OP(aclnnBitwiseAndTensorOut(const aclTensor* self, const aclTensor* other, 
 
 MAKE_OP(aclnnAdd(const aclTensor* self, const aclTensor* other, const aclScalar* alpha, out aclTensor* out,
                  uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::add_out(out, self, other, alpha.item());
+    at::add_out(out, self, other, alpha);
 })
 MAKE_OP(aclnnInplaceAdd(out aclTensor* selfRef, const aclTensor* other, const aclScalar* alpha,
                         uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.add_(other, alpha.item());
+    selfRef.add_(other, alpha);
 })
+
 MAKE_OP(aclnnAddV3(const aclScalar* self, const aclTensor* other, const aclScalar* alpha, out aclTensor* out,
                    uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::add_out(out, self, other, alpha.item());
+    auto self_t = at::scalar_tensor(self, other.options());
+    at::add_out(out, self_t, other, alpha);
 })
 MAKE_OP(aclnnInplaceAddV3(out const aclScalar* selfRef, const aclTensor* other, const aclScalar* alpha,
                           uint64_t* workspaceSize, aclOpExecutor** executor) {
-    auto result = at::add(selfRef, other, alpha.item());
+    auto result = at::add(selfRef, other, alpha);
     selfRef.copy_(result);
 })
 
 MAKE_OP(aclnnAdds(const aclTensor* self, const aclScalar* other, const aclScalar* alpha, out aclTensor* out,
                   uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::add_out(out, self, other, alpha.item());
+    at::add_out(out, self, other, alpha);
 })
 MAKE_OP(aclnnInplaceAdds(out const aclTensor* selfRef, const aclScalar* other, const aclScalar* alpha,
                          uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.add_(other, alpha.item());
+    selfRef.add_(other, alpha);
 })
 
 
 MAKE_OP(aclnnSub(const aclTensor* self, const aclTensor* other, const aclScalar* alpha, out aclTensor* out,
                  uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::sub_out(out, self, other, alpha.item());
-})
-MAKE_OP(aclnnSubs(const aclTensor* self, const aclScalar* other, const aclScalar* alpha, out aclTensor* out,
-                  uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::sub_out(out, self, other, alpha.item());
+    at::sub_out(out, self, other, alpha);
 })
 MAKE_OP(aclnnInplaceSub(out aclTensor* selfRef, const aclTensor* other, const aclScalar* alpha,
                         uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.sub_(other, alpha.item());
+    selfRef.sub_(other, alpha);
+})
+
+MAKE_OP(aclnnSubs(const aclTensor* self, const aclScalar* other, const aclScalar* alpha, out aclTensor* out,
+                  uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::sub_out(out, self, other, alpha);
 })
 MAKE_OP(aclnnInplaceSubs(out aclTensor* selfRef, const aclScalar* other, const aclScalar* alpha,
                          uint64_t* workspaceSize, aclOpExecutor** executor) {
-    selfRef.sub_(other, alpha.item());
+    selfRef.sub_(other, alpha);
 })
+
 
 MAKE_OP(aclnnRsub(const aclTensor* self, const aclTensor* other, const aclScalar* alpha, out aclTensor* out,
                   uint64_t* workspaceSize, aclOpExecutor** executor) {
     // out = other - alpha * self
-    at::sub_out(out, other, self, alpha.item());
+    at::sub_out(out, other, self, alpha);
 })
 MAKE_OP(aclnnRsubs(const aclTensor* self, const aclScalar* other, const aclScalar* alpha, out aclTensor* out,
                    uint64_t* workspaceSize, aclOpExecutor** executor) {
     // out = other - alpha * self
-    at::sub_out(out, other, self, alpha.item());
+    auto other_t = at::scalar_tensor(other, self.options());
+    at::sub_out(out, other_t, self, alpha);
 })
 
 
@@ -915,6 +1042,7 @@ MAKE_OP(aclnnInplaceMul(out aclTensor* selfRef, const aclTensor* other,
                         uint64_t* workspaceSize, aclOpExecutor** executor) {
     selfRef.mul_(other);
 })
+
 MAKE_OP(aclnnMuls(const aclTensor* self, const aclScalar* other, out aclTensor* out,
                   uint64_t* workspaceSize, aclOpExecutor** executor) {
     // other автоматически раскрывается в const at::Tensor&
@@ -935,6 +1063,7 @@ MAKE_OP(aclnnInplaceDiv(out aclTensor* selfRef, const aclTensor* other,
                         uint64_t* workspaceSize, aclOpExecutor** executor) {
     selfRef.div_(other);
 })
+
 MAKE_OP(aclnnDivs(const aclTensor* self, const aclScalar* other, out aclTensor* out,
                   uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::div_out(out, self, other);
@@ -943,6 +1072,7 @@ MAKE_OP(aclnnInplaceDivs(out aclTensor* selfRef, const aclScalar* other,
                          uint64_t* workspaceSize, aclOpExecutor** executor) {
     selfRef.div_(other);
 })
+
 
 MAKE_OP(aclnnDivMod(const aclTensor* self, const aclTensor* other, int mode, out aclTensor* out,
                     uint64_t* workspaceSize, aclOpExecutor** executor) {
@@ -966,6 +1096,7 @@ MAKE_OP(aclnnInplaceDivMod(out aclTensor* selfRef, const aclTensor* other, int m
     }
     selfRef.div_(other, rounding);
 })
+
 MAKE_OP(aclnnDivMods(const aclTensor* self, const aclScalar* other, int mode, out aclTensor* out,
                      uint64_t* workspaceSize, aclOpExecutor** executor) {
     c10::optional<c10::string_view> rounding;
@@ -994,21 +1125,79 @@ MAKE_OP(aclnnPowTensorTensor(const aclTensor* self, const aclTensor* exponent, o
                              uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::pow_out(out, self, exponent);
 })
+MAKE_OP(aclnnInplacePowTensorTensor(out const aclTensor* self, const aclTensor* exponent,
+                                    uint64_t* workspaceSize, aclOpExecutor** executor) {
+    self.pow_(exponent);
+})
+
 MAKE_OP(aclnnPowTensorScalar(const aclTensor* self, const aclScalar* exponent, out aclTensor* out,
                              uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::pow_out(out, self, exponent);
-})
-MAKE_OP(aclnnPowScalarTensor(const aclScalar* self, const aclTensor* exponent, out aclTensor* out,
-                             uint64_t* workspaceSize, aclOpExecutor** executor) {
-    out.copy_(at::pow(self.item(), exponent));
 })
 MAKE_OP(aclnnInplacePowTensorScalar(out const aclTensor* self, const aclScalar* exponent,
                                     uint64_t* workspaceSize, aclOpExecutor** executor) {
     self.pow_(exponent);
 })
-MAKE_OP(aclnnInplacePowTensorTensor(out const aclTensor* self, const aclTensor* exponent,
-                                    uint64_t* workspaceSize, aclOpExecutor** executor) {
-    self.pow_(exponent);
+
+MAKE_OP(aclnnPowScalarTensor(const aclScalar* self, const aclTensor* exponent, out aclTensor* out,
+                             uint64_t* workspaceSize, aclOpExecutor** executor) {
+    out.copy_(at::pow(self, exponent));
+})
+
+
+MAKE_OP(aclnnIsClose(const aclTensor* self, const aclTensor* other, double rtol, double atol, bool equal_nan,
+                     out aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    auto diff = at::abs(self - other);
+    auto tol = atol + rtol * at::abs(other);
+    auto close = diff <= tol;
+
+    if (equal_nan)
+        close |= at::isnan(self) & at::isnan(other);
+
+    out.copy_(close);
+})
+
+
+MAKE_OP(aclnnAtan2(const aclTensor* self, const aclTensor* other, out aclTensor* out,
+                   uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::atan2_out(out, self, other);
+})
+MAKE_OP(aclnnInplaceAtan2(out aclTensor* selfRef, const aclTensor* other,
+                          uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.atan2_(other);
+})
+
+
+MAKE_OP(aclnnXLogYTensor(const aclTensor* self, const aclTensor* other, out aclTensor* out,
+                         uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::xlogy_out(out, self, other);
+})
+MAKE_OP(aclnnInplaceXLogYTensor(out aclTensor* selfRef, const aclTensor* other,
+                                uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.xlogy_(other);
+})
+
+MAKE_OP(aclnnXLogYScalarOther(const aclTensor* self, const aclScalar* other, out aclTensor* out,
+                              uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::xlogy_out(out, self, other);
+})
+MAKE_OP(aclnnInplaceXLogYScalarOther(out aclTensor* selfRef, const aclScalar* other,
+                                     uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.xlogy_(other);
+})
+
+MAKE_OP(aclnnXLogYScalarSelf(const aclScalar* self, const aclTensor* other, out aclTensor* out,
+                             uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::xlogy_out(out, self, other);
+})
+
+MAKE_OP(aclnnLogAddExp(const aclTensor* self, const aclTensor* other, out aclTensor* out,
+                       uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::logaddexp_out(out, self, other);
+})
+MAKE_OP(aclnnLogAddExp2(const aclTensor* self, const aclTensor* other, out aclTensor* out,
+                        uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::logaddexp2_out(out, self, other);
 })
 
 
@@ -1253,12 +1442,48 @@ MAKE_OP(aclnnMaskedSelect(const aclTensor* self, const aclTensor* mask, sync acl
 MAKE_OP(aclnnInplaceMaskedFillScalar(out aclTensor* selfRef, const aclTensor* mask,
                                      const aclScalar* value, uint64_t* workspaceSize,
                                      aclOpExecutor** executor) {
-    selfRef.masked_fill_(mask, value.item());
+    selfRef.masked_fill_(mask, value);
 })
 MAKE_OP(aclnnInplaceMaskedFillTensor(out aclTensor* selfRef, const aclTensor* mask,
                                      const aclTensor* value, uint64_t* workspaceSize,
                                      aclOpExecutor** executor) {
     selfRef.masked_fill_(mask, value);
+})
+
+MAKE_OP(aclnnLogicalAnd(const aclTensor* self, const aclTensor* other, out aclTensor* out,
+                        uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::logical_and_out(out, self, other);
+})
+MAKE_OP(aclnnInplaceLogicalAnd(out aclTensor* selfRef, const aclTensor* other,
+                               uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.logical_and_(other);
+})
+
+MAKE_OP(aclnnLogicalNot(const aclTensor* self, out aclTensor* out,
+                        uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::logical_not_out(out, self);
+})
+MAKE_OP(aclnnInplaceLogicalNot(out aclTensor* selfRef,
+                               uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.logical_not_();
+})
+
+MAKE_OP(aclnnLogicalOr(const aclTensor* self, const aclTensor* other, out aclTensor* out,
+                       uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::logical_or_out(out, self, other);
+})
+MAKE_OP(aclnnInplaceLogicalOr(out aclTensor* selfRef, const aclTensor* other,
+                              uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.logical_or_(other);
+})
+
+MAKE_OP(aclnnLogicalXor(const aclTensor* self, const aclTensor* other, out aclTensor* out,
+                        uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::bitwise_xor_out(out, self, other);
+})
+MAKE_OP(aclnnInplaceLogicalXor(out aclTensor* selfRef, const aclTensor* other,
+                               uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.bitwise_xor_(other);
 })
 
 
@@ -1339,8 +1564,10 @@ aclTensor* aclCreateTensor(const int64_t* viewDims, uint64_t viewDimsNum, aclDat
     }
     tensor->offset = offset;
 
- // log << "\n" << tensorDataToString(tensor);
- // log_output(log, true);
+    if (!log_is_quiet()) {
+        log << "\n" << tensorDataToString(tensor);
+        log_output(log);
+    }
 
     #if LOG_MEMORY
         std::ostringstream log2;
@@ -1387,8 +1614,10 @@ aclScalar* aclCreateScalar(void* value, aclDataType dataType) {
  // log_output(log, true);
 
     auto opts = at::TensorOptions().dtype(type).device(at::kCPU);
+    auto tensor = at::from_blob(value, {}, opts).clone();
     return new aclScalar {
-        .tensor = at::from_blob(value, {}, opts).clone(),
+        .item = tensor.item(),
+        .tensor = tensor,
         .dtype = dataType,
     };
 }
@@ -1678,7 +1907,7 @@ aclnnStatus aclGetDataType(const aclTensor* tensor, aclDataType* dataType) {
     std::ostringstream log;
     log << "[aclGetDataType] tensor=" << static_cast<const void*>(tensor)
         << " dataType=" << static_cast<void*>(dataType)
-        << "\nError: UNIMPLEMENTED BASE OP";
+        << "\nError: UNIMPLEMENTED BaseOp";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -1688,7 +1917,7 @@ aclnnStatus aclGetStorageShape(const aclTensor* tensor, int64_t** storageDims, u
     log << "[aclGetStorageShape] tensor=" << static_cast<const void*>(tensor)
         << " storageDims=" << static_cast<void*>(storageDims)
         << " storageDimsNum=" << static_cast<void*>(storageDimsNum)
-        << "\nError: UNIMPLEMENTED BASE OP";
+        << "\nError: UNIMPLEMENTED BaseOp";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -1698,7 +1927,7 @@ aclnnStatus aclGetViewStrides(const aclTensor* tensor, int64_t** stridesValue, u
     log << "[aclGetViewStrides] tensor=" << static_cast<const void*>(tensor)
         << " stridesValue=" << static_cast<void*>(stridesValue)
         << " stridesNum=" << static_cast<void*>(stridesNum)
-        << "\nError: UNIMPLEMENTED BASE OP";
+        << "\nError: UNIMPLEMENTED BaseOp";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -1707,7 +1936,7 @@ aclnnStatus aclGetViewOffset(const aclTensor* tensor, int64_t* offset) {
     std::ostringstream log;
     log << "[aclGetViewOffset] tensor=" << static_cast<const void*>(tensor)
         << " offset=" << static_cast<void*>(offset)
-        << "\nError: UNIMPLEMENTED BASE OP";
+        << "\nError: UNIMPLEMENTED BaseOp";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -1716,7 +1945,7 @@ aclnnStatus aclGetFormat(const aclTensor* tensor, aclFormat* format) {
     std::ostringstream log;
     log << "[aclGetFormat] tensor=" << static_cast<const void*>(tensor)
         << " format=" << static_cast<void*>(format)
-        << "\nError: UNIMPLEMENTED BASE OP";
+        << "\nError: UNIMPLEMENTED BaseOp";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -1736,7 +1965,7 @@ aclnnStatus aclInitTensor(aclTensor* tensor, const int64_t* viewDims, uint64_t v
         << " storageDims=" << static_cast<const void*>(storageDims)
         << " storageDimsNum=" << storageDimsNum
         << " tensorDataAddr=" << tensorDataAddr
-        << "\nError: UNIMPLEMENTED BASE OP";
+        << "\nError: UNIMPLEMENTED BaseOp";
     log_output(log, true);
     return UNIMPLEMENTED;
 }
@@ -2163,12 +2392,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnApplyTopKTopPGetWorkspaceSize,
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnApplyTopKTopP,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
                            aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnArangeGetWorkspaceSize,
-                           const aclScalar* start, const aclScalar* end, const aclScalar* step, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnArange,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, const aclrtStream stream)
 
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnArgMaxGetWorkspaceSize,
                            const aclTensor* self, int64_t dim, bool keepdim,
@@ -3666,53 +3889,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLerps,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
                            const aclrtStream stream)
 
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLogGetWorkspaceSize,
-                           aclTensor* selfRef, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLog,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLog10GetWorkspaceSize,
-                           aclTensor* selfRef, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLog10,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLog1pGetWorkspaceSize,
-                           aclTensor* selfRef, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLog1p,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLog2GetWorkspaceSize,
-                           const aclTensor* selfRef, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLog2,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLogicalAndGetWorkspaceSize,
-                           aclTensor* selfRef, const aclTensor* other, uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLogicalAnd,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLogicalNotGetWorkspaceSize,
-                           aclTensor* selfRef, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLogicalNot,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLogicalOrGetWorkspaceSize,
-                           aclTensor* selfRef, const aclTensor* other,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLogicalOr,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLtScalarGetWorkspaceSize,
                            const aclTensor* selfRef, const aclScalar* other, uint64_t* workspaceSize, aclOpExecutor** executor)
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceLtScalar,
@@ -3845,19 +4021,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceScatterValueGetWorkspaceSize,
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceScatterValue,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
 
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceSqrtGetWorkspaceSize,
-                           aclTensor* self, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceSqrt,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceThresholdGetWorkspaceSize,
-                           aclTensor* selfRef, const aclScalar* threshold, const aclScalar* value, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceThreshold,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceTruncGetWorkspaceSize,
                            aclTensor* selfRef, uint64_t* workspaceSize,
                            aclOpExecutor** executor)
@@ -3872,20 +4035,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceWeightQuantMatmulAllReduceAddRmsNormGetWo
                            const aclTensor* normOut, uint64_t* workspaceSize, aclOpExecutor** executor)
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceWeightQuantMatmulAllReduceAddRmsNorm,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, const aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceXLogYScalarOtherGetWorkspaceSize,
-                           aclTensor* selfRef, const aclScalar* other,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceXLogYScalarOther,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceXLogYTensorGetWorkspaceSize,
-                           aclTensor* selfRef, const aclTensor* other,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceXLogYTensor,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
 
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnInstanceNormGetWorkspaceSize,
                            const aclTensor* x, const aclTensor* gamma, const aclTensor* beta, const char* dataFormat, double eps, aclTensor* y,
@@ -4082,97 +4231,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnLinspaceGetWorkspaceSize,
                            const aclScalar* start, const aclScalar* end, int64_t steps,
                            aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnLinspace,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogGetWorkspaceSize,
-                           const aclTensor* self, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLog,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLog10GetWorkspaceSize,
-                           const aclTensor* self, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLog10,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLog1pGetWorkspaceSize,
-                           const aclTensor* self, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLog1p,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLog2GetWorkspaceSize,
-                           const aclTensor* self, const aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLog2,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogAddExpGetWorkspaceSize,
-                           const aclTensor* self, const aclTensor* other, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogAddExp,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogAddExp2GetWorkspaceSize,
-                           const aclTensor* self, const aclTensor* other, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogAddExp2,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogSoftmaxGetWorkspaceSize,
-                           const aclTensor* self, int64_t dim, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogSoftmax,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogSoftmaxBackwardGetWorkspaceSize,
-                           const aclTensor* gradOutput, const aclTensor* output,
-                           int64_t dim, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogSoftmaxBackward,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogSpaceGetWorkspaceSize,
-                           const aclScalar *start, const aclScalar *end, int64_t steps, double base,
-                           const aclTensor *result, uint64_t *workspaceSize, aclOpExecutor **executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogSpace,
-                           void *workspace, uint64_t workspaceSize, aclOpExecutor *executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogdetGetWorkspaceSize,
-                           const aclTensor* self, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogdet,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogicalAndGetWorkspaceSize,
-                           const aclTensor* self, const aclTensor* other, aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogicalAnd,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogicalNotGetWorkspaceSize,
-                           const aclTensor* self, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogicalNot,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogicalOrGetWorkspaceSize,
-                           const aclTensor* self, const aclTensor* other, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogicalOr,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogicalXorGetWorkspaceSize,
-                           const aclTensor* self, const aclTensor* other, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLogicalXor,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
                            aclrtStream stream)
 
@@ -5337,41 +5395,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnRenormGetWorkspaceSize,
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnRenorm,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
 
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnRepeatGetWorkspaceSize,
-                           const aclTensor* self, const aclIntArray* repeats, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnRepeat,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnRepeatInterleaveGetWorkspaceSize,
-                           const aclTensor* self, const aclTensor* repeats, int64_t outputSize, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnRepeatInterleave,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnRepeatInterleaveIntGetWorkspaceSize,
-                           const aclTensor* self, int64_t repeats, int64_t outputSize, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnRepeatInterleaveInt,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnRepeatInterleaveIntWithDimGetWorkspaceSize,
-                           const aclTensor* self, int64_t repeats, int64_t dim, int64_t outputSize, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnRepeatInterleaveIntWithDim,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnRepeatInterleaveTensorGetWorkspaceSize,
-                           const aclTensor* repeats, int64_t outputSize, aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnRepeatInterleaveTensor,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnRepeatInterleaveWithDimGetWorkspaceSize,
-                           const aclTensor* self, const aclTensor* repeats, int64_t dim, int64_t outputSize, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnRepeatInterleaveWithDim,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnReplicationPad1dGetWorkspaceSize,
                            const aclTensor* self, const aclIntArray* padding,
                            aclTensor* out, uint64_t* workspaceSize,
@@ -5715,12 +5738,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnSplitWithSize,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
                            aclrtStream stream)
 
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnSqrtGetWorkspaceSize,
-                           const aclTensor* self, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** opExecutor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnSqrt,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* opExecutor, aclrtStream stream)
-
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnSquareGetWorkspaceSize,
                            const aclTensor* self, aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnSquare,
@@ -5822,20 +5839,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnThreeInterpolateBackwardGetWorkspaceSize,
                            uint64_t* workspaceSize, aclOpExecutor** executor)
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnThreeInterpolateBackward,
                            void* workspace, uint64_t workspace_size, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnThresholdGetWorkspaceSize,
-                           const aclTensor* self, const aclScalar* threshold, const aclScalar* value, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnThreshold,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnThresholdBackwardGetWorkspaceSize,
-                           const aclTensor *gradOutput, const aclTensor *self,
-                           const aclScalar *threshold, aclTensor *out,
-                           uint64_t *workspaceSize, aclOpExecutor **executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnThresholdBackward,
-                           void *workspace, uint64_t workspaceSize, aclOpExecutor *executor,
-                           const aclrtStream stream)
 
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnTopkGetWorkspaceSize,
                            const aclTensor* self, int64_t k, int64_t dim, bool largest,
@@ -6155,29 +6158,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnWeightQuantMatmulAllReduceAddRmsNormGetWorkspace
                            const aclTensor* y, const aclTensor* normOut, uint64_t* workspaceSize, aclOpExecutor** executor)
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnWeightQuantMatmulAllReduceAddRmsNorm,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, const aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnXLogYScalarOtherGetWorkspaceSize,
-                           const aclTensor* self, const aclScalar* other,
-                           aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnXLogYScalarOther,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnXLogYScalarSelfGetWorkspaceSize,
-                           const aclScalar* self, const aclTensor* other,
-                           aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnXLogYScalarSelf,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnXLogYTensorGetWorkspaceSize,
-                           const aclTensor* self, const aclTensor* other, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnXLogYTensor,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
 
 
 #ifdef __cplusplus

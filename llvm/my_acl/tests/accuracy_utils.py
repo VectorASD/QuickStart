@@ -73,6 +73,39 @@ SWIGLU_SPECIAL_SHAPES = (((2, 19, 8),) if QUICK_MODE else (
     (20, 30),
 ))
 
+REGLU_SPECIAL_SHAPES = (
+    (1,),
+    (512, 512),
+    (1, 2048),
+    (2048, 1),
+    (1024, 1024),
+    (20, 320, 15),
+    (4096, 1024),
+    (2048, 2048),
+    (1024, 4096),
+    (512, 512, 512),
+    (512, 256, 512),
+)
+
+
+HARDCORE_MODE = False  # последние две формы слишком тяжёлые (пример: geglu 17 to 3 sec)
+DIM_SHAPES = tuple(
+    ((*shape[:dim], (shape[dim] + 1) & -2, *shape[dim+1:]), dim)
+    for shape in POINTWISE_SHAPES[:(None if HARDCORE_MODE else -2)]
+        for dim in range(len(shape))
+)
+DIM_SWIGLU_SHAPES = tuple(
+    ((*shape[:dim], (shape[dim] + 1) & -2, *shape[dim+1:]), dim)
+    for shape in SWIGLU_SPECIAL_SHAPES[:(None if HARDCORE_MODE else -2)]
+        for dim in range(len(shape))
+)
+DIM_REGLU_SHAPES = tuple(
+    ((*shape[:dim], (shape[dim] + 1) & -2, *shape[dim+1:]), dim)
+    for shape in REGLU_SPECIAL_SHAPES[:(None if HARDCORE_MODE else -2)]
+        for dim in range(len(shape))
+)
+# "x & -2" аналогично "x // 2 * 2"
+
 
 
 # функционал

@@ -182,6 +182,7 @@ inline std::ostream& operator<<(std::ostream& os, const aclTensor* tensor) {
 
 
 struct aclScalar {
+    at::Scalar item;
     at::Tensor tensor;
     aclDataType dtype;
 
