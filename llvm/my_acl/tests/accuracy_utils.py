@@ -158,6 +158,7 @@ def to_reference(inp, upcast=False):
         if ref_inp.is_complex():
             ref_inp = ref_inp.to(torch.complex128)
         else:
+            assert ref_inp.is_floating_point(), "upcast=True only for floating/complex tensors"
             ref_inp = ref_inp.to(torch.float64)
     return ref_inp
 

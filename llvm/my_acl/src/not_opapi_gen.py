@@ -157,7 +157,7 @@ def make_printer(func_name: str, need_out: bool, signature, write):
     write(';');
 
     for name in tensor_lists:
-        write(f"\n       aclTensorList::toString({name}, log);")
+        write(f'\n       aclTensorList::toString("{name}", {name}, log);')
     write("\n    }")
 
 exe_cache = {}
@@ -270,7 +270,7 @@ def make_GWS(op_name: str, exe_name: str, signature, body: str, write):
             if first:
                 write('\n')
                 first = False
-            write(f"\n    SYNC_AFTER_MUTATION(exec->{name}, {name})")
+            write(f"\n    exec->{name}->sync_after_mutation({name});")
 
     write("\n})")
 

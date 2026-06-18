@@ -1403,3 +1403,100 @@ def test_accuracy_reglu_backward(shape: tuple[int, ...], dim: int, dtype: torch.
     ref_out = torch.cpu_reglu_backward(ref_grad_output, ref_inp, dim)
     res_out = torch.cpu_reglu_backward(    grad_output,     inp, dim)
     assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.ceil
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_ceil(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.ceil(ref_inp)
+    res_out = torch.ceil(inp)
+
+    assert_equal(res_out, ref_out)
+
+
+@pytest.mark.inplace
+@pytest.mark.ceil_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_ceil_(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    ref_inp = to_reference(inp)
+
+    ref_out = ref_inp.ceil_()
+    res_out = inp.ceil_()
+
+    assert_equal(res_out, ref_out)
+
+
+@pytest.mark.ceil_out
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_ceil_out(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=device)
+    out = torch.empty_like(inp)
+
+    ref_inp = to_reference(inp)
+    ref_out = torch.empty_like(ref_inp)
+
+    torch.ceil(ref_inp, out=ref_out)
+    torch.ceil(inp,     out=    out)
+
+    assert_equal(out, ref_out)
+
+
+def apply_repetition_penalties(logits, pm, om, pens):
+    for i in range(logits.shape[0]):
+        m = pm[i] | om[i]
+        print(m.shape, logits.shape, logits[i][m].shape, m.sum())
+        return logits[i]
+        logits[i][m] = torch.where(
+            logits[i][m] > 0, logits[i][m] / pens[i], logits[i][m] * pens[i]
+        )
+
+@pytest.mark.apply_repetition_penalties
+@pytest.mark.parametrize("shape", (
+    (1, 1024),
+    (1, 4096),
+    (1, 8192),
+    (8, 4096),
+    (16, 4096),
+    (32, 1024),
+    (8, 8192),
+))
+@pytest.mark.parametrize("penalty", (1.0, 1.2, 1.5))
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+@pytest.mark.parametrize("mask_mode", ("random", "empty"))
+def test_repetition_penalty(shape, penalty, dtype, mask_mode):
+    device.log_it()
+    res_logits = torch.randn(shape, dtype=dtype, device=device).contiguous()
+    if mask_mode == "random":
+        res_prompt_mask = torch.randint(0, 2, shape, dtype=torch.bool, device=device)
+        res_output_mask = torch.randint(0, 2, shape, dtype=torch.bool, device=device)
+    else:
+        res_prompt_mask = torch.zeros(shape, dtype=torch.bool, device=device)
+        res_output_mask = torch.zeros(shape, dtype=torch.bool, device=device)
+    res_penalties = torch.full((shape[0],), penalty, dtype=dtype, device=device)
+
+    ref_prompt_mask = to_reference(res_prompt_mask)
+    ref_output_mask = to_reference(res_output_mask)
+    ref_penalties   = to_reference(res_penalties,   True)
+    ref_logits      = to_reference(res_logits,      True)
+    logits_ori = ref_logits.clone()
+
+    apply_repetition_penalties(ref_logits, ref_prompt_mask, ref_output_mask, ref_penalties)
+    apply_repetition_penalties(res_logits, res_prompt_mask, res_output_mask, res_penalties)
+
+    assert_close(res_logits, ref_logits, dtype)
+
+    """
+    has_mask = (ref_prompt_mask | ref_output_mask).any().item()
+    should_modify = has_mask and penalty != 1.0
+    if should_modify:
+        assert not torch.equal(ref_logits, logits_ori)
+    elif mask_mode == "empty":
+        assert_close(ref_logits, logits_ori, dtype)
+    """

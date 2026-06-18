@@ -110,16 +110,6 @@ struct OptionalScalarType {
         return _ret;                                             \
     }
 
-#define SYNC_AFTER_MUTATION(acl_tensor_ptr, at_tensor) \
-    do { \
-        auto _t = (acl_tensor_ptr);                                     \
-        auto& _at = (at_tensor);                                        \
-        _t->desc->dims.assign(_at.sizes().begin(), _at.sizes().end());  \
-        _t->strides.assign(_at.strides().begin(), _at.strides().end()); \
-        /* offset остаётся 0, т.к. после операции тензор непрерывен */  \
-        _t->offset = 0;                                                 \
-    } while (0);
-
 
 
 struct aclTensor {
@@ -127,17 +117,18 @@ struct aclTensor {
     aclDataBuffer* buffer;
     std::vector<int64_t> strides;
     int64_t offset;
+    bool already_sync = false;
 
     void store(const at::Tensor& src) {
-        if (!desc) throw std::runtime_error("aclTensor::store: desc is null");
+        if (!desc)
+            throw std::runtime_error("aclTensor::store: desc is null");
 
         size_t total_bytes = src.nbytes();
 
         // Если буфера нет или он слишком мал – выделяем новый
         if (!buffer || buffer->size < total_bytes) {
             void* new_data = malloc(total_bytes);
-            if (!new_data)
-                throw std::runtime_error("malloc failed in aclTensor::store");
+            if (!new_data) throw std::runtime_error("malloc failed in aclTensor::store");
             if (buffer) {
                 free(buffer->data);
                 buffer->data = new_data;
@@ -155,6 +146,21 @@ struct aclTensor {
 
         // Копируем сырые данные
         std::memcpy(buffer->data, src.const_data_ptr(), total_bytes);
+
+        // Устанавливаем флаг, чтобы SYNC_AFTER_MUTATION не делал лишнюю работу
+        already_sync = true;
+    }
+
+    void sync_after_mutation(const at::Tensor& src) {
+        if (already_sync) {
+            already_sync = false; // сброс для будущих использований
+            return;
+        }
+        auto sizes = src.sizes();
+        auto strides = src.strides();
+        desc->dims.assign(sizes.begin(), sizes.end());
+        this->strides.assign(strides.begin(), strides.end());
+        offset = 0;
     }
 };
 
@@ -290,12 +296,13 @@ struct aclTensorList {
         return at::TensorList(cached);
     }
 
-    static void toString(const aclTensorList* list, std::ostringstream& oss) {
+    static void toString(const char* name, const aclTensorList* list, std::ostringstream& oss) {
+        oss << "\n    " << name << ": aclTensorList";
         if (!list) {
-            oss << "\n    aclTensorList null\n";
+            oss << " null\n";
             return;
         }
-        oss << "\n    aclTensorList(" << list->n << "):";
+        oss << '(' << list->n << "):";
         for (size_t i = 0; i < list->n; ++i)
             oss << "\n      [" << i << "]:\n" << tensorDataToString(list->data[i]);
     }
