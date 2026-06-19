@@ -54,6 +54,7 @@ from .accuracy_utils import (
     unsqueeze_tuple,
     device,
 )
+from math import prod
 
 # pytest test_unary_pointwise_ops.py -m abs -sv
 # pytest test_unary_pointwise_ops.py --count-100 --log
@@ -1130,6 +1131,18 @@ def test_accuracy_flip_with_non_dense_input(shape, dtype, dims):
 @pytest.mark.parametrize("dims", ((0,), (2,), (2, 0), (0, 2), (2, 2), (2, 2, 2), (2, 2, 2, 2)))
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_tile(shape, dims, dtype):
+    out_elements = prod(shape) * prod(dims)
+    out_bytes = out_elements * (torch.finfo(dtype).bits // 8)
+    out_mb = out_bytes / 1024**2
+    if out_mb > 100:
+        pytest.skip(
+            f"Output tensor would be {out_mb:.1f} MB (> 100 MB limit). "
+            f"In practice, this test additionally uses ~{out_mb*2:.1f} MB "
+            f"for intermediate tensors (ref_out, NPU result, comparison copies) "
+            f"and ~300 MB for the random cache (3 dtypes × ~100 MB), "
+            f"so total memory pressure exceeds safe limits. Skipping to avoid OOM."
+        )
+
     res_inp = torch.randn(shape, dtype=dtype, device=device)
     ref_inp = to_reference(res_inp)
 
@@ -1140,14 +1153,25 @@ def test_accuracy_tile(shape, dims, dtype):
 
 
 @pytest.mark.repeatt  # -m repeat конфликтует с плагином repeat-0.9.4
-@pytest.mark.parametrize("shape", POINTWISE_SHAPES[:-2])
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("sizes", ((2, 3, 4, 5), (5, 0, 4)))
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_repeat(shape, sizes, dtype):
+    sizes = unsqueeze_tuple(sizes, len(shape))
+    out_elements = prod(shape) * prod(sizes)
+    out_bytes = out_elements * (torch.finfo(dtype).bits // 8)
+    out_mb = out_bytes / 1024**2
+    if out_mb > 100:
+        pytest.skip(
+            f"Output tensor would be {out_mb:.1f} MB (> 100 MB limit). "
+            f"In practice, this test additionally uses ~{out_mb*2:.1f} MB "
+            f"for intermediate tensors (ref_out, NPU result, comparison copies) "
+            f"and ~300 MB for the random cache (3 dtypes × ~100 MB), "
+            f"so total memory pressure exceeds safe limits. Skipping to avoid OOM."
+        )
+
     res_inp = torch.randn(shape, dtype=dtype, device=device)
     ref_inp = to_reference(res_inp)
-
-    sizes = unsqueeze_tuple(sizes, res_inp.ndim)
 
     ref_out = ref_inp.repeat(*sizes)
     res_out = res_inp.repeat(*sizes)
@@ -1198,7 +1222,7 @@ def test_accuracy_to_dtype(shape, dtype):
 
     ref_out = ref_x.to(dtype)
     res_out = res_x.to(dtype)
-    print(dtype, ref_out.dtype, res_out.dtype)
+  # print(dtype, ref_out.dtype, res_out.dtype)
 
     assert_equal(res_out, ref_out)
 
@@ -1448,14 +1472,22 @@ def test_accuracy_ceil_out(shape, dtype):
     assert_equal(out, ref_out)
 
 
-def apply_repetition_penalties(logits, pm, om, pens):
+def apply_repetition_penalties(logits, pm, om, pens):  # тест проходит за 5.86s
     for i in range(logits.shape[0]):
         m = pm[i] | om[i]
-        print(m.shape, logits.shape, logits[i][m].shape, m.sum())
-        return logits[i]
+      # print(m.shape, logits.shape, logits[i][m].shape, m.sum())
         logits[i][m] = torch.where(
             logits[i][m] > 0, logits[i][m] / pens[i], logits[i][m] * pens[i]
         )
+
+def apply_repetition_penalties(logits, pm, om, pens):  # тест проходит за 3.43s
+    mask = pm | om
+    penalty_expanded = pens.unsqueeze(1).expand_as(logits)
+    logits[mask] = torch.where(
+        logits[mask] > 0,
+        logits[mask] / penalty_expanded[mask],
+        logits[mask] * penalty_expanded[mask]
+    )
 
 @pytest.mark.apply_repetition_penalties
 @pytest.mark.parametrize("shape", (
@@ -1468,10 +1500,9 @@ def apply_repetition_penalties(logits, pm, om, pens):
     (8, 8192),
 ))
 @pytest.mark.parametrize("penalty", (1.0, 1.2, 1.5))
-@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+@pytest.mark.parametrize("dtype", ALL_FLOAT_DTYPES)
 @pytest.mark.parametrize("mask_mode", ("random", "empty"))
 def test_repetition_penalty(shape, penalty, dtype, mask_mode):
-    device.log_it()
     res_logits = torch.randn(shape, dtype=dtype, device=device).contiguous()
     if mask_mode == "random":
         res_prompt_mask = torch.randint(0, 2, shape, dtype=torch.bool, device=device)
@@ -1483,8 +1514,8 @@ def test_repetition_penalty(shape, penalty, dtype, mask_mode):
 
     ref_prompt_mask = to_reference(res_prompt_mask)
     ref_output_mask = to_reference(res_output_mask)
-    ref_penalties   = to_reference(res_penalties,   True)
-    ref_logits      = to_reference(res_logits,      True)
+    ref_penalties   = to_reference(res_penalties)
+    ref_logits      = to_reference(res_logits)
     logits_ori = ref_logits.clone()
 
     apply_repetition_penalties(ref_logits, ref_prompt_mask, ref_output_mask, ref_penalties)
@@ -1492,11 +1523,9 @@ def test_repetition_penalty(shape, penalty, dtype, mask_mode):
 
     assert_close(res_logits, ref_logits, dtype)
 
-    """
     has_mask = (ref_prompt_mask | ref_output_mask).any().item()
     should_modify = has_mask and penalty != 1.0
     if should_modify:
         assert not torch.equal(ref_logits, logits_ori)
     elif mask_mode == "empty":
         assert_close(ref_logits, logits_ori, dtype)
-    """

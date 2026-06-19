@@ -164,14 +164,19 @@ static std::string aclElementToString(aclDataType dtype, const void* elemPtr) {
     }
 }
 
-static std::string tensorDataToString(const aclTensorDesc* desc, const aclDataBuffer* buf,
+static void tensorDataToString(const aclTensorDesc* desc, const aclDataBuffer* buf,
                                       const std::vector<int64_t>& strides, const int64_t offset,
-                                      const int baseIndent = 8) {
-    if (!desc || !buf || !buf->data || buf->size == 0)
-        return "(no data)";
+                                      std::ostream& os, const int baseIndent = 8) {
+    if (!desc || !buf || !buf->data || buf->size == 0) {
+        os << "(no data)";
+        return;
+    }
 
     size_t numElements = calc_num_elements(desc, buf->size);
-    if (numElements == 0) return "(no elements)";
+    if (numElements == 0) {
+        os << "(no elements)";
+        return;
+    }
 
     const std::vector<int64_t>& dims = desc->dims;
     const int edgeItems = 3;          // сколько элементов показывать с краёв при сокращении
@@ -181,83 +186,86 @@ static std::string tensorDataToString(const aclTensorDesc* desc, const aclDataBu
     const char* baseData = static_cast<const char*>(buf->data);
     size_t elemSize = aclDataTypeBytes(desc->dtype);
 
-    std::ostringstream oss;
-    oss << std::string(baseIndent, ' ');
+    os << std::string(baseIndent, ' ');
     if (dims.empty()) {
         const char* ptr = baseData + offset * aclDataTypeBytes(desc->dtype);
-        oss << aclElementToString(desc->dtype, ptr);
-        return oss.str();
+        os << aclElementToString(desc->dtype, ptr);
+        return;
     }
 
     // Рекурсивная лямбда для форматирования
-    std::function<void(std::ostringstream&, const std::vector<int64_t>&, int, int, int64_t)> printRec;
-    printRec = [&](std::ostringstream& oss, const std::vector<int64_t>& curDims, int depth, int indent, int64_t curOffset) {
+    std::function<void(std::ostream&, const std::vector<int64_t>&, int, int, int64_t)> printRec;
+    printRec = [&](std::ostream& os, const std::vector<int64_t>& curDims, int depth, int indent, int64_t curOffset) {
         if (depth == curDims.size() - 1) {
             // Последнее измерение – строка чисел
             int64_t size = curDims[depth];
-            oss << '[';
+            os << '[';
             if (doTruncate && size > 2 * edgeItems + 1) {
                 for (int64_t i = 0; i < edgeItems; ++i) {
-                    if (i > 0) oss << ", ";
+                    if (i > 0) os << ", ";
                     const void* elemPtr = baseData + (curOffset + i * strides[depth]) * elemSize;
-                    oss << aclElementToString(desc->dtype, elemPtr);
+                    os << aclElementToString(desc->dtype, elemPtr);
                 }
-                oss << ", ..., ";
+                os << ", ..., ";
                 for (int64_t i = size - edgeItems; i < size; ++i) {
-                    if (i > size - edgeItems) oss << ", ";
+                    if (i > size - edgeItems) os << ", ";
                     const void* elemPtr = baseData + (curOffset + i * strides[depth]) * elemSize;
-                    oss << aclElementToString(desc->dtype, elemPtr);
+                    os << aclElementToString(desc->dtype, elemPtr);
                 }
             } else {
                 for (int64_t i = 0; i < size; ++i) {
-                    if (i > 0) oss << ", ";
+                    if (i > 0) os << ", ";
                     const void* elemPtr = baseData + (curOffset + i * strides[depth]) * elemSize;
-                    oss << aclElementToString(desc->dtype, elemPtr);
+                    os << aclElementToString(desc->dtype, elemPtr);
                 }
             }
-            oss << ']';
+            os << ']';
         } else {
             // Промежуточное измерение – вывод вложенных тензоров
             indent++;
             auto pad = std::string(indent, ' ');
             int64_t size = curDims[depth];
-            oss << '[';
+            os << '[';
             if (doTruncate && size > 2 * edgeItems + 1) {
                 for (int64_t i = 0; i < edgeItems; ++i) {
-                    if (i > 0) oss << ",\n" << pad;
+                    if (i > 0) os << ",\n" << pad;
                     int64_t newOffset = curOffset + i * strides[depth];
-                    printRec(oss, curDims, depth + 1, indent, newOffset);
+                    printRec(os, curDims, depth + 1, indent, newOffset);
                 }
-                oss << ",\n" << std::string(indent + 1, ' ')
+                os << ",\n" << std::string(indent + 1, ' ')
                     << "...\n" << std::string(indent, ' ');
                 for (int64_t i = size - edgeItems; i < size; ++i) {
-                    if (i > size - edgeItems) oss << ",\n" << pad;
+                    if (i > size - edgeItems) os << ",\n" << pad;
                     int64_t newOffset = curOffset + i * strides[depth];
-                    printRec(oss, curDims, depth + 1, indent, newOffset);
+                    printRec(os, curDims, depth + 1, indent, newOffset);
                 }
             } else {
                 for (int64_t i = 0; i < size; ++i) {
-                    if (i > 0) oss << ",\n" << pad;
+                    if (i > 0) os << ",\n" << pad;
                     int64_t newOffset = curOffset + i * strides[depth];
-                    printRec(oss, curDims, depth + 1, indent, newOffset);
+                    printRec(os, curDims, depth + 1, indent, newOffset);
                 }
             }
-            oss << ']';
+            os << ']';
         }
     };
 
-    printRec(oss, dims, 0, baseIndent, offset);
-    return oss.str();
+    printRec(os, dims, 0, baseIndent, offset);
 }
 
-static std::string tensorDataToString(const aclTensorDesc* desc, const aclDataBuffer* buf) {
+static void tensorDataToString(const aclTensorDesc* desc, const aclDataBuffer* buf, std::ostream& os) {
     std::vector<int64_t> denseStrides(desc->dims.size());
     if (!desc->dims.empty()) {
         denseStrides.back() = 1;
         for (int i = desc->dims.size()-2; i >= 0; --i)
             denseStrides[i] = denseStrides[i+1] * desc->dims[i+1];
     }
-    return tensorDataToString(desc, buf, denseStrides, 0);
+    tensorDataToString(desc, buf, denseStrides, 0, os);
+}
+static std::string tensorDataToString(const aclTensorDesc* desc, const aclDataBuffer* buf) {
+    std::ostringstream oss;
+    tensorDataToString(desc, buf, oss);
+    return oss.str();
 }
 
 enum TensorPrintFlags {

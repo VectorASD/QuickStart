@@ -147,12 +147,14 @@ def make_printer(func_name: str, need_out: bool, signature, write):
         write(" << ':'")
         first = False
 
+    if tensors:
+        max_len = max(map(len, tensors))
     for name in tensors:
         if first:
             first = False
         else:
             write("\n           ")
-        write(rf' << "\n    {name}: {" " * (8 - len(name))}" << {name}')
+        write(rf' << "\n    {name}: {" " * (max_len - len(name))}" << {name}')
 
     write(';');
 

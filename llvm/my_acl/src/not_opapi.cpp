@@ -27,53 +27,73 @@ extern "C" {
 
 MAKE_OP(aclnnInplaceNormal(out const aclTensor* selfRef, float mean, float std, int64_t seed, int64_t offset,
                            uint64_t* workspaceSize, aclOpExecutor** executor) {
-    auto gen = at::detail::getDefaultCPUGenerator();
+    // На примере test_unary_pointwise_ops.py:
+ 
+ /* auto gen = at::detail::getDefaultCPUGenerator();
     gen.set_current_seed(static_cast<uint64_t>(seed) + static_cast<uint64_t>(offset));
     selfRef.normal_(mean, std, gen);
+
+    2465 passed, 6 skipped, 1 warning in 99.33s (0:01:39)
+    aclnnInplaceNormal:           count=2591 | min=  5.143 us | avg=21251.568 us | max=159883.171 us | sum=55062813.281 us */
+
+ /* selfRef.zero_();
+
+    80 failed, 2385 passed, 6 skipped, 1 warning in 51.20s
+    aclnnInplaceNormal:           count= 2591 | min=  3.401 us | avg= 1204.005 us | max= 17830.911 us | sum=3119576.408 us */
+    
+    // Вывод: 55062813.281 us - 3119576.408 us = 51.94s из 99.33s (52%) всего времени улетает
+    // исключительно на работу этой функции, исключая работы malloc/free за пределами данной операции!
+
+ /* std::ostringstream oss;
+    oss << "RANDOM: mean: " << mean << ", std: " << stdd << ", offset: " << offset << ", seed: " << seed;
+    log_output(oss, true);
+        Хороший показательный пример того, что seed по умолчанию НИКОГДА не меняется! Только offset :)
+        Т.е. это лишь подкрепляет мою личную идею с кешированием рандомных чисел */
+
+    cached_normal_(selfRef, seed, offset, mean, std);
+    // aclnnInplaceNormal:           count=2583 | min=  6.232 us | avg=1618.561 us | max=53768.063 us | sum=4832651.754 us
+    // 2465 passed, 6 skipped, 1 warning in 45.12s (0:01:39)
+
+    // После того, как test_accuracy_tile и test_accuracy_repeat были ограничены на 100 Mb (от этого же растёт ещё и кеш рандома)
+    // Бонусом, кеш расширяется, не пересчитывая весь тензор, а только недостающую для расширения часть
+    // aclnnInplaceNormal:           count=2583 | min=  7.450 us | avg= 1654.452 us | max=87228.201 us | sum=4273448.321 us
+    // 2457 passed, 26 skipped, 1 warning in 38.73s
 })
 MAKE_OP(aclnnInplaceNormalTensor(out const aclTensor* selfRef, float mean, float std,
                                  const aclTensor* seedTensor, const aclTensor* offsetTensor, int64_t offset,
                                  uint64_t* workspaceSize, aclOpExecutor** executor) {
-    int64_t seed_val = seedTensor.item<int64_t>();
-    int64_t offset_val = offsetTensor.item<int64_t>();
-    uint64_t total_seed = static_cast<uint64_t>(seed_val) + static_cast<uint64_t>(offset_val)
-                          + static_cast<uint64_t>(offset);
-    auto gen = at::detail::getDefaultCPUGenerator();
-    gen.set_current_seed(total_seed);
-    selfRef.normal_(mean, std, gen);
+    int64_t base_seed = seedTensor.item<int64_t>() + offsetTensor.item<int64_t>();
+    cached_normal_(selfRef, base_seed, offset, mean, std);
 })
 
 MAKE_OP(aclnnInplaceRandom(out const aclTensor* selfRef, int64_t from, int64_t to, int64_t seed, int64_t offset,
                            uint64_t* workspaceSize, aclOpExecutor** executor) {
-    auto gen = at::detail::getDefaultCPUGenerator();
-    gen.set_current_seed(static_cast<uint64_t>(seed) + static_cast<uint64_t>(offset));
-    selfRef.random_(from, to, gen);
+    cached_random_(selfRef, seed, offset, from, to);
 })
 MAKE_OP(aclnnInplaceRandomTensor(out const aclTensor* selfRef, int64_t from, int64_t to,
                                  const aclTensor* seedTensor, const aclTensor* offsetTensor, int64_t offset,
                                  uint64_t* workspaceSize, aclOpExecutor** executor) {
-    int64_t seed_val = seedTensor.item<int64_t>();
-    int64_t offset_val = offsetTensor.item<int64_t>();
-    uint64_t total_seed = static_cast<uint64_t>(seed_val) + static_cast<uint64_t>(offset_val)
-                          + static_cast<uint64_t>(offset);
-    auto gen = at::detail::getDefaultCPUGenerator();
-    gen.set_current_seed(total_seed);
-    selfRef.random_(from, to, gen);
+    int64_t base_seed = seedTensor.item<int64_t>() + offsetTensor.item<int64_t>();
+    cached_random_(selfRef, base_seed, offset, from, to);
 })
 
 MAKE_OP(aclnnInplaceUniform(out const aclTensor* selfRef, double from, double to, uint64_t seed, uint64_t offset,
                            uint64_t* workspaceSize, aclOpExecutor** executor) {
-    auto gen = at::detail::getDefaultCPUGenerator();
-    gen.set_current_seed(seed + offset);
-    selfRef.uniform_(from, to, gen);
+    cached_uniform_(selfRef, static_cast<int64_t>(seed), static_cast<int64_t>(offset), from, to);
 })
 MAKE_OP(aclnnInplaceUniformTensor(out const aclTensor* selfRef, double from, double to,
                                  const aclTensor* seedTensor, const aclTensor* offsetTensor,
                                  uint64_t offset, uint64_t* workspaceSize, aclOpExecutor** executor) {
-    uint64_t seed_val = static_cast<uint64_t>(seedTensor.item<int64_t>()) + static_cast<uint64_t>(offsetTensor.item<int64_t>()) + offset;
+    int64_t base_seed = static_cast<int64_t>(seedTensor.item<int64_t>()) + static_cast<int64_t>(offsetTensor.item<int64_t>());
+    cached_uniform_(selfRef, base_seed, static_cast<int64_t>(offset), from, to);
+})
+
+MAKE_OP(aclnnRandperm(int64_t n, int64_t seed, int64_t offset, sync aclTensor* out,
+                      uint64_t* workspaceSize, aclOpExecutor** executor) {
+    // Невозможно создать такой кеш, чтобы не нарушить правило перестановки
     auto gen = at::detail::getDefaultCPUGenerator();
-    gen.set_current_seed(seed_val);
-    selfRef.uniform_(from, to, gen);
+    gen.set_current_seed(static_cast<uint64_t>(seed) + static_cast<uint64_t>(offset));
+    at::randperm_out(out, n, gen);
 })
 
 
@@ -98,13 +118,6 @@ MAKE_OP(aclnnInplaceFillScalar(out aclTensor* selfRef, const aclScalar* value,
 MAKE_OP(aclnnInplaceFillTensor(out aclTensor* selfRef, const aclTensor* value,
                                 uint64_t* workspaceSize, aclOpExecutor** executor) {
     selfRef.copy_(value);
-})
-
-MAKE_OP(aclnnRandperm(int64_t n, int64_t seed, int64_t offset, sync aclTensor* out,
-                      uint64_t* workspaceSize, aclOpExecutor** executor) {
-    auto gen = at::detail::getDefaultCPUGenerator();
-    gen.set_current_seed(static_cast<uint64_t>(seed) + static_cast<uint64_t>(offset));
-    at::randperm_out(out, n, gen);
 })
 
 MAKE_OP(aclnnEye(int64_t n, int64_t m, out aclTensor* out,
@@ -140,15 +153,21 @@ MAKE_OP(aclnnSort(const aclTensor* self, bool stable, int64_t dim, bool descendi
     at::sort_out(valuesOut, indicesOut, self, dim, descending);
 })
 
-MAKE_OP(aclnnLogSpace(const aclScalar* start, const aclScalar* end, int64_t steps, double base,
-                      sync aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::logspace_out(out, _start, _end, steps, base);
+MAKE_OP(aclnnRange(const aclScalar* start, const aclScalar* end, const aclScalar* step,
+                   out aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    out.copy_(at::range(_start, _end, step, out.options()));
 })
-
 MAKE_OP(aclnnArange(const aclScalar* start, const aclScalar* end, const aclScalar* step,
-                    sync aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
-    out.copy_(at::arange(_start, _end, step,
-                         at::device(at::kCPU).dtype(out.scalar_type())));
+                    out aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    out.copy_(at::arange(_start, _end, step, at::device(at::kCPU).dtype(out.scalar_type())));
+})
+MAKE_OP(aclnnLinspace(const aclScalar* start, const aclScalar* end, int64_t steps,
+                      out aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    out.copy_(at::linspace(_start, _end, steps, out.options()));
+})
+MAKE_OP(aclnnLogSpace(const aclScalar* start, const aclScalar* end, int64_t steps, double base,
+                      out aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::logspace_out(out, _start, _end, steps, base);
 })
 
 
@@ -470,12 +489,12 @@ MAKE_OP(aclnnInplaceSqrt(out aclTensor* self,
 
 MAKE_OP(aclnnNonzero(const aclTensor* self, sync aclTensor* out,
                     uint64_t* workspaceSize, aclOpExecutor** executor) {
-    out.copy_(at::nonzero(self));
+    exec->out->store(at::nonzero(self));
 })
 MAKE_OP(aclnnNonzeroV2(const aclTensor* self, sync aclTensor* out,
                        uint64_t* workspaceSize, aclOpExecutor** executor) {
- // out.copy_(at::nonzero(self));  // БАГ torch_npu: выход размером (1, 1024), а должен быть (758, 1024)
-    exec->out->store(at::nonzero(self));
+    auto idx = at::nonzero(self);           // [N, ndim]
+    exec->out->store(idx.transpose(0, 1));  // [ndim, N]
 })
 
 
@@ -1722,7 +1741,7 @@ aclTensor* aclCreateTensor(const int64_t* viewDims, uint64_t viewDimsNum, aclDat
     tensor->offset = offset;
 
     if (!log_is_quiet()) {
-        log << "\n" << tensorDataToString(tensor);
+        log << '\n'; tensorDataToString(tensor, log);
         log_output(log);
     }
 
@@ -4214,13 +4233,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnLinalgVectorNormGetWorkspaceSize,
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnLinalgVectorNorm,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
 
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLinspaceGetWorkspaceSize,
-                           const aclScalar* start, const aclScalar* end, int64_t steps,
-                           aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnLinspace,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor,
-                           aclrtStream stream)
-
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnLstmBackwardGetWorkspaceSize,
                            const aclTensor *input,
                            const aclTensorList *hx,
@@ -5282,12 +5294,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnQuantizedBatchNormGetWorkspaceSize,
                            const aclScalar* inputZeroPoint, const aclScalar* outputScale, const aclScalar* outputZeroPoint, aclTensor* weight,
                            aclTensor* bias, float epsilon, aclTensor* output, uint64_t* workspaceSize, aclOpExecutor** executor)
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnQuantizedBatchNorm,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnRangeGetWorkspaceSize,
-                           const aclScalar* start, const aclScalar* end, const aclScalar* step, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnRange,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
 
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnRealGetWorkspaceSize,

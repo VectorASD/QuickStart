@@ -19,16 +19,18 @@ import threading
 # ---------- memory check ----------
 libc = ctypes.CDLL("libc.so.6")
 
-def check_memory(threshold: float = 0.8):
+def check_memory(threshold: float = 0.6):
     vm = psutil.virtual_memory()
-    free = vm.used / vm.available
-    if free > threshold:
+    usage = (vm.total - vm.available) / vm.total  # vm.percent / 100
+    # Killed после 0.777* :) Не могу найти формулу, чтобы Killed б
+  # print(usage, vm.percent)
+    if usage > threshold:
         gc.collect()
         libc.malloc_trim(0)
         vm = psutil.virtual_memory()
-        free2 = vm.used / vm.available
-        if free2 > threshold * 0.9:
-            print(f"USED MEMORY: {free * 100:.3f}% -> {free2 * 100:.3f}%")
+        usage2 = (vm.total - vm.available) / vm.total
+        if usage2 > threshold * 0.9:
+            print(f"USED MEMORY: {usage * 100:.3f}% -> {usage2 * 100:.3f}%")
             raise RuntimeError("Memory leak detected! Freed less than 10% of used memory")
 
 @pytest.fixture(autouse=True)
