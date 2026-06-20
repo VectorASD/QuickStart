@@ -168,13 +168,13 @@ def test_accuracy_bitwise_right_shift(shapes, dtype):
     assert_close(res_out, ref_out, dtype)
 
 
-INPLACE_BITWISE_SHAPES = [
+INPLACE_BITWISE_SHAPES = (
     ((512, 1024), (512, 1024)),
     ((256, 512), (1, 512)),
     ((256, 512), (256, 1)),
     ((1024,), ()),
     # сдвиги подразумевают изменение формы self тензора, что невозможно в inplace режиме (copy_ сломается)
-]
+)
 
 
 @pytest.mark.bitwise_left_shift

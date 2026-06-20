@@ -49,6 +49,8 @@ BOOL_TYPES = (torch.bool,)
 
 COMPLEX_DTYPES = (torch.complex32, torch.complex64)
 
+SCALARS = (0.001, -0.999, 100.001, -111.999)
+
 
 
 # формы
