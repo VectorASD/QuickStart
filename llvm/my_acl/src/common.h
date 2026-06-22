@@ -3,6 +3,7 @@
 
 #include <cstddef>  // uint8_t, int16_t...
 #include <cstdint>  // size_t
+
 #include <iostream>       // std::cout
 #include <string>         // std::string
 #include <unordered_map>  // std::unordered_map
@@ -11,6 +12,12 @@
 #include <sstream>        // std::ostringstream
 #include <algorithm>      // std::sort
 #include <variant>        // std::variant
+#include <unistd.h>
+
+#include <filesystem>  // std::filesystem
+#include <fstream>     // std::ofstream
+#include <pwd.h>       // getpwuid, passwd
+
 
 #if defined(_MSC_VER)
     #ifdef FUNC_VISIBILITY
@@ -43,6 +50,20 @@ typedef enum {
     ACL_WARNING = 2,
     ACL_ERROR = 3,
 } aclLogLevel;
+
+typedef enum aclrtMemMallocPolicy {
+    ACL_MEM_MALLOC_HUGE_FIRST,
+    ACL_MEM_MALLOC_HUGE_ONLY,
+    ACL_MEM_MALLOC_NORMAL_ONLY,
+    ACL_MEM_MALLOC_HUGE_FIRST_P2P,
+    ACL_MEM_MALLOC_HUGE_ONLY_P2P,
+    ACL_MEM_MALLOC_NORMAL_ONLY_P2P,
+    ACL_MEM_MALLOC_HUGE1G_ONLY,
+    ACL_MEM_MALLOC_HUGE1G_ONLY_P2P,
+    ACL_MEM_TYPE_LOW_BAND_WIDTH   = 0x0100,
+    ACL_MEM_TYPE_HIGH_BAND_WIDTH  = 0x1000,
+    ACL_MEM_ACCESS_USER_SPACE_READONLY = 0x100000,
+} aclrtMemMallocPolicy;
 
 typedef enum aclrtMemcpyKind {
     ACL_MEMCPY_HOST_TO_HOST,
@@ -106,10 +127,12 @@ struct aclDataBuffer {
 
 static const int ACL_SUCCESS = 0;
 static const int ACL_ERROR_INVALID_PARAM         = 100000;
+static const int ACL_ERROR_UNINITIALIZE          = 100001;
 static const int ACL_ERROR_OP_NOT_FOUND          = 100024;
 static const int ACL_ERROR_UNSUPPORTED_DATA_TYPE = 100026;
 static const int ACL_ERROR_BAD_ALLOC      = 200000;
 static const int ACL_ERROR_INTERNAL_ERROR = 500000;
+static const int ACL_ERROR_FAILURE        = 500001;
 
 typedef enum {
     ACL_MEMTYPE_DEVICE = 0,
@@ -386,7 +409,7 @@ static std::mutex g_log_mutex;
 
 static bool log_is_quiet() {
     const char* env = std::getenv("NOT_NPU_QUIET");
-    return env && env[0] == '1';
+    return env && env[0] == '1' && env[1] == '\0';
 }
 
 static bool log_is_quiet_cached() {
@@ -409,6 +432,69 @@ static inline void log_output(const std::string& msg, bool is_error = false) {
         std::lock_guard<std::mutex> lock(g_log_mutex);
         std::cout << msg << std::endl;
     }
+}
+
+
+// файловая система
+
+static const char* ANSI_RED   = "\033[31m";
+static const char* ANSI_RESET = "\033[0m";
+
+static std::filesystem::path get_home_path() {
+    const char* home = std::getenv("HOME");
+    if (home && home[0])
+        return std::filesystem::path(home);
+    // Fallback на passwd
+    struct passwd* pw = getpwuid(getuid());
+    if (pw)
+        return std::filesystem::path(pw->pw_dir);
+    return "/tmp";
+}
+
+static void ensure_directory(const std::filesystem::path& dir) {
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    // Ошибки игнорируем – если не удалось создать, дальше всё равно упадёт при записи файла
+}
+
+static void ensure_file(const std::filesystem::path& file_path,
+                        const std::string& content,
+                        bool make_executable = false) {
+    if (std::filesystem::exists(file_path))
+        return;
+
+    ensure_directory(file_path.parent_path());
+
+    std::ofstream ofs(file_path);
+    ofs << content;
+    ofs.close();
+
+    if (make_executable)
+        std::filesystem::permissions(
+            file_path,
+            std::filesystem::perms::owner_exec |
+                std::filesystem::perms::group_exec |
+                std::filesystem::perms::others_exec,
+            std::filesystem::perm_options::add);
+}
+
+static bool ensure_file_contains(const std::filesystem::path& file_path,
+                                 const std::string& content) {
+    if (std::filesystem::exists(file_path)) {
+        std::string first_line = content.substr(0, content.find('\n'));
+        if (first_line.empty())
+            first_line = content;
+
+        std::ifstream ifs(file_path);
+        std::string line;
+        while (std::getline(ifs, line))
+            if (line == first_line)
+                return false;
+    }
+
+    std::ofstream ofs(file_path, std::ios::app);
+    ofs << "\n" << content << "\n";
+    return true;
 }
 
 

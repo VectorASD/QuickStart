@@ -2,3 +2,4 @@ CompileFlags:
   Add:
     - "-I/opt/python311/lib/python3.11/site-packages/torch/include"
     - "-I/opt/python311/lib/python3.11/site-packages/torch/include/torch/csrc/api/include"
+    - "-I${workspaceFolder}/env/include"

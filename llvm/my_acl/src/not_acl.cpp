@@ -1,5 +1,6 @@
 #include "common.h"
 #include "op_profiler.h"  // log_op_timings, reset_op_timings
+#include "../env/include/runtime/runtime/rt.h"
 
 #include <iostream>  // cout, endl
 #include <cstdarg>   // va_end, va_list, va_start
@@ -12,19 +13,13 @@
 
 void __not_acl_placeholder() {}
 
-static uint32_t g_device_count = 1;
-static uint32_t g_current_device = 0;
-
-static int64_t info_ai_core_num     = 28;
-static int64_t info_cube_core_num   = info_ai_core_num;
-static int64_t info_vector_core_num = info_ai_core_num * 2;
-static int64_t info_L2_size         = 112LL * 1024 * 1024;               // 112 MiB
-static int64_t info_GM_size         = (79LL * 1024 + 736) * 1024 * 1024; // 79 Gb, 736 Mb
-
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+static int64_t info_L2_size         = 112LL * 1024 * 1024;               // 112 MiB
+static int64_t info_GM_size         = (79LL * 1024 + 736) * 1024 * 1024; // 79 Gb, 736 Mb
 
 
 // ~~~ cann-npu-runtime/runtime/include/external/acl/acl_base_rt.h ~~~
@@ -60,12 +55,18 @@ ACL_FUNC_VISIBILITY aclError aclGetDeviceCapability(uint32_t deviceId, aclDevice
         return ACL_ERROR_INVALID_PARAM;
     }
 
+    uint32_t aiCoreCnt;
+
     switch (deviceInfo) {
         case ACL_DEVICE_INFO_AI_CORE_NUM:
-            *value = info_ai_core_num;
+            if (rtGetAiCoreCount(&aiCoreCnt))
+                return ACL_ERROR_FAILURE;
+            *value = aiCoreCnt;
             break;
         case ACL_DEVICE_INFO_VECTOR_CORE_NUM:
-            *value = info_vector_core_num;
+            if (rtGetAiCoreCount(&aiCoreCnt))
+                return ACL_ERROR_FAILURE;
+            *value = aiCoreCnt * 2;
             break;
         case ACL_DEVICE_INFO_L2_SIZE:
             *value = info_L2_size;
@@ -76,7 +77,6 @@ ACL_FUNC_VISIBILITY aclError aclGetDeviceCapability(uint32_t deviceId, aclDevice
             return ACL_ERROR_INVALID_PARAM;
     }
 
-    log_output(log);
     return ACL_SUCCESS;
 }
 
@@ -163,91 +163,70 @@ ACL_FUNC_VISIBILITY aclError aclrtSynchronizeStreamWithTimeout(aclrtStream strea
     return ACL_SUCCESS;
 }
 
+
 ACL_FUNC_VISIBILITY aclError aclrtGetDeviceCount(uint32_t *count) {
-    *count = g_device_count;
- // std::ostringstream log;
- // log << "[aclrtGetDeviceCount] count=" << *count;
- // log_output(log);
-
-    return ACL_SUCCESS;
+    rtError_t ret = rtGetDeviceCount(reinterpret_cast<int32_t*>(count));
+    return ret ? ACL_ERROR_FAILURE : ACL_SUCCESS;
+}
+ACL_FUNC_VISIBILITY aclError aclrtGetDevice(int32_t *deviceId) {
+    rtError_t ret = rtGetDevice(deviceId);
+    return ret ? ACL_ERROR_FAILURE : ACL_SUCCESS;
+}
+ACL_FUNC_VISIBILITY aclError aclrtSetDevice(int32_t deviceId) {
+    rtError_t ret = rtSetDevice(deviceId);
+    return ret ? ACL_ERROR_FAILURE : ACL_SUCCESS;
+}
+ACL_FUNC_VISIBILITY const char *aclrtGetSocName() {
+    static char buffer[64];
+    rtGetSocVersion(buffer, sizeof(buffer));
+    return buffer;
 }
 
-ACL_FUNC_VISIBILITY const char *aclGetRecentErrMsg() {
-    log_output("[aclGetRecentErrMsg]");
-    return "not-npu: no recent error";
+ACL_FUNC_VISIBILITY aclError aclrtMallocHost(void **hostPtr, size_t size) {
+    switch (rtMallocHost(hostPtr, size, 0)) {
+        case RT_ERROR_NONE:          return ACL_SUCCESS;
+        case RT_ERROR_INVALID_VALUE: return ACL_ERROR_FAILURE;
+        case RT_ERROR_BAD_ALLOC:     return ACL_ERROR_BAD_ALLOC;
+        default:
+            return ACL_ERROR_INTERNAL_ERROR;
+    }
 }
-
 ACL_FUNC_VISIBILITY aclError aclrtFreeHost(void *hostPtr) {
-    std::ostringstream log;
-    log << "[aclrtFreeHost] hostPtr=" << hostPtr;
-    log_output(log);
-
-    free(hostPtr);
-
-    return ACL_SUCCESS;
+    rtError_t ret = rtFreeHost(hostPtr);
+    return ret ? ACL_ERROR_FAILURE : ACL_SUCCESS;
 }
-
-typedef enum aclrtMemMallocPolicy {
-    ACL_MEM_MALLOC_HUGE_FIRST,
-    ACL_MEM_MALLOC_HUGE_ONLY,
-    ACL_MEM_MALLOC_NORMAL_ONLY,
-    ACL_MEM_MALLOC_HUGE_FIRST_P2P,
-    ACL_MEM_MALLOC_HUGE_ONLY_P2P,
-    ACL_MEM_MALLOC_NORMAL_ONLY_P2P,
-    ACL_MEM_MALLOC_HUGE1G_ONLY,
-    ACL_MEM_MALLOC_HUGE1G_ONLY_P2P,
-    ACL_MEM_TYPE_LOW_BAND_WIDTH   = 0x0100,
-    ACL_MEM_TYPE_HIGH_BAND_WIDTH  = 0x1000,
-    ACL_MEM_ACCESS_USER_SPACE_READONLY = 0x100000,
-} aclrtMemMallocPolicy;
 
 ACL_FUNC_VISIBILITY aclError aclrtMalloc(void **devPtr,
                                          size_t size,
                                          aclrtMemMallocPolicy policy) {
-    std::ostringstream log;
-    log << "[aclrtMalloc] size=" << size
-        << " policy=" << policy
-        << " devPtr=" << devPtr;
-
-    if (!devPtr) {
-        log << "\n    devPtr is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log, true);
+    if (!devPtr)
         return ACL_ERROR_INVALID_PARAM;
+    switch(rtMalloc(devPtr, size, 0, 0)) {
+        case RT_ERROR_NONE:          return ACL_SUCCESS;
+        case RT_ERROR_INVALID_VALUE: return ACL_ERROR_FAILURE;
+        case RT_ERROR_BAD_ALLOC:     return ACL_ERROR_BAD_ALLOC;
+        default:
+            return ACL_ERROR_INTERNAL_ERROR;
     }
-
-    // not‑NPU: device memory = обычный malloc
-    void *ptr = malloc(size);
-    *devPtr = ptr;
-
-    log << "\n    allocated" << ptr;
-
-    if (!ptr) {
-        log << "\n    allocation failed → ACL_ERROR_BAD_ALLOC";
-        log_output(log, true);
-        return ACL_ERROR_BAD_ALLOC;
-    }
-
-    log_output(log);
-    return ACL_SUCCESS;
+}
+ACL_FUNC_VISIBILITY aclError aclrtFree(void *devPtr) {
+    rtError_t ret = rtFree(devPtr);
+    return ret ? ACL_ERROR_FAILURE : ACL_SUCCESS;
 }
 
-ACL_FUNC_VISIBILITY aclError aclrtMallocHost(void **hostPtr, size_t size) {
-    std::ostringstream log;
-    log << "[aclrtMallocHost] size=" << size;
+ACL_FUNC_VISIBILITY aclError aclrtMemcpy(void *dst,
+                                         size_t destMax,
+                                         const void *src,
+                                         size_t count,
+                                         aclrtMemcpyKind kind) {
+    rtError_t ret = rtMemcpy(dst, destMax, src, count, static_cast<rtMemcpyKind_t>(kind));
+    return ret ? ACL_ERROR_FAILURE : ACL_SUCCESS;
+}
 
-    void *ptr = malloc(size);
-    *hostPtr = ptr;
 
-    log << "\n    allocated=" << ptr;
-
-    if (!ptr) {
-        log << "\n    allocation failed → ACL_ERROR_BAD_ALLOC";
-        log_output(log, true);
-        return ACL_ERROR_BAD_ALLOC;
-    }
-
-    log_output(log);
-    return ACL_SUCCESS;
+ACL_FUNC_VISIBILITY const char *aclGetRecentErrMsg() {
+    log_output("[aclGetRecentErrMsg]");
+    return "not-npu: no recent error";
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtMallocAlign32(void **devPtr,
@@ -288,68 +267,6 @@ ACL_FUNC_VISIBILITY aclError aclrtMallocAlign32(void **devPtr,
     return ACL_SUCCESS;
 }
 
-ACL_FUNC_VISIBILITY aclError aclrtGetDevice(int32_t *deviceId) {
-    std::ostringstream log;
-    log << "[aclrtGetDevice]";
-
-    if (!deviceId) {
-        log << "\n    deviceId is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log, true);
-        return ACL_ERROR_INVALID_PARAM;
-    }
- // log_output(log);
-
-    *deviceId = g_current_device;
-
-    return ACL_SUCCESS;
-}
-
-ACL_FUNC_VISIBILITY aclError aclrtSetDevice(int32_t deviceId) {
-    std::ostringstream log;
-    log << "[aclrtSetDevice] deviceId=" << deviceId;
-
-    if (deviceId < 0 || deviceId >= g_device_count) {
-        log << "\n    invalid deviceId → ACL_ERROR_INVALID_PARAM";
-        log_output(log, true);
-        return ACL_ERROR_INVALID_PARAM;
-    }
-    log_output(log);
-
-    g_current_device = deviceId;
-
-    return ACL_SUCCESS;
-}
-
-ACL_FUNC_VISIBILITY aclError aclrtMemcpy(void *dst,
-                                         size_t destMax,
-                                         const void *src,
-                                         size_t count,
-                                         aclrtMemcpyKind kind) {
-    std::ostringstream log;
-    log << "[aclrtMemcpy] dst=" << dst
-        << " src=" << src
-        << " count=" << count
-        << " destMax=" << destMax
-        << " kind=" << kind;
-
-    if (!dst || !src) {
-        log << "\n    null pointer → ACL_ERROR_INVALID_PARAM";
-        log_output(log, true);
-        return ACL_ERROR_INVALID_PARAM;
-    }
-
-    if (count > destMax) {
-        log << "\n    count > destMax → ACL_ERROR_INVALID_PARAM";
-        log_output(log, true);
-        return ACL_ERROR_INVALID_PARAM;
-    }
- // log_output(log);
-
-    memcpy(dst, src, count);
-
-    return ACL_SUCCESS;
-}
-
 ACL_FUNC_VISIBILITY aclError aclrtMemcpyAsync(void *dst,
                                               size_t destMax,
                                               const void *src,
@@ -378,26 +295,6 @@ ACL_FUNC_VISIBILITY aclError aclrtMemcpyAsync(void *dst,
     log_output(log);
 
     memcpy(dst, src, count);
-
-    return ACL_SUCCESS;
-}
-
-ACL_FUNC_VISIBILITY aclError aclrtFree(void *devPtr) {
-    std::ostringstream log;
-    log << "[aclrtFree] devPtr=" << devPtr;
-    log_output(log);
-
-    free(devPtr);
-
-    return ACL_SUCCESS;
-}
-
-ACL_FUNC_VISIBILITY aclError aclrtDestroyStream(aclrtStream stream) {
-    std::ostringstream log;
-    log << "[aclrtDestroyStream] stream=" << stream;
-    log_output(log);
-
-    free(stream);
 
     return ACL_SUCCESS;
 }
@@ -454,21 +351,29 @@ ACL_FUNC_VISIBILITY aclError aclrtGetDeviceInfo(uint32_t deviceId, aclrtDevAttr 
         return ACL_ERROR_INVALID_PARAM;
     }
 
+    uint32_t aiCoreCnt;
+
     switch (attr) {
         case ACL_DEV_ATTR_AICPU_CORE_NUM:
             *value = 0; // нет AICPU
             break;
 
         case ACL_DEV_ATTR_AICORE_CORE_NUM:
-            *value = info_ai_core_num;
+            if (rtGetAiCoreCount(&aiCoreCnt))
+                return ACL_ERROR_FAILURE;
+            *value = aiCoreCnt;
             break;
 
         case ACL_DEV_ATTR_CUBE_CORE_NUM:
-            *value = info_cube_core_num;
+            if (rtGetAiCoreCount(&aiCoreCnt))
+                return ACL_ERROR_FAILURE;
+            *value = aiCoreCnt;
             break;
 
         case ACL_DEV_ATTR_VECTOR_CORE_NUM:
-            *value = info_vector_core_num;
+            if (rtGetAiCoreCount(&aiCoreCnt))
+                return ACL_ERROR_FAILURE;
+            *value = aiCoreCnt * 2;
             break;
 
         case ACL_DEV_ATTR_UBUF_PER_VECTOR_CORE:
@@ -556,8 +461,11 @@ ACL_FUNC_VISIBILITY aclError aclrtDeviceCanAccessPeer(int32_t *canAccessPeer,
         return ACL_ERROR_INVALID_PARAM;
     }
 
-    if (deviceId < 0 || deviceId >= (int)g_device_count ||
-        peerDeviceId < 0 || peerDeviceId >= (int)g_device_count) {
+    int32_t device_count;
+    rtGetDeviceCount(&device_count);
+
+    if (deviceId < 0 || deviceId >= device_count ||
+        peerDeviceId < 0 || peerDeviceId >= device_count) {
         log << "\n    invalid deviceId/peerDeviceId → ACL_ERROR_INVALID_PARAM";
         log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
@@ -651,24 +559,12 @@ ACL_FUNC_VISIBILITY aclError aclrtSynchronizeEvent(aclrtEvent event) {
 }
 
 ACL_FUNC_VISIBILITY aclError aclrtCreateStream(aclrtStream *stream) {
-    std::ostringstream log;
-    log << "[aclrtCreateStream]";
-
-    if (!stream) {
-        log << "\n    stream_ptr is null → ACL_ERROR_INVALID_PARAM";
-        log_output(log, true);
-        return ACL_ERROR_INVALID_PARAM;
-    }
-
-    // not‑NPU: создаём фиктивный указатель, чтобы Torch‑NPU был доволен
-    void *fake_stream = malloc(1);
-
-    *stream = fake_stream;
-
-    log << "\n    created stream=" << fake_stream;
-    log_output(log);
-
-    return ACL_SUCCESS;
+    rtError_t ret = rtStreamCreate(stream, 0);
+    return ret ? ACL_ERROR_FAILURE : ACL_SUCCESS;
+}
+ACL_FUNC_VISIBILITY aclError aclrtDestroyStream(aclrtStream stream) {
+    rtError_t ret = rtStreamDestroy(stream);
+    return ret ? ACL_ERROR_FAILURE : ACL_SUCCESS;
 }
 
 static aclrtContext g_current_context = nullptr;
@@ -749,9 +645,52 @@ ACL_FUNC_VISIBILITY aclError aclInit(const char *configPath) {
         return ACL_SUCCESS;
     }
 
+    /*auto home = get_home_path();
+    auto main_dir = home / "not_npu";
+    auto setenv = main_dir / "setenv.sh";
+
+    std::string ccec_content = R"(#!/bin/bash
+if [ "$1" = "-print-targets" ]
+    then echo "hiipu64"
+    else echo "not bisheng OK"
+fi
+)";
+    ensure_file(main_dir / "ccec", ccec_content, true);
+
+    std::string install_content = "version=9.1.0"; // Нужно для get_cann_version из /opt/python311/lib/python3.11/site-packages/torch_npu/utils/collect_env.py
+    ensure_file(main_dir / "ascend_toolkit_install.info", install_content);
+
+    auto main_dir_str = "\"" + main_dir.string() + "\"";
+    std::string setenv_content =
+        "export TRITON_NPU_COMPILER_PATH=" + main_dir_str + "\n"
+        "export ASCEND_HOME_PATH=" + main_dir_str + "\n"
+        "export ASCEND_OPP_PATH=" + main_dir_str + "\n";
+    ensure_file(setenv, setenv_content);
+
+    ensure_directory(main_dir / "runtime");
+    ensure_directory(main_dir / "compiler");
+
+    auto setenv_str = "\"" + setenv.string() + "\"";
+    std::string bashrc_addition =
+        "# NOT_NPU: source custom rc file\n"
+        "if [ -f " + setenv_str + " ]; then\n"
+        "    source " + setenv_str + "\n"
+        "fi";
+
+    const char* env_val = std::getenv("TRITON_NPU_COMPILER_PATH");
+    if (ensure_file_contains(home / ".bashrc", bashrc_addition) || !env_val || !env_val[0]) {
+        std::cerr << ANSI_RED << "[NOT_NPU] ~/.bashrc has been updated. "
+                  << "Please restart your terminal or run 'source ~/.bashrc' "
+                  << "for the environment to take effect in new sessions."
+                  << ANSI_RESET << std::endl;
+        // return ACL_ERROR_UNINITIALIZE; как много слов...
+        // exit(1); Вызывает pybind11::handle::dec_ref за GIL, что разносит систему
+        _exit(1);
+    }*/
+
     g_acl_initialized = true;
 
-    log << "\n    initialized ACL runtime (not‑NPU stub)";
+    log << "\n    initialized ACL runtime";
     log_output(log);
 
     return ACL_SUCCESS;
@@ -762,7 +701,10 @@ ACL_FUNC_VISIBILITY aclError aclrtDeviceEnablePeerAccess(int32_t peerDeviceId, u
     log << "[aclrtDeviceEnablePeerAccess] peerDeviceId=" << peerDeviceId
         << " flags=" << flags;
 
-    if (peerDeviceId < 0 || peerDeviceId >= (int)g_device_count) {
+    int32_t device_count;
+    rtGetDeviceCount(&device_count);
+
+    if (peerDeviceId < 0 || peerDeviceId >= device_count) {
         log << "\n    invalid peerDeviceId → ACL_ERROR_INVALID_PARAM";
         log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
@@ -796,7 +738,10 @@ ACL_FUNC_VISIBILITY aclError aclrtResetDevice(int32_t deviceId) {
     std::ostringstream log;
     log << "[aclrtResetDevice] deviceId=" << deviceId;
 
-    if (deviceId < 0 || deviceId >= (int)g_device_count) {
+    int32_t device_count;
+    rtGetDeviceCount(&device_count);
+
+    if (deviceId < 0 || deviceId >= device_count) {
         log << "\n    invalid deviceId → ACL_ERROR_INVALID_PARAM";
         log_output(log, true);
         return ACL_ERROR_INVALID_PARAM;
@@ -1402,154 +1347,6 @@ MSVP_PROF_API uint64_t MsprofSysCycleTime(void) {
     // not‑NPU: фиктивное значение 1 ns
 
     return 1;
-}
-
-
-
-// ~~~ cann-npu-runtime/runtime/pkg_inc/runtime/runtime/kernel.h ~~~
-
-#define RTS_DLL_EXPORT
-
-#ifndef RTS_API
-#ifdef RTS_DLL_EXPORT
-#define RTS_API __attribute__((visibility("default")))
-#else
-#define RTS_API
-#endif
-#endif
-
-typedef int32_t rtError_t;
-static const int32_t RT_ERROR_NONE = 0; // success
-static const int32_t RT_ERROR_INVALID_VALUE = 1; // ???
-
-typedef struct tagRtDevBinary {
-    uint32_t magic;    // magic number
-    uint32_t version;  // version of binary
-    const void *data;  // binary data
-    uint64_t length;   // binary length
-} rtDevBinary_t;
-
-RTS_API rtError_t rtDevBinaryRegister(const rtDevBinary_t *bin, void **hdl) {
-    std::ostringstream log;
-    log << "[rtDevBinaryRegister] bin=" << bin
-        << " hdl=" << hdl;
-
-    if (!bin || !hdl) {
-        log << "\n    bin or hdl is null → RT_ERROR_INVALID_VALUE";
-        log_output(log);
-        return RT_ERROR_INVALID_VALUE;
-    }
-
-    log << "\n    rtDevBinary_t:"
-        << "\n        magic=" << bin->magic
-        << "\n        version=" << bin->version
-        << "\n        data=" << bin->data
-        << "\n        length=" << bin->length;
-
-    // not‑NPU: не загружаем бинарь, не парсим ELF, не регистрируем ничего.
-    // Просто возвращаем фиктивный handle, чтобы последующие вызовы могли его логировать.
-    *hdl = (void*)bin;
-
-    log << "\n    handle set to bin (fake handle)";
-    log_output(log);
-
-    return RT_ERROR_NONE;
-}
-
-#ifndef char_t
-typedef char char_t;
-#endif
-
-RTS_API rtError_t rtFunctionRegister(void *binHandle, const void *stubFunc, const char_t *stubName,
-                                     const void *kernelInfoExt, uint32_t funcMode) {
-    std::ostringstream log;
-    log << "[rtFunctionRegister] binHandle=" << binHandle
-        << " stubFunc=" << stubFunc
-        << " stubName=" << stubName
-        << " kernelInfoExt=" << kernelInfoExt
-        << " funcMode=" << funcMode;
-
-    if (!binHandle || !stubFunc || !stubName) {
-        log << "\n    invalid argument → RT_ERROR_INVALID_VALUE";
-        log_output(log);
-        return RT_ERROR_INVALID_VALUE;
-    }
-    log_output(log);
-
-    // not‑NPU: Torch-NPU не использует реальную регистрацию функций.
-    // Мы просто логируем и возвращаем успех.
-
-    return RT_ERROR_NONE;
-}
-
-typedef void *rtStream_t;
-
-typedef struct tagRtSmData {
-    uint64_t L2_mirror_addr;          // preload or swap source addr
-    uint32_t L2_data_section_size;    // every data size
-    uint8_t L2_preload;               // 1 - preload from mirrorAddr, 0 - no preload
-    uint8_t modified;                 // 1 - data will be modified by kernel, 0 - no modified
-    uint8_t priority;                 // data priority
-    int8_t prev_L2_page_offset_base;  // remap source section offset
-    uint8_t L2_page_offset_base;      // remap destination section offset
-    uint8_t L2_load_to_ddr;           // 1 - need load out, 0 - no need
-    uint8_t reserved[2];              // reserved
-} rtSmData_t;
-
-typedef struct tagRtSmCtrl {
-    rtSmData_t data[8];  // data description
-    uint64_t size;       // max page Num
-    uint8_t remap[64];   /* just using for static remap mode, default:0xFF
-                          array index: virtual l2 page id, array value: physic l2 page id */
-    uint8_t l2_in_main;  // 0-DDR, 1-L2, default:0xFF
-    uint8_t reserved[3];
-} rtSmDesc_t;
-
-RTS_API rtError_t rtKernelLaunch(const void *stubFunc, uint32_t numBlocks, void *args, uint32_t argsSize,
-                                 rtSmDesc_t *smDesc, rtStream_t stm) {
-    std::ostringstream log;
-    log << "[rtKernelLaunch] stubFunc=" << stubFunc
-        << " numBlocks=" << numBlocks
-        << " args=" << args
-        << " argsSize=" << argsSize
-        << " smDesc=" << smDesc
-        << " stream=" << stm;
-
-    if (!stubFunc) {
-        log << "\n    stubFunc is null → RT_ERROR_INVALID_VALUE";
-        log_output(log);
-        return RT_ERROR_INVALID_VALUE;
-    }
-
-    // Логируем smDesc, если он есть
-    if (smDesc) {
-        log << "\n    rtSmDesc_t:"
-            << "\n        size=" << smDesc->size
-            << "\n        l2_in_main=" << (int)smDesc->l2_in_main
-
-            << "\n        remap[0..7]: ";
-        for (int i = 0; i < 8; i++) {
-            log << (int)smDesc->remap[i] << " ";
-        }
-
-        for (int i = 0; i < 8; i++) {
-            const rtSmData_t &d = smDesc->data[i];
-            log << "\n        data[" << i << "]: L2_mirror_addr=" << d.L2_mirror_addr
-                << " L2_data_section_size=" << d.L2_data_section_size
-                << " L2_preload=" << (int)d.L2_preload
-                << " modified=" << (int)d.modified
-                << " priority=" << (int)d.priority
-                << " prev_L2_page_offset_base=" << (int)d.prev_L2_page_offset_base
-                << " L2_page_offset_base=" << (int)d.L2_page_offset_base
-                << " L2_load_to_ddr=" << (int)d.L2_load_to_ddr;
-        }
-    }
-
-    // not‑NPU: Torch-NPU не использует реальный запуск ядра.
-    log << "\n    kernel launched (fake)";
-    log_output(log);
-
-    return RT_ERROR_NONE;
 }
 
 

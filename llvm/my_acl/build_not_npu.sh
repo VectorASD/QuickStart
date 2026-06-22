@@ -10,7 +10,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 SRC="$SCRIPT_DIR/src"
 OBJ="$SCRIPT_DIR/obj"
-LIB="$SCRIPT_DIR/lib"
+LIB="$SCRIPT_DIR/env/lib64"
+INCLUDE="$SCRIPT_DIR/env/include"
 
 mkdir -p "$OBJ" "$LIB"
 
@@ -33,12 +34,14 @@ TORCH_LINK_FLAGS=(
 )
 
 # ~/QuickStart/llvm/my_acl/build_not_npu.sh
-if ! grep -qxF "export LD_LIBRARY_PATH=\"$LIB:\$LD_LIBRARY_PATH\"" ~/.bashrc; then
-    echo "export LD_LIBRARY_PATH=\"$LIB:\$LD_LIBRARY_PATH\"" >> ~/.bashrc
-    echo "alias build_not_npu=\"$SCRIPT_DIR/build_not_npu.sh\"" >> ~/.bashrc
+BASHRC="$HOME/.bashrc"
+MARKER="source \"$SCRIPT_DIR/env/setenv.sh\""
+if ! grep -qxF "$MARKER" "$BASHRC"; then
+    echo "$MARKER" >> "$BASHRC"
     echo "reopen terminal"
     exit 1
 fi
+
 : << 'COMMENT'
 LEVEL 1:
     build_not_npu && python -c "import torch_npu"   # stage 1, чтобы просто завелись библиотеки .so внутри torch_npu
@@ -133,6 +136,7 @@ build_obj $CC not_acl_tdt_channel.c not_acl_tdt_channel.o
 build_obj $CXX not_acl.cpp             not_acl.o
 build_obj $CXX op_profiler.cpp         op_profiler.o
 build_obj $CXX not_acl_op_compiler.cpp not_acl_op_compiler.o "${TORCH_COMPILE_FLAGS[@]}"
+build_obj $CXX not_runtime.cpp         not_runtime.o
 
 generate_code not_opapi_gen.py         not_opapi_gen.cpp
 build_obj $CXX not_opapi.cpp           not_opapi.o "${TORCH_COMPILE_FLAGS[@]}"
@@ -140,11 +144,14 @@ build_obj $CXX not_opapi.cpp           not_opapi.o "${TORCH_COMPILE_FLAGS[@]}"
 # 2. Линковка разделяемых библиотек (mold ускоряет)
 echo -n "Linking shared libraries... "
 $CC  $MOLD_FLAGS -shared "$OBJ/not_hccl.o"            -o "$LIB/libhccl.so"
+$CC  $MOLD_FLAGS -shared "$OBJ/not_runtime.o"         -o "$LIB/libruntime.so"
 $CC  $MOLD_FLAGS -shared "$OBJ/not_ge_runner.o"       -o "$LIB/libge_runner.so"
 $CC  $MOLD_FLAGS -shared "$OBJ/not_graph.o"           -o "$LIB/libgraph.so"
 $CC  $MOLD_FLAGS -shared "$OBJ/not_acl_tdt_channel.o" -o "$LIB/libacl_tdt_channel.so"
 
-$CXX $MOLD_FLAGS -shared "$OBJ/not_acl.o" "$OBJ/op_profiler.o" -o "$LIB/libascendcl.so"
+$CXX $MOLD_FLAGS -shared "$OBJ/not_acl.o" "$OBJ/op_profiler.o" -o "$LIB/libascendcl.so" \
+    -L"$LIB" -Wl,--no-as-needed -lruntime -Wl,--as-needed \
+    -Wl,-rpath='$ORIGIN'
 $CXX $MOLD_FLAGS -shared "$OBJ/not_opapi.o"                    -o "$LIB/libopapi.so" \
     -L"$LIB" -lascendcl ${TORCH_LINK_FLAGS[@]}
 $CXX $MOLD_FLAGS -shared "$OBJ/not_acl_op_compiler.o"          -o "$LIB/libacl_op_compiler.so" \

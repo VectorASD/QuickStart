@@ -1,0 +1,5 @@
+#!/bin/bash
+if [ "$1" = "-print-targets" ]
+    then echo "hiipu64"
+    else echo "not bisheng OK"
+fi
