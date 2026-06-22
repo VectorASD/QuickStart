@@ -18,3 +18,4 @@ version=9.1.0
 EOF
 
 export NOT_NPU_QUIET=1
+python "$ENV_DIR/triton_patch.py"
