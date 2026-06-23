@@ -1,5 +1,14 @@
+import pyzstd  # sudo pip install pyzstd
+
 from triton.backends import backends
+from triton.runtime.cache import get_cache_manager
+from triton._C.libtriton import ir, passes, ascend
+
+import hashlib
+import pickle
+
 AscendBackend = backends['ascend'].compiler
+
 
 real_add_stages = AscendBackend.add_stages
 def add_stages(self, stages, options, *language):
@@ -12,13 +21,70 @@ def add_stages(self, stages, options, *language):
     assert len(stages) == 3, "Видимо, у вас получился cpu-пайплайн: ttir, ttadapter, llir, cpuasm! А ожидается npu-бэкенд"
     real_ttir, real_ttadapter, real_npubin = stages.values()
 
-    def ttir(src, metadata):
-        print("OKKKKKKKKKKKK")
-        # print(src)
-        return src # real_ttir(src, metadata)
+    def ttir(mod, metadata):
+        if "hash" not in metadata:
+            metadata["hash"] = hashlib.sha256(f"{mod}-{metadata}".encode()).hexdigest()
+        # the same optimize pass for triton-ir as all other backends
+        pass_funcs = (
+            passes.common.add_inliner,
+            passes.ttir.add_combine,
+            passes.common.add_canonicalizer,
+            passes.ttir.add_reorder_broadcast,
+            passes.common.add_cse,
+            passes.common.add_licm,
+            passes.common.add_symbol_dce,
+            passes.ttir.add_loop_unroll,
+        )
+        dumps = [str(mod)]
+        for add_pass in pass_funcs:
+            pm = ir.pass_manager(mod.context)
+          # pm.enable_debug()
+            add_pass(pm)
+            pm.run(mod)
+            dumps.append(str(mod))
+          # print(hashlib.sha256(str(mod).encode()).hexdigest())
+          # получился тот же хеш, что и при монолитном ir.pass_manager!
+        compressed = pyzstd.compress(pickle.dumps(dumps, protocol=4))
+        get_cache_manager(metadata["hash"]).put(compressed, "stage_1.pkl.zstd", binary=True)
+        return mod
 
-    def ttadapter(src, metadata):
-        return str(src) # real_ttadapter(src, metadata)
+    def _is_auto_map_parallel_blocks_enabled() -> bool:
+        return os.getenv("TRITON_ALL_BLOCKS_PARALLEL", "false").lower() in ("true", "1")
+    def ttadapter(mod, metadata, *, named_ops=True):
+        # use triton_adapter to lower Triton-MLIR to linalg
+        # Get Triton-MLIR as string
+        passes = []; add = passes.append
+
+        add(lambda pm: ascend.passes.ttir.add_auto_blockify(pm, 1 if not _is_auto_map_parallel_blocks_enabled() else metadata["auto_blockify_size"]))
+        if (metadata["add_auto_scheduling"]):
+            add(lambda pm: ascend.passes.ttir.add_dag_sync(pm))
+            add(lambda pm: ascend.passes.ttir.add_dag_scope(pm))
+            add(lambda pm: passes.common.add_cse(pm))
+            add(lambda pm: passes.common.add_canonicalizer(pm))
+            add(lambda pm: ascend.passes.ttir.add_dag_ssbuffer(pm))
+            add(lambda pm: passes.common.add_cse(pm))
+            add(lambda pm: passes.common.add_canonicalizer(pm))
+        add(lambda pm: ascend.passes.ttir.add_triton_to_structure(pm, metadata["enable_mask_fallback_conversion"], metadata["optimize_dynamic_offset"]))
+        add(lambda pm: ascend.passes.ttir.add_discrete_mask_access_conversion(pm, metadata["compile_on_910_95"], metadata["force_simt_template"]))
+        add(lambda pm: ascend.passes.ttir.add_triton_to_annotation(pm))
+        add(lambda pm: ascend.passes.ttir.add_triton_to_unstructure(pm, metadata["compile_on_910_95"], metadata["force_simt_template"]))
+        add(lambda pm: ascend.passes.ttir.add_triton_to_hivm(pm))
+        add(lambda pm: ascend.passes.ttir.add_triton_to_hfusion(pm))
+        add(lambda pm: ascend.passes.ttir.add_triton_to_llvm(pm))
+        add(lambda pm: ascend.passes.ttir.add_bubble_up_operation(pm))
+        add(lambda pm: ascend.passes.ttir.add_triton_to_structure(pm, metadata["enable_mask_fallback_conversion"], metadata["optimize_dynamic_offset"]))
+        add(lambda pm: ascend.passes.ttir.add_triton_to_linalg(pm, False, named_ops, metadata["enable_nd2nz_on_vector"], metadata["enable_select_analysis"], metadata["compile_on_910_95"]))
+
+        dumps = []
+        for add_pass in passes:
+            pm = ir.pass_manager(mod.context)
+          # pm.enable_debug()
+            add_pass(pm)
+            pm.run(mod)
+            dumps.append(str(mod))
+        compressed = pyzstd.compress(pickle.dumps(dumps, protocol=4))
+        get_cache_manager(metadata["hash"]).put(compressed, "stage_2.pkl.zstd", binary=True)
+        return str(mod)
 
     def npubin(linalg, metadata):
         import re
@@ -45,6 +111,34 @@ def add_stages(self, stages, options, *language):
     stages["ttadapter"] = ttadapter
     stages["npubin"]    = npubin
 AscendBackend.add_stages = add_stages
+
+
+
+from triton.runtime.driver import driver
+from functools import wraps
+
+launcher_cls = driver.active.launcher_cls
+@wraps(launcher_cls.__call__)
+def patched_launcher(self, *args, **kwargs):
+    print("LOL!", args)
+    return patched_launcher.__wrapped__(self, *args, **kwargs)
+launcher_cls.__call__ = patched_launcher
+
+
+
+"""
+from triton.compiler.compiler import CompiledKernel
+
+def my_enter_hook(launch_metadata):
+    # launch_metadata — словарь с информацией о запуске
+    print("Before kernel launch:", launch_metadata.get())
+
+def my_exit_hook(launch_metadata):
+    print("After kernel launch:", launch_metadata.get())
+
+CompiledKernel.launch_enter_hook = my_enter_hook
+CompiledKernel.launch_exit_hook = my_exit_hook
+"""
 
 
 
