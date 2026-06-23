@@ -184,7 +184,7 @@ RTS_API rtError_t rtKernelLaunch(const void *stubFunc, uint32_t numBlocks, void 
     }
 
     log << "\n    kernel NOT launched";
-    log_output(log, true);
+    log_output(log);
 
     return RT_ERROR_NONE;
 }
@@ -287,7 +287,14 @@ RTS_API rtError_t rtStreamCreate(rtStream_t *stream, int32_t priority) {
         return RT_ERROR_INVALID_VALUE;
     }
 
-    *stream = malloc(1);
+    void *ptr = malloc(1);
+    if (!ptr) {
+        log << "\n    allocation failed → RT_ERROR_BAD_ALLOC";
+        log_output(log, true);
+        return RT_ERROR_BAD_ALLOC;
+    }
+
+    *stream = ptr;
     log << "\n    created stream=" << stream;
     log_output(log);
 
@@ -315,7 +322,7 @@ RTS_API rtError_t rtMallocHost(void **hostPtr, uint64_t size, const uint16_t mod
 
     void *ptr = malloc(size);
     if (!ptr) {
-        log << "\n    allocation failed → ACL_ERROR_BAD_ALLOC";
+        log << "\n    allocation failed → RT_ERROR_BAD_ALLOC";
         log_output(log, true);
         return RT_ERROR_BAD_ALLOC;
     }

@@ -310,6 +310,38 @@ ACL_FUNC_VISIBILITY aclError aclrtProcessReport(int32_t timeout) {
     return ACL_SUCCESS;
 }
 
+
+ACL_FUNC_VISIBILITY aclError aclrtCreateEventWithFlag(aclrtEvent *event, uint32_t flag) {
+    std::ostringstream log;
+    log << "[aclrtCreateEventWithFlag] flag=" << flag;
+
+    if (!event) {
+        log << "\n    event_ptr is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log, true);
+        return ACL_ERROR_INVALID_PARAM;
+    }
+
+    // not‑NPU: создаём фиктивный event, чтобы Torch‑NPU был доволен
+    void *not_event = malloc(1);
+    if (!not_event) {
+        log << "\n    malloc failed → ACL_ERROR_BAD_ALLOC";
+        log_output(log, true);
+        return ACL_ERROR_BAD_ALLOC;
+    }
+
+    *event = not_event;
+    log << "\n    created event=" << not_event;
+    log_output(log);
+
+    return ACL_SUCCESS;
+}
+ACL_FUNC_VISIBILITY aclError aclrtCreateEvent(aclrtEvent *event) {
+    return aclrtCreateEventWithFlag(event, 0);
+}
+ACL_FUNC_VISIBILITY aclError aclrtCreateEventExWithFlag(aclrtEvent *event, uint32_t flag) {
+    return aclrtCreateEventWithFlag(event, flag);
+}
+
 ACL_FUNC_VISIBILITY aclError aclrtEventElapsedTime(float *ms, aclrtEvent startEvent, aclrtEvent endEvent) {
     std::ostringstream log;
     log << "[aclrtEventElapsedTime] ms=" << ms
@@ -339,6 +371,51 @@ ACL_FUNC_VISIBILITY aclError aclrtRecordEvent(aclrtEvent event, aclrtStream stre
 
     return ACL_SUCCESS;
 }
+
+ACL_FUNC_VISIBILITY aclError aclrtDestroyEvent(aclrtEvent event) {
+    std::ostringstream log;
+    log << "[aclrtDestroyEvent] event=" << event;
+    log_output(log);
+
+    // not‑NPU: no-op
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtStreamWaitEvent(aclrtStream stream, aclrtEvent event) {
+    std::ostringstream log;
+    log << "[aclrtStreamWaitEvent] stream=" << stream
+        << " event=" << event;
+    log_output(log);
+
+    // not‑NPU: Torch-NPU не использует реальные события и не ждёт их.
+    // Полный no-op.
+
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtSynchronizeEvent(aclrtEvent event) {
+    std::ostringstream log;
+    log << "[aclrtSynchronizeEvent] event=" << event;
+    log_output(log);
+
+    // not‑NPU: Torch-NPU не использует реальные события.
+    // Полный no-op.
+
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtResetEvent(aclrtEvent event, aclrtStream stream) {
+    std::ostringstream log;
+    log << "[aclrtResetEvent] event=" << event
+        << " stream=" << stream;
+    log_output(log);
+
+    // not‑NPU: Torch-NPU не использует реальные события.
+    // Полный no-op.
+
+    return ACL_SUCCESS;
+}
+
 
 ACL_FUNC_VISIBILITY aclError aclrtGetDeviceInfo(uint32_t deviceId, aclrtDevAttr attr, int64_t *value) {
     std::ostringstream log;
@@ -439,15 +516,6 @@ ACL_FUNC_VISIBILITY aclError aclFinalize() {
     return ACL_SUCCESS;
 }
 
-ACL_FUNC_VISIBILITY aclError aclrtDestroyEvent(aclrtEvent event) {
-    std::ostringstream log;
-    log << "[aclrtDestroyEvent] event=" << event;
-    log_output(log);
-
-    // not‑NPU: no-op
-    return ACL_SUCCESS;
-}
-
 ACL_FUNC_VISIBILITY aclError aclrtDeviceCanAccessPeer(int32_t *canAccessPeer,
                                                       int32_t deviceId,
                                                       int32_t peerDeviceId) {
@@ -536,29 +604,6 @@ ACL_FUNC_VISIBILITY aclError aclmdlSetDump(const char *dumpCfgPath) {
     return ACL_SUCCESS;
 }
 
-ACL_FUNC_VISIBILITY aclError aclrtStreamWaitEvent(aclrtStream stream, aclrtEvent event) {
-    std::ostringstream log;
-    log << "[aclrtStreamWaitEvent] stream=" << stream
-        << " event=" << event;
-    log_output(log);
-
-    // not‑NPU: Torch-NPU не использует реальные события и не ждёт их.
-    // Полный no-op.
-
-    return ACL_SUCCESS;
-}
-
-ACL_FUNC_VISIBILITY aclError aclrtSynchronizeEvent(aclrtEvent event) {
-    std::ostringstream log;
-    log << "[aclrtSynchronizeEvent] event=" << event;
-    log_output(log);
-
-    // not‑NPU: Torch-NPU не использует реальные события.
-    // Полный no-op.
-
-    return ACL_SUCCESS;
-}
-
 ACL_FUNC_VISIBILITY aclError aclrtCreateStream(aclrtStream *stream) {
     rtError_t ret = rtStreamCreate(stream, 0);
     return ret ? ACL_ERROR_FAILURE : ACL_SUCCESS;
@@ -599,6 +644,11 @@ ACL_FUNC_VISIBILITY aclError aclrtGetCurrentContext(aclrtContext *context) {
     // Если контекст ещё не создан — создаём фиктивный
     if (!g_current_context) {
         g_current_context = malloc(1);
+        if (!g_current_context) {
+            log << "\n    malloc failed → ACL_ERROR_BAD_ALLOC";
+            log_output(log, true);
+            return ACL_ERROR_BAD_ALLOC;
+        }
         log << "\n    created default NOT context";
     }
 
@@ -719,18 +769,6 @@ ACL_FUNC_VISIBILITY aclError aclrtDeviceEnablePeerAccess(int32_t peerDeviceId, u
     // not‑NPU: P2P не поддерживается, но enable должен возвращать успех
     log << "\n    P2P unsupported → no-op";
     log_output(log);
-
-    return ACL_SUCCESS;
-}
-
-ACL_FUNC_VISIBILITY aclError aclrtResetEvent(aclrtEvent event, aclrtStream stream) {
-    std::ostringstream log;
-    log << "[aclrtResetEvent] event=" << event
-        << " stream=" << stream;
-    log_output(log);
-
-    // not‑NPU: Torch-NPU не использует реальные события.
-    // Полный no-op.
 
     return ACL_SUCCESS;
 }
@@ -890,7 +928,7 @@ ACL_FUNC_VISIBILITY aclError aclrtPointerGetAttributes(const void *ptr,
     attributes->location.id = 0;
 
     log << "\n    type=DEVICE";
-    log_output(log, true);
+    log_output(log);
     return ACL_SUCCESS;
 }
 
