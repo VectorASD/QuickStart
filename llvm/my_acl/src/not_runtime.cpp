@@ -27,8 +27,8 @@ RTS_API rtError_t rtGetDeviceCount(int32_t *count) {
     }
 
     *count = g_device_count;
- // log << " count=" << *count;
- // log_output(log);
+    log << " count=" << *count;
+    log_output(log);
 
     return RT_ERROR_NONE;
 }
@@ -43,8 +43,8 @@ RTS_API rtError_t rtGetDevice(int32_t *deviceId) {
     }
 
     *deviceId = g_current_device;
- // log << " device=" << *deviceId;
- // log_output(log);
+    log << " device=" << *deviceId;
+    log_output(log);
 
     return RT_ERROR_NONE;
 }
@@ -58,8 +58,8 @@ RTS_API rtError_t rtSetDevice(int32_t deviceId) {
         return RT_ERROR_INVALID_VALUE;
     }
 
- // g_current_device = deviceId;
- // log_output(log);
+    g_current_device = deviceId;
+    log_output(log);
 
     return RT_ERROR_NONE;
 }
@@ -68,9 +68,9 @@ rtError_t rtGetSocVersion(char_t *ver, const uint32_t maxLen) {
     std::strncpy(ver, g_device_name, maxLen - 1);
     ver[maxLen - 1] = '\0';
 
- // std::ostringstream log;
- // log << "[rtGetSocVersion] returned='" << ver << '\'';
- // log_output(log);
+    std::ostringstream log;
+    log << "[rtGetSocVersion] returned='" << ver << '\'';
+    log_output(log);
 
     return RT_ERROR_NONE;
 }
@@ -86,11 +86,12 @@ RTS_API rtError_t rtGetAiCoreCount(uint32_t *aiCoreCnt) {
     }
 
     *aiCoreCnt = info_ai_core_num;
- // log << " aiCoreCnt=" << *aiCoreCnt;
- // log_output(log);
+    log << " aiCoreCnt=" << *aiCoreCnt;
+    log_output(log);
 
     return RT_ERROR_NONE;
 }
+
 
 
 RTS_API rtError_t rtDevBinaryRegister(const rtDevBinary_t *bin, void **hdl) {
@@ -100,7 +101,7 @@ RTS_API rtError_t rtDevBinaryRegister(const rtDevBinary_t *bin, void **hdl) {
 
     if (!bin || !hdl) {
         log << "\n    bin or hdl is null → RT_ERROR_INVALID_VALUE";
-        log_output(log);
+        log_output(log, true);
         return RT_ERROR_INVALID_VALUE;
     }
 
@@ -114,8 +115,8 @@ RTS_API rtError_t rtDevBinaryRegister(const rtDevBinary_t *bin, void **hdl) {
     // Просто возвращаем фиктивный handle, чтобы последующие вызовы могли его логировать.
     *hdl = (void*)bin;
 
-    log << "\n    handle set to bin (fake handle)";
-    log_output(log);
+    log << "\n    handle NOT set to bin";
+    log_output(log, true);
 
     return RT_ERROR_NONE;
 }
@@ -131,16 +132,17 @@ RTS_API rtError_t rtFunctionRegister(void *binHandle, const void *stubFunc, cons
 
     if (!binHandle || !stubFunc || !stubName) {
         log << "\n    invalid argument → RT_ERROR_INVALID_VALUE";
-        log_output(log);
+        log_output(log, true);
         return RT_ERROR_INVALID_VALUE;
     }
-    log_output(log);
+    log_output(log, true);
 
     // not‑NPU: Torch-NPU не использует реальную регистрацию функций.
     // Мы просто логируем и возвращаем успех.
 
     return RT_ERROR_NONE;
 }
+
 
 RTS_API rtError_t rtKernelLaunch(const void *stubFunc, uint32_t numBlocks, void *args, uint32_t argsSize,
                                  rtSmDesc_t *smDesc, rtStream_t stm) {
@@ -154,7 +156,7 @@ RTS_API rtError_t rtKernelLaunch(const void *stubFunc, uint32_t numBlocks, void 
 
     if (!stubFunc) {
         log << "\n    stubFunc is null → RT_ERROR_INVALID_VALUE";
-        log_output(log);
+        log_output(log, true);
         return RT_ERROR_INVALID_VALUE;
     }
 
@@ -165,9 +167,8 @@ RTS_API rtError_t rtKernelLaunch(const void *stubFunc, uint32_t numBlocks, void 
             << "\n        l2_in_main=" << (int)smDesc->l2_in_main
 
             << "\n        remap[0..7]: ";
-        for (int i = 0; i < 8; i++) {
-            log << (int)smDesc->remap[i] << " ";
-        }
+        for (int i = 0; i < 8; i++)
+            log << (int) smDesc->remap[i] << " ";
 
         for (int i = 0; i < 8; i++) {
             const rtSmData_t &d = smDesc->data[i];
@@ -182,12 +183,98 @@ RTS_API rtError_t rtKernelLaunch(const void *stubFunc, uint32_t numBlocks, void 
         }
     }
 
-    // not‑NPU: Torch-NPU не использует реальный запуск ядра.
-    log << "\n    kernel launched (fake)";
-    log_output(log);
+    log << "\n    kernel NOT launched";
+    log_output(log, true);
 
     return RT_ERROR_NONE;
 }
+
+RTS_API rtError_t rtKernelLaunchWithFlag(const void *stubFunc, uint32_t numBlocks,
+                                         rtArgsEx_t *argsInfo, rtSmDesc_t *smDesc,
+                                         rtStream_t stm, uint32_t flags) {
+    return rtKernelLaunchWithFlagV2(stubFunc, numBlocks, argsInfo, smDesc, stm, flags, nullptr);
+}
+
+RTS_API rtError_t rtKernelLaunchWithFlagV2(const void *stubFunc, uint32_t numBlocks,
+                                           rtArgsEx_t *argsInfo, rtSmDesc_t *smDesc,
+                                           rtStream_t stm, uint32_t flags,
+                                           const rtTaskCfgInfo_t *cfgInfo) {
+    std::ostringstream log;
+    log << "[rtKernelLaunchWithFlagV2] stubFunc=" << stubFunc
+        << " numBlocks=" << numBlocks
+        << " argsInfo=" << argsInfo
+        << " smDesc=" << smDesc
+        << " stream=" << stm
+        << " flags=" << flags
+        << " cfgInfo=" << cfgInfo;
+
+    if (!stubFunc) {
+        log << "\n    stubFunc is null → RT_ERROR_INVALID_VALUE";
+        log_output(log, true);
+        return RT_ERROR_INVALID_VALUE;
+    }
+
+    // Логируем argsInfo
+    if (argsInfo) {
+        log << "\n    rtArgsEx_t:"
+            << "\n        args=" << argsInfo->args
+            << " argsSize=" << argsInfo->argsSize
+            << " tilingAddrOffset=" << argsInfo->tilingAddrOffset
+            << " tilingDataOffset=" << argsInfo->tilingDataOffset
+            << " hostInputInfoNum=" << argsInfo->hostInputInfoNum
+            << " hasTiling=" << (int)argsInfo->hasTiling
+            << " isNoNeedH2DCopy=" << (int)argsInfo->isNoNeedH2DCopy;
+        if (argsInfo->hostInputInfoPtr && argsInfo->hostInputInfoNum > 0) {
+            for (uint16_t i = 0; i < argsInfo->hostInputInfoNum; ++i) {
+                const auto &hi = argsInfo->hostInputInfoPtr[i];
+                log << "\n        hostInputInfo[" << i << "]: addrOffset=" << hi.addrOffset
+                    << " dataOffset=" << hi.dataOffset;
+            }
+        }
+    }
+
+    // Логируем smDesc (как в rtKernelLaunch)
+    if (smDesc) {
+        log << "\n    rtSmDesc_t:"
+            << "\n        size=" << smDesc->size
+            << "\n        l2_in_main=" << (int)smDesc->l2_in_main;
+
+        log << "\n        remap[0..7]: ";
+        for (int i = 0; i < 8; i++)
+            log << (int)smDesc->remap[i] << " ";
+
+        for (int i = 0; i < 8; i++) {
+            const rtSmData_t &d = smDesc->data[i];
+            log << "\n        data[" << i << "]: L2_mirror_addr=" << d.L2_mirror_addr
+                << " L2_data_section_size=" << d.L2_data_section_size
+                << " L2_preload=" << (int)d.L2_preload
+                << " modified=" << (int)d.modified
+                << " priority=" << (int)d.priority
+                << " prev_L2_page_offset_base=" << (int)d.prev_L2_page_offset_base
+                << " L2_page_offset_base=" << (int)d.L2_page_offset_base
+                << " L2_load_to_ddr=" << (int)d.L2_load_to_ddr;
+        }
+    }
+
+    // Логируем cfgInfo
+    if (cfgInfo) {
+        log << "\n    rtTaskCfgInfo_t:"
+            << "\n        qos=" << (int)cfgInfo->qos
+            << " partId=" << (int)cfgInfo->partId
+            << " schemMode=" << (int)cfgInfo->schemMode
+            << " d2dCrossFlag=" << cfgInfo->d2dCrossFlag
+            << " blockDimOffset=" << cfgInfo->blockDimOffset
+            << " dumpflag=" << (int)cfgInfo->dumpflag
+            << " neverTimeout=" << (int)cfgInfo->neverTimeout
+            << " localMemorySize=" << cfgInfo->localMemorySize;
+    }
+
+    log << "\n    kernel NOT launched";
+    log_output(log, true);
+
+    return RT_ERROR_NONE;
+}
+
 
 
 RTS_API rtError_t rtStreamCreate(rtStream_t *stream, int32_t priority) {

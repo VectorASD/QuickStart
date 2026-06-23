@@ -1,6 +1,5 @@
-#include <stdint.h>  // uint16_t, uint32_t, uint64_t
-#include <thread>    // get_id, thread
-#include "../../../src/common.h"
+#include <cstddef>   // size_t
+#include <stdint.h>  // int32_t, uint16_t, uint32_t, uint64_t, uint8_t
 
 
 #ifndef ACL_H
@@ -15,11 +14,15 @@
 #define MSPROF_MAX_DEV_NUM 64
 #define MSPROF_COMPACT_INFO_DATA_LENGTH 40
 
-#if (defined(_WIN32) || defined(_WIN64) || defined(_MSC_VER))
-#define MSVP_PROF_API __declspec(dllexport)
-#else
-#define MSVP_PROF_API __attribute__((visibility("default")))
-#endif
+#define MSPROF_REPORT_NODE_LEVEL        10000U
+#define MSPROF_REPORT_NODE_BASIC_INFO_TYPE       0U  /* type info: node_basic_info */
+#define MSPROF_REPORT_NODE_TENSOR_INFO_TYPE      1U  /* type info: tensor_info */
+#define MSPROF_REPORT_NODE_CONTEXT_ID_INFO_TYPE  4U  /* type info: context_id_info */
+#define MSPROF_REPORT_NODE_LAUNCH_TYPE           5U  /* type info: launch */
+
+#define MSPROF_GE_TENSOR_DATA_SHAPE_LEN 8
+#define MSPROF_GE_TENSOR_DATA_NUM 5
+#define MSPROF_CTX_ID_MAX_NUM 55
 
 
 struct MsprofCommandHandleParams {
@@ -41,27 +44,6 @@ struct MsprofCommandHandle {
     struct MsprofCommandHandleParams params;
 };
 
-typedef void* VOID_PTR;
-
-MSVP_PROF_API uint64_t MsprofGetHashId(const char *hashInfo, size_t length) {
-    std::ostringstream log;
-    log << "[MsprofGetHashId] hashInfo=" << hashInfo
-        << " length=" << length;
-
-    // простой детерминированный FNV‑1a hash
-    uint64_t h = 1469598103934665603ULL;
-    const uint8_t *p = reinterpret_cast<const uint8_t*>(hashInfo);
-    for (size_t i = 0; i < length; ++i) {
-        h ^= p[i];
-        h *= 1099511628211ULL;
-    }
-
-    log << "\n    h = " << h;
-    log_output(log);
-
-    return h;
-}
-
 struct MsprofApi { // for MsprofReportApi
 #ifdef __cplusplus
     uint16_t magicNumber = MSPROF_REPORT_DATA_MAGIC_NUM;
@@ -76,59 +58,6 @@ struct MsprofApi { // for MsprofReportApi
     uint64_t endTime;
     uint64_t itemId;
 };
-
-MSVP_PROF_API int32_t MsprofReportApi(uint32_t nonPersistantFlag, const struct MsprofApi *api) {
-    std::ostringstream log;
-    log << "[MsprofReportApi] nonPersistantFlag=" << nonPersistantFlag
-        << " api=" << api;
-
-    if (!api) {
-        log << "\n    api is null → FAILED";
-        log_output(log);
-        return -1;
-    }
-
-    // not‑NPU: заполняем структуру здесь же (как будто драйвер это делает)
-    MsprofApi filled = *api;
-
-    // thread id
-    filled.threadId = static_cast<uint32_t>(
-        std::hash<std::thread::id>{}(std::this_thread::get_id())
-    );
-
-    // timestamps
-    auto now = std::chrono::high_resolution_clock::now().time_since_epoch();
-    uint64_t t = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
-    filled.beginTime = t;
-    filled.endTime = t + 100; // фиктивная длительность 100 ns
-
-    // itemId = FNV‑1a(type + level)
-    {
-        uint64_t h = 1469598103934665603ULL;
-        uint64_t x = (static_cast<uint64_t>(filled.type) << 32) | filled.level;
-        for (int i = 0; i < 8; ++i) {
-            h ^= (x >> (i * 8)) & 0xFF;
-            h *= 1099511628211ULL;
-        }
-        filled.itemId = h;
-    }
-
-    // reserve всегда 0
-    filled.reserve = 0;
-
-    // magicNumber уже установлен конструктором
-    log << "\n    filled: magic=" << filled.magicNumber
-        << " level=" << filled.level
-        << " type=" << filled.type
-        << " threadId=" << filled.threadId
-        << " begin=" << filled.beginTime
-        << " end=" << filled.endTime
-        << " itemId=" << filled.itemId;
-    log_output(log);
-
-    // not‑NPU: no-op
-    return 0;
-}
 
 struct MsprofNodeBasicInfo {
     uint64_t opName;
@@ -200,71 +129,87 @@ struct MsprofCompactInfo {  // for MsprofReportCompactInfo buffer data
     } data;
 };
 
-MSVP_PROF_API int32_t MsprofReportCompactInfo(uint32_t nonPersistantFlag, const VOID_PTR data, uint32_t length) {
-    std::ostringstream log;
-    log << "[MsprofReportCompactInfo] nonPersistantFlag=" << nonPersistantFlag
-        << " length=" << length
-        << " data=" << data;
+#define MSPROF_ADDTIONAL_INFO_DATA_LENGTH (232)
+struct MsprofAdditionalInfo {  // for MsprofReportAdditionalInfo buffer data
+#ifdef __cplusplus
+    uint16_t magicNumber = MSPROF_REPORT_DATA_MAGIC_NUM;
+#else
+    uint16_t magicNumber;
+#endif
+    uint16_t level;
+    uint32_t type;
+    uint32_t threadId;
+    uint32_t dataLen;
+    uint64_t timeStamp;
+    uint8_t  data[MSPROF_ADDTIONAL_INFO_DATA_LENGTH];
+};
 
-    if (!data) {
-        log << "\n    data is null → FAILED";
-        log_output(log);
-        return -1;
-    }
+struct MsrofTensorData {
+    uint32_t tensorType;
+    uint32_t format;
+    uint32_t dataType;
+    uint32_t shape[MSPROF_GE_TENSOR_DATA_SHAPE_LEN];
+};
 
-    if (length < sizeof(MsprofCompactInfo)) {
-        log << "\n    length < sizeof(MsprofCompactInfo) → FAILED";
-        log_output(log);
-        return -1;
-    }
+struct MsprofTensorInfo {
+    uint64_t opName;
+    uint32_t tensorNum;
+    struct MsrofTensorData tensorData[MSPROF_GE_TENSOR_DATA_NUM];
+};
 
-    const MsprofCompactInfo *src = reinterpret_cast<const MsprofCompactInfo*>(data);
-    MsprofCompactInfo filled = *src;
+struct MsprofContextIdInfo {
+    uint64_t opName;
+    uint32_t ctxIdNum;
+    uint32_t ctxIds[MSPROF_CTX_ID_MAX_NUM];
+};
 
-    // thread id
-    filled.threadId = static_cast<uint32_t>(
-        std::hash<std::thread::id>{}(std::this_thread::get_id())
-    );
 
-    // timestamp
-    auto now = std::chrono::high_resolution_clock::now().time_since_epoch();
-    filled.timeStamp = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+enum MsprofGeTaskType { 
+    MSPROF_GE_TASK_TYPE_AI_CORE = 0,
+    MSPROF_GE_TASK_TYPE_AI_CPU,
+    MSPROF_GE_TASK_TYPE_AIV,
+    MSPROF_GE_TASK_TYPE_WRITE_BACK,
+    MSPROF_GE_TASK_TYPE_MIX_AIC,
+    MSPROF_GE_TASK_TYPE_MIX_AIV,
+    MSPROF_GE_TASK_TYPE_FFTS_PLUS,
+    MSPROF_GE_TASK_TYPE_DSA,
+    MSPROF_GE_TASK_TYPE_DVPP,
+    MSPROF_GE_TASK_TYPE_HCCL,
+    MSPROF_GE_TASK_TYPE_FUSION,
+    MSPROF_GE_TASK_TYPE_INVALID
+};
 
-    // magic number (если вдруг не установлен)
-    filled.magicNumber = MSPROF_REPORT_DATA_MAGIC_NUM;
+enum MsprofGeTensorType {
+    MSPROF_GE_TENSOR_TYPE_INPUT = 0,
+    MSPROF_GE_TENSOR_TYPE_OUTPUT,
+};
 
-    // dataLen — оставляем как есть, Torch-NPU не проверяет
-    // union data — не трогаем, просто логируем
 
-    log << "\n    filled: magic=" << filled.magicNumber
-        << " level=" << filled.level
-        << " type=" << filled.type
-        << " threadId=" << filled.threadId
-        << " dataLen=" << filled.dataLen
-        << " timeStamp=" << filled.timeStamp;
+typedef int32_t (*ProfCommandHandle)(uint32_t type, void *data, uint32_t len);
 
-    // Логируем первые 32 байта info[] для отладки
-    log << "\n    data[0..31]: ";
-    for (int i = 0; i < 32; ++i) {
-        uint8_t b = filled.data.info[i];
-        const char *hex = "0123456789abcdef";
-        char hi = hex[(b >> 4) & 0xF];
-        char lo = hex[b & 0xF];
-        log << hi << lo << " ";
-    }
-    log_output(log);
 
-    // not‑NPU: no-op
-    return 0;
+#if (defined(_WIN32) || defined(_WIN64) || defined(_MSC_VER))
+#define MSVP_PROF_API __declspec(dllexport)
+#else
+#define MSVP_PROF_API __attribute__((visibility("default")))
+#endif
+
+typedef void* VOID_PTR;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+MSVP_PROF_API uint64_t MsprofGetHashId(const char *hashInfo, size_t length);
+MSVP_PROF_API int32_t MsprofReportApi(uint32_t nonPersistantFlag, const struct MsprofApi *api);
+MSVP_PROF_API int32_t MsprofReportCompactInfo(uint32_t nonPersistantFlag, const VOID_PTR data, uint32_t length);
+MSVP_PROF_API uint64_t MsprofSysCycleTime(void);
+MSVP_PROF_API int32_t MsprofReportAdditionalInfo(uint32_t nonPersistantFlag, const VOID_PTR data, uint32_t length);
+MSVP_PROF_API int32_t MsprofRegisterCallback(uint32_t moduleId, ProfCommandHandle handle);
+
+#ifdef __cplusplus
 }
-
-MSVP_PROF_API uint64_t MsprofSysCycleTime(void) {
-    log_output("[MsprofSysCycleTime]");
-
-    // not‑NPU: фиктивное значение 1 ns
-
-    return 1;
-}
+#endif
 
 
 #endif  // ACL_H

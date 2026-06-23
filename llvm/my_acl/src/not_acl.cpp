@@ -1,6 +1,7 @@
 #include "common.h"
 #include "op_profiler.h"  // log_op_timings, reset_op_timings
 #include "../env/include/runtime/runtime/rt.h"
+#include "../env/include/acl/acl.h"
 
 #include <iostream>  // cout, endl
 #include <cstdarg>   // va_end, va_list, va_start
@@ -598,7 +599,7 @@ ACL_FUNC_VISIBILITY aclError aclrtGetCurrentContext(aclrtContext *context) {
     // Если контекст ещё не создан — создаём фиктивный
     if (!g_current_context) {
         g_current_context = malloc(1);
-        log << "\n    created default fake context";
+        log << "\n    created default NOT context";
     }
 
     *context = g_current_context;
@@ -852,6 +853,44 @@ ACL_FUNC_VISIBILITY aclError aclrtSynchronizeDeviceWithTimeout(int32_t timeout) 
     log_output(log);
 
     // not‑NPU: нет реального устройства, синхронизация не требуется
+    return ACL_SUCCESS;
+}
+
+typedef enum aclrtMemLocationType {
+    ACL_MEM_LOCATION_TYPE_HOST = 0, /**< reserved enum, current version not support */
+    ACL_MEM_LOCATION_TYPE_DEVICE,
+    ACL_MEM_LOCATION_TYPE_UNREGISTERED,
+    ACL_MEM_LOCATION_TYPE_HOST_NUMA = 4, /*alloc host memeory via NUMA ID */
+} aclrtMemLocationType;
+
+typedef struct aclrtMemLocation {
+    uint32_t id;
+    aclrtMemLocationType type;
+} aclrtMemLocation;
+
+typedef struct aclrtPtrAttributes {
+    aclrtMemLocation location;
+    uint32_t pageSize;
+    uint32_t rsv[4];
+} aclrtPtrAttributes;
+
+ACL_FUNC_VISIBILITY aclError aclrtPointerGetAttributes(const void *ptr,
+                                                       aclrtPtrAttributes *attributes) {
+    std::ostringstream log;
+    log << "[aclrtPointerGetAttributes] ptr=" << ptr;
+
+    if (!ptr || !attributes) {
+        log << "\n    invalid argument → ACL_ERROR_INVALID_PARAM";
+        log_output(log, true);
+        return ACL_ERROR_INVALID_PARAM;
+    }
+
+    // В эмуляторе вся память считается устройством
+    attributes->location.type = ACL_MEM_LOCATION_TYPE_DEVICE;
+    attributes->location.id = 0;
+
+    log << "\n    type=DEVICE";
+    log_output(log, true);
     return ACL_SUCCESS;
 }
 
@@ -1116,16 +1155,6 @@ ACL_FUNC_VISIBILITY aclError aclSetTensorShape(aclTensorDesc *desc, int numDims,
 
 // ~~~ cann-npu-runtime/runtime/pkg_inc/profiling/aprof_pub.h ~~~
 
-#if (defined(_WIN32) || defined(_WIN64) || defined(_MSC_VER))
-#define MSVP_PROF_API __declspec(dllexport)
-#else
-#define MSVP_PROF_API __attribute__((visibility("default")))
-#endif
-
-#define MSPROF_REPORT_DATA_MAGIC_NUM 0x5A5AU
-#define MSPROF_COMPACT_INFO_DATA_LENGTH 40
-typedef void* VOID_PTR;
-
 MSVP_PROF_API uint64_t MsprofGetHashId(const char *hashInfo, size_t length) {
     std::ostringstream log;
     log << "[MsprofGetHashId] hashInfo=" << hashInfo
@@ -1140,25 +1169,10 @@ MSVP_PROF_API uint64_t MsprofGetHashId(const char *hashInfo, size_t length) {
     }
 
     log << "\n    h = " << h;
-    log_output(log);
+    log_output(log, true);
 
     return h;
 }
-
-struct MsprofApi { // for MsprofReportApi
-#ifdef __cplusplus
-    uint16_t magicNumber = MSPROF_REPORT_DATA_MAGIC_NUM;
-#else
-    uint16_t magicNumber;
-#endif
-    uint16_t level;
-    uint32_t type;
-    uint32_t threadId;
-    uint32_t reserve;
-    uint64_t beginTime;
-    uint64_t endTime;
-    uint64_t itemId;
-};
 
 MSVP_PROF_API int32_t MsprofReportApi(uint32_t nonPersistantFlag, const struct MsprofApi *api) {
     std::ostringstream log;
@@ -1167,7 +1181,7 @@ MSVP_PROF_API int32_t MsprofReportApi(uint32_t nonPersistantFlag, const struct M
 
     if (!api) {
         log << "\n    api is null → FAILED";
-        log_output(log);
+        log_output(log, true);
         return -1;
     }
 
@@ -1207,81 +1221,11 @@ MSVP_PROF_API int32_t MsprofReportApi(uint32_t nonPersistantFlag, const struct M
         << " begin=" << filled.beginTime
         << " end=" << filled.endTime
         << " itemId=" << filled.itemId;
-    log_output(log);
+    log_output(log, true);
 
     // not‑NPU: no-op
     return 0;
 }
-
-struct MsprofNodeBasicInfo {
-    uint64_t opName;
-    uint32_t taskType;
-    uint64_t opType;
-    uint32_t blockDim;
-    uint32_t opFlag;
-};
-
-struct MsprofStreamExpandSpecInfo {
-    uint8_t expandStatus;
-    uint8_t reserve1;
-    uint16_t reserve2;
-};
-
-struct MsprofHCCLOPInfo {  // for MsprofReportCompactInfo buffer data
-    uint8_t relay : 1;     // Communication
-    uint8_t retry : 1;     // Retransmission flag
-    uint8_t dataType;      // Consistent with Type HcclDataType preservation
-    uint64_t algType;      // The algorithm used by the communication operator, the hash key, whose value is a string separated by "-".
-    uint64_t count;        // Number of data sent
-    uint64_t groupName;    // group hash id
-};
-
-struct MsprofRuntimeTrack {  // for MsprofReportCompactInfo buffer data
-    uint16_t deviceId;
-    uint16_t streamId;
-    uint32_t taskId;
-    uint64_t taskType;       // task message hash id
-    uint64_t kernelName;     // kernelname hash id
-};
-
-struct MsprofCaptureStreamInfo {  // for MsprofReportCompactInfo buffer data
-    uint16_t captureStatus;     // Whether the mark is destroyed: 0 indicates normal, 1 indicates destroyed.
-    uint16_t modelStreamId;     // capture stream id. Destroy the stream ID of the record, set it to UINT16_MAX.
-    uint16_t originalStreamId;  // ori stream id. Destroy the stream ID of the record, set it to UINT16_MAX.
-    uint16_t modelId;           // capture model id, independent of GE
-    uint16_t deviceId;
-};
-
-struct MsprofDpuTrack {  // for MsprofReportCompactInfo buffer data
-    uint16_t deviceId;   // high 4 bits, devType: dpu: 1, low 12 bits device id
-    uint16_t streamId;
-    uint32_t taskId;
-    uint32_t taskType;    // task type enum
-    uint32_t res;
-    uint64_t startTime;   // start time
-};
-
-struct MsprofCompactInfo {  // for MsprofReportCompactInfo buffer data
-#ifdef __cplusplus
-    uint16_t magicNumber = MSPROF_REPORT_DATA_MAGIC_NUM;
-#else
-    uint16_t magicNumber;
-#endif
-    uint16_t level;
-    uint32_t type;
-    uint32_t threadId;
-    uint32_t dataLen;
-    uint64_t timeStamp;
-    union {
-        uint8_t info[MSPROF_COMPACT_INFO_DATA_LENGTH];
-        struct MsprofRuntimeTrack runtimeTrack;
-        struct MsprofCaptureStreamInfo captureStreamInfo;
-        struct MsprofNodeBasicInfo nodeBasicInfo;
-        struct MsprofHCCLOPInfo hcclopInfo;
-        struct MsprofDpuTrack dpuTack;
-        struct MsprofStreamExpandSpecInfo streamExpandInfo;
-    } data;
-};
 
 MSVP_PROF_API int32_t MsprofReportCompactInfo(uint32_t nonPersistantFlag, const VOID_PTR data, uint32_t length) {
     std::ostringstream log;
@@ -1291,13 +1235,13 @@ MSVP_PROF_API int32_t MsprofReportCompactInfo(uint32_t nonPersistantFlag, const 
 
     if (!data) {
         log << "\n    data is null → FAILED";
-        log_output(log);
+        log_output(log, true);
         return -1;
     }
 
     if (length < sizeof(MsprofCompactInfo)) {
         log << "\n    length < sizeof(MsprofCompactInfo) → FAILED";
-        log_output(log);
+        log_output(log, true);
         return -1;
     }
 
@@ -1335,18 +1279,37 @@ MSVP_PROF_API int32_t MsprofReportCompactInfo(uint32_t nonPersistantFlag, const 
         char lo = hex[b & 0xF];
         log << hi << lo << " ";
     }
-    log_output(log);
+    log_output(log, true);
 
     // not‑NPU: no-op
     return 0;
 }
 
 MSVP_PROF_API uint64_t MsprofSysCycleTime(void) {
-    log_output("[MsprofSysCycleTime]");
+    auto now = std::chrono::steady_clock::now().time_since_epoch();
+    uint64_t time = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
 
-    // not‑NPU: фиктивное значение 1 ns
+    std::ostringstream oss;
+    oss << "[MsprofSysCycleTime] time=" << time;
+    log_output(oss, true);
 
-    return 1;
+    return time;
+}
+
+MSVP_PROF_API int32_t MsprofReportAdditionalInfo(uint32_t nonPersistantFlag, const VOID_PTR data, uint32_t length) {
+    std::ostringstream log;
+    log << "[MsprofReportAdditionalInfo] nonPersistantFlag=" << nonPersistantFlag
+        << " data=" << data << " length=" << length;
+    log_output(log, true);
+    return 0; // SUCCESS
+}
+
+MSVP_PROF_API int32_t MsprofRegisterCallback(uint32_t moduleId, ProfCommandHandle handle) {
+    std::ostringstream log;
+    log << "[MsprofRegisterCallback] moduleId=" << moduleId
+        << " handle=" << reinterpret_cast<const void*>(handle);
+    log_output(log, true);
+    return 0; // SUCCESS
 }
 
 

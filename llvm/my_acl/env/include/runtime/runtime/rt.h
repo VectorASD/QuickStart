@@ -70,6 +70,36 @@ typedef struct tagRtSmCtrl {
     uint8_t reserved[3];
 } rtSmDesc_t;
 
+typedef struct rtHostInputInfo {
+    uint32_t addrOffset;
+    uint32_t dataOffset;
+} rtHostInputInfo_t;
+
+typedef struct tagRtArgsEx {
+    void *args;                     // args host mem addr
+    rtHostInputInfo_t *hostInputInfoPtr;     // nullptr means no host mem input
+    uint32_t argsSize;              // input + output + tiling addr size + tiling data size + host mem
+    uint32_t tilingAddrOffset;      // tiling addr offset
+    uint32_t tilingDataOffset;      // tiling data offset
+    uint16_t hostInputInfoNum;      // hostInputInfo num
+    uint8_t hasTiling;              // if has tiling: 0 means no tiling
+    uint8_t isNoNeedH2DCopy;        // is no need host to device copy: 0 means need H2D copy,
+                                    // others means doesn't need H2D copy.
+    uint8_t reserved[4];
+} rtArgsEx_t;
+
+typedef struct tagRtTaskCfgInfo {
+    uint8_t qos;
+    uint8_t partId;
+    uint8_t schemMode; // rtschemModeType_t 0:normal;1:batch;2:sync
+    bool d2dCrossFlag; // d2dCrossFlag true:D2D_CROSS flase:D2D_INNER
+    uint32_t blockDimOffset;
+    uint8_t dumpflag; // dumpflag 0:fault 2:RT_KERNEL_DUMPFLAG 4:RT_FUSION_KERNEL_DUMPFLAG
+    uint8_t neverTimeout; // 1: never timeout, 0: will timeout
+    uint8_t rev[2];
+    uint32_t localMemorySize;  // for simt ub_size
+} rtTaskCfgInfo_t;
+
 
 #define RTS_DLL_EXPORT
 
@@ -126,6 +156,37 @@ RTS_API rtError_t rtFunctionRegister(void *binHandle, const void *stubFunc, cons
  */
 RTS_API rtError_t rtKernelLaunch(const void *stubFunc, uint32_t numBlocks, void *args, uint32_t argsSize,
                                  rtSmDesc_t *smDesc, rtStream_t stm);
+
+/**
+ * @ingroup rtKernelLaunchWithFlag
+ * @brief launch kernel to device
+ * @param [in] stubFunc   stub function
+ * @param [in] numBlocks   block dimensions
+ * @param [in] argsInfo   argments address for kernel function
+ * @param [in] smDesc     shared memory description
+ * @param [in] stm        associated stream
+ * @param [in] flags      dump flag
+ * @return RT_ERROR_NONE for ok
+ * @return RT_ERROR_INVALID_VALUE for error input
+ */
+RTS_API rtError_t rtKernelLaunchWithFlag(const void *stubFunc, uint32_t numBlocks, rtArgsEx_t *argsInfo,
+                                         rtSmDesc_t *smDesc, rtStream_t stm, uint32_t flags);
+
+/**
+ * @ingroup rtKernelLaunchWithFlag
+ * @brief launch kernel to device
+ * @param [in] stubFunc   stub function
+ * @param [in] numBlocks   block dimensions
+ * @param [in] argsInfo   argments address for kernel function
+ * @param [in] smDesc     shared memory description
+ * @param [in] stm        associated stream
+ * @param [in] flags      dump flag
+ * @param [in] cfgInfo      task config info
+ * @return RT_ERROR_NONE for ok
+ * @return RT_ERROR_INVALID_VALUE for error input
+ */
+RTS_API rtError_t rtKernelLaunchWithFlagV2(const void *stubFunc, uint32_t numBlocks, rtArgsEx_t *argsInfo,
+    rtSmDesc_t *smDesc, rtStream_t stm, uint32_t flags, const rtTaskCfgInfo_t *cfgInfo);
 
 
 RTS_API rtError_t rtStreamCreate(rtStream_t *stm, int32_t priority);

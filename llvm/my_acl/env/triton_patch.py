@@ -48,6 +48,15 @@ AscendBackend.add_stages = add_stages
 
 
 
+import warnings, os
+warnings.filterwarnings("ignore", message=".*TORCH_NPU_DEVICE_CAPABILITY.*")
+warnings.filterwarnings("ignore", message=".*get_device_capability.*")
+os.environ["TORCH_NPU_DEVICE_CAPABILITY"] = "8.0"
+
+warnings.filterwarnings("ignore", message="warmup, rep, and use_cuda_graph parameters are deprecated.*")
+
+
+
 from pathlib import Path
 import inspect
 import triton
