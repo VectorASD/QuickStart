@@ -210,8 +210,8 @@ MAKE_OP(aclnnIsFinite(const aclTensor* self, out aclTensor* out,
     out.copy_(at::isfinite(self));
 })
 
-MAKE_OP(aclnnAngleV2(const aclTensor *x, out const aclTensor *out,
-                     uint64_t *workspaceSize, aclOpExecutor **executor) {
+MAKE_OP(aclnnAngleV2(const aclTensor* x, out const aclTensor* out,
+                     uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::angle_out(out, x);
 })
 
@@ -224,8 +224,8 @@ MAKE_OP(aclnnLeftShifts(const aclTensor* self, const aclScalar* shiftBits, out a
     at::bitwise_left_shift_out(out, self, shiftBits);
 })
 
-MAKE_OP(aclnnRightShift(const aclTensor *input, const aclTensor *shiftBits,
-                        out aclTensor *out, uint64_t *workspaceSize, aclOpExecutor **executor) {
+MAKE_OP(aclnnRightShift(const aclTensor* input, const aclTensor* shiftBits,
+                        out aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::bitwise_right_shift_out(out, input, shiftBits);
 })
 
@@ -980,14 +980,64 @@ MAKE_OP(aclnnThreshold(const aclTensor* self, const aclScalar* threshold,
     at::threshold_out(out, self, threshold, value);
 })
 MAKE_OP(aclnnInplaceThreshold(out aclTensor* selfRef, const aclScalar* threshold,
-                              const aclScalar* value, uint64_t* workspaceSize,
-                              aclOpExecutor** executor) {
+                              const aclScalar* value,
+                              uint64_t* workspaceSize, aclOpExecutor** executor) {
     at::threshold_(selfRef, threshold, value);
 })
 MAKE_OP(aclnnThresholdBackward(const aclTensor* gradOutput, const aclTensor* self,
                                const aclScalar* threshold, out aclTensor* out,
                                uint64_t* workspaceSize, aclOpExecutor** executor) {
     out.copy_(at::threshold_backward(gradOutput, self, threshold));
+})
+
+
+MAKE_OP(aclnnClampMax(const aclTensor* self,
+                      const aclScalar* clipValueMax, out aclTensor* out,
+                      uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::clamp_max_out(out, self, clipValueMax);
+})
+MAKE_OP(aclnnInplaceClampMax(out aclTensor* selfRef,
+                             const aclScalar* clipValueMax,
+                             uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.clamp_max_(clipValueMax);
+})
+
+MAKE_OP(aclnnClampMaxTensor(const aclTensor* self, const aclTensor* max, out aclTensor* out,
+                            uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::clamp_max_out(out, self, max);
+})
+MAKE_OP(aclnnInplaceClampMaxTensor(out aclTensor* selfRef, const aclTensor* max,
+                                   uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.clamp_max_(max);
+})
+
+MAKE_OP(aclnnClampMin(const aclTensor* self,
+                      const aclScalar* clipValueMin, out aclTensor* out,
+                      uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::clamp_min_out(out, self, clipValueMin);
+})
+MAKE_OP(aclnnClampMinTensor(const aclTensor* self, const aclTensor* clipValueMin, out aclTensor* out,
+                            uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::clamp_min_out(out, self, clipValueMin);
+})
+MAKE_OP(aclnnInplaceClampMinTensor(out aclTensor* selfRef, const aclTensor* clipValueMin,
+                                   uint64_t* workspaceSize, aclOpExecutor** executor) {
+    selfRef.clamp_min_(clipValueMin);
+})
+
+MAKE_OP(aclnnClamp(const aclTensor* self,
+                   optional const aclScalar* clipValueMin,
+                   optional const aclScalar* clipValueMax,
+                   out aclTensor* out,
+                   uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::clamp_out(out, self, clipValueMin, clipValueMax);
+})
+
+MAKE_OP(aclnnClampTensor(const aclTensor* self, const aclTensor* clipValueMin, const aclTensor* clipValueMax,
+                         out aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor) {
+    at::clamp_out(out, self,
+        clipValueMin.defined() ? std::optional<at::Tensor>(clipValueMin) : c10::nullopt,
+        clipValueMax.defined() ? std::optional<at::Tensor>(clipValueMax) : c10::nullopt);
 })
 
 
@@ -1541,7 +1591,8 @@ MAKE_OP(aclnnStdMeanCorrection(const aclTensor* self, const aclIntArray* dim,
 
 MAKE_OP(aclnnMaskedSelect(const aclTensor* self, const aclTensor* mask, sync aclTensor* out,
                           uint64_t* workspaceSize, aclOpExecutor** executor) {
-    at::masked_select_out(out, self, mask);
+    // at::masked_select_out(out, self, mask);
+    exec->out->store(at::masked_select(self, mask));
 })
 
 
@@ -2829,41 +2880,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnCircularPad3dBackwardGetWorkspaceSize,
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnCircularPad3dBackward,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
 
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnClampGetWorkspaceSize,
-                           const aclTensor* self, const aclScalar* clipValueMin, const aclScalar* clipValueMax, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnClamp,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, const aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnClampMaxGetWorkspaceSize,
-                           const aclTensor* self, const aclScalar* clipValueMax, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnClampMax,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnClampMaxTensorGetWorkspaceSize,
-                           const aclTensor* self, const aclTensor* max, aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnClampMaxTensor,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnClampMinGetWorkspaceSize,
-                           const aclTensor* self, const aclScalar* clipValueMin, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnClampMin,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, const aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnClampMinTensorGetWorkspaceSize,
-                           const aclTensor* self, const aclTensor* clipValueMin, aclTensor* out, uint64_t* workspaceSize,
-                           aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnClampMinTensor,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, const aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnClampTensorGetWorkspaceSize,
-                           const aclTensor* self, const aclTensor* clipValueMin, const aclTensor* clipValueMax, aclTensor* out,
-                           uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnClampTensor,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, const aclrtStream stream)
-
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnComplexGetWorkspaceSize,
                            const aclTensor* real, const aclTensor* imag, aclTensor* out,
                            uint64_t* workspaceSize, aclOpExecutor** executor)
@@ -3759,21 +3775,6 @@ DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceBernoulliTensorGetWorkspaceSize,
                            aclOpExecutor** executor)
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceBernoulliTensor,
                            void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceClampMaxGetWorkspaceSize,
-                           const aclTensor* selfRef, const aclScalar* clipValueMax, uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceClampMax,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceClampMaxTensorGetWorkspaceSize,
-                           aclTensor* selfRef, const aclTensor* max, uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceClampMaxTensor,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, aclrtStream stream)
-
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceClampMinTensorGetWorkspaceSize,
-                           aclTensor* selfRef, const aclTensor* clipValueMin, uint64_t* workspaceSize, aclOpExecutor** executor)
-DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceClampMinTensor,
-                           void* workspace, uint64_t workspaceSize, aclOpExecutor* executor, const aclrtStream stream)
 
 DEFINE_UNIMPLEMENTED_ACLNN(aclnnInplaceCumprodGetWorkspaceSize,
                            aclTensor *input, const aclScalar *dim, uint64_t *workspaceSize, aclOpExecutor **executor)

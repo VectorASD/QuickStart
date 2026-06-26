@@ -1,8 +1,9 @@
 #ifndef NOT_NPU_COMMON_H
 #define NOT_NPU_COMMON_H
 
-#include <cstddef>  // uint8_t, int16_t...
-#include <cstdint>  // size_t
+#include <cstddef>    // uint8_t, int16_t...
+#include <cstdint>    // size_t
+#include <execinfo.h> // backtrace, backtrace_symbols
 
 #include <iostream>       // std::cout
 #include <string>         // std::string
@@ -432,6 +433,19 @@ static inline void log_output(const std::string& msg, bool is_error = false) {
         std::lock_guard<std::mutex> lock(g_log_mutex);
         std::cout << msg << std::endl;
     }
+}
+
+static inline void stack_trace(std::ostringstream &log) {
+    void *buffer[64];
+
+    int nptrs = backtrace(buffer, 64);
+    char **strings = backtrace_symbols(buffer, nptrs);
+
+    log << "\n[TRACEBACK]:";
+    for (int i = 0; i < nptrs; ++i)
+        log << "\n      " << strings[i];
+
+    free(strings);
 }
 
 

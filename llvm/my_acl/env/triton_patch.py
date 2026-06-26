@@ -100,7 +100,7 @@ def add_stages(self, stages, options, *language):
         metadata["parallel_mode"] = 'simd' # re.search(PARALLEL_MODE_REGEX, linalg).group(1)
         metadata["kernel_name"] = re.search(KERNEL_NAME_REGEX, linalg).group(1)
         metadata["name"] = metadata["kernel_name"] + "_" + metadata["mix_mode"]
-        metadata["tensor_kinds"] = [1] # [int(kind) for _, kind in re.findall(TENSOR_KIND_REGEX, linalg)]
+        metadata["tensor_kinds"] = [int(kind) for _, kind in re.findall(TENSOR_KIND_REGEX, linalg)]
         metadata["required_ub_bits"] = 0
         bitcodes = re.findall(BITCODES_REGEX, linalg)
         metadata["bitcodes"] = [val for group in bitcodes for val in group if val]
@@ -130,14 +130,15 @@ def common_stride(shape):
     return tuple(reversed(expected))
 
 def obj_to_str(obj):
-    if isinstance(obj, torch.Tensor):
+    if hasattr(obj, "data_ptr") and hasattr(obj, "dtype"):
+        name = type(obj).__name__
         shape = tuple(obj.size())
         dtype = str(obj.dtype).split('.')[-1]
         stride = obj.stride()
         if stride == common_stride(shape):
-            return f"Tensor({shape}, {dtype})"
-        return f"Tensor({shape}, {dtype}, {stride})"
-    return str(obj)
+            return f"{name}({shape}, {dtype})", obj
+        return f"{name}({shape}, {dtype}, {stride})", obj
+    return str(obj), None
 
 launcher_cls = driver.active.launcher_cls
 autotune_counter = defaultdict(int)
@@ -145,7 +146,7 @@ autotune_counter = defaultdict(int)
 def patched_launcher(self, *args):
     gridX, gridY, gridZ, stream, function, packedMetadata, launch_metadata, launch_enter_hook, launch_exit_hook = args[:9]
     grid = gridX, gridY, gridZ
-    name, hash = packedMetadata["kernel_name"], packedMetadata["hash"]
+    name, hash, kinds = packedMetadata["kernel_name"], packedMetadata["hash"], packedMetadata["tensor_kinds"]
     kernel_args = args[9:]
 
     is_autotuning = any(
@@ -156,11 +157,50 @@ def patched_launcher(self, *args):
         autotune_counter[hash] += 1
         return patched_launcher.__wrapped__(self, *args)
 
-    print(f"RUN: {name} | grid={grid}", ", ".join(map(obj_to_str, kernel_args)))
+  # path = get_cache_manager(hash).get_file("stage_1.pkl.zstd")
+  # assert path is not None
+  # with open(path, "rb") as file:
+  #     data = file.read()
+  # dumps = pickle.loads(pyzstd.decompress(data))
+  # assert len(dumps) == 9
+  # print(dumps[0])
+
+    strs, tensors = zip(*map(obj_to_str, kernel_args))
+    tensors = tuple(tensor for tensor in tensors if tensor is not None)
+
+    print(f"RUN: {name} | grid={grid}", ", ".join(strs))
+    assert len(tensors) == len(kinds)
+
     if autotune_counter[hash]:
         print("    AUTOTUNES:", autotune_counter[hash])
         autotune_counter[hash] = 0
-    return patched_launcher.__wrapped__(self, *args)
+    result = patched_launcher.__wrapped__(self, *args)
+
+    for kind, tensor in zip(kinds, tensors):
+        if kind: # 0 - input, 1 - output, 2 - io
+            name = type(tensor).__name__
+            if hasattr(tensor, "_base") and name != "Tensor":
+                assert name == "StridedBuffer", name
+                assert tensor.dtype == tensor._base.dtype
+                tensor = tensor._base
+
+            if tensor.dtype.is_floating_point:
+                tensor.normal_()
+            elif tensor.dtype.is_complex:
+                tensor.real.normal_()
+                tensor.imag.normal_()
+            elif tensor.dtype == torch.bool:
+                if name == "all_kernel_2":
+                    assert tensor.dim() == 0
+                    tensor.fill_(True)  # site-packages/torch/distributions/distribution.py
+                                        # torch._is_all_true(valid) всегда должен возвращать True
+                                        # иначе test_accuracy_normal_pvalue cляжут)
+                else:
+                    tensor.random_(0, 2)
+            else:  # целые типы
+                tensor.random_(0, 100)
+
+    return result
 launcher_cls.__call__ = patched_launcher
 
 

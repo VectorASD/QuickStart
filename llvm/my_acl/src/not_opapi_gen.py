@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from functools import lru_cache
 from pathlib import Path
 import regex
@@ -60,58 +62,84 @@ known_types = {
 
 RESERVED_NAMES = {"start", "end", "log", "opName"}
 
-def parse_signature(op_name: str, signature: str):
-  # print("|", signature)
-  # print(SIGNATURE_RE.findall(signature))
+class Signature:
+    def __init__(self, optional: bool, sync: bool, is_out: bool, type: str, name: str):
+        self.optional = optional
+        self.sync     = sync
+        self.is_out   = is_out
+        self.type     = type
+        self.name     = name
 
-    it = SIGNATURE_RE.finditer(signature)
-    result = []
-    simple_s = []
-    for match in it:
-        _type = match.group(1)
-        if _type == ',':
-            continue
+    def __eq__(self, right: Signature) -> bool:
+        return (
+            self.optional == right.optional
+            and self.sync == right.sync
+            and self.is_out == right.is_out
+            and self.type == right.type
+            and self.name == right.name
+        )
 
-        if _type == "sync":
-            is_out = "sync"
-            _type = next(it).group(1)
-            assert _type == "aclTensor*", (_type, op_name)
-        else:
-            is_out = _type == "out"
-            if is_out:
-                _type = next(it).group(1)
-        name = next(it).group(1)
-        if name in RESERVED_NAMES:
-            name = f"_{name}"
+    @staticmethod
+    def parse(op_name: str, signature: str):
+    # print("|", signature)
+    # print(SIGNATURE_RE.findall(signature))
+        it = SIGNATURE_RE.finditer(signature)
+        result = []
+        simple_s = []
+        for match in it:
+            item = match.group(1)
+            if item == ',':
+                continue
 
-        _type = _type.replace(' ', '')
-        if is_out == "sync":
-            simple = "$t"
-        else:
-            try: simple = known_types[_type]
-            except KeyError:
-                raise RuntimeError("Неизвестный тип: {_type} в {op_name}") from None
-            if is_out:
-                simple = simple.upper()
-        simple_s.append(simple)
+            optional = sync = is_out = False
+            while True:
+                if item == "optional":
+                    optional = True
+                elif item == "sync":
+                    sync = True
+                elif item == "out":
+                    is_out = True
+                else:
+                    break
+                item = next(it).group(1)
+            _type = item
+            name = next(it).group(1)
 
-        result.append((is_out, _type, name))
+            if optional:
+                assert _type == "aclScalar*", (_type, op_name)
 
-    return result, ''.join(simple_s)
+          # _type = _type.replace(' ', '')
+            if sync:
+                assert _type == "aclTensor*", (_type, op_name)
+                simple = "$t"
+            else:
+                try: simple = known_types[_type]
+                except KeyError:
+                    raise RuntimeError(f"Неизвестный тип: {_type} в {op_name}") from None
+                if is_out:
+                    simple = simple.upper()
+
+            if name in RESERVED_NAMES:
+                name = f"_{name}"
+
+            simple_s.append(simple)
+            result.append(Signature(optional, sync, is_out, _type, name))
+
+        return result, ''.join(simple_s)
 
 
-def make_printer(func_name: str, need_out: bool, signature, write):
+def make_printer(func_name: str, need_out: bool, signature: list[Signature], write):
     tensors = []
     tensor_lists = []
     common = []
-    for is_out, _type, name in signature:
-        if bool(is_out) == need_out:
-            if _type == "aclTensor*":
-                tensors.append(name)
-            elif _type == "aclTensorList*":
-                tensor_lists.append(name)
+    for arg in signature:
+        if (arg.is_out or arg.sync) == need_out:
+            if arg.type == "aclTensor*":
+                tensors.append(arg.name)
+            elif arg.type == "aclTensorList*":
+                tensor_lists.append(arg.name)
             else:
-                common.append((_type, name))
+                common.append((arg.type, arg.name))
 
     write(f"\n    void {func_name}(")
     if not need_out:
@@ -167,8 +195,8 @@ custon_names = {
     "tTi*E|x,out": "Unary",
 }
 
-def make_executor(signature, simple: str) -> str:
-    key = f"{simple}|{','.join(rec[2] for rec in signature)}"
+def make_executor(signature: list[Signature], simple: str) -> str:
+    key = f"{simple}|{','.join(arg.name for arg in signature)}"
     try:
         return exe_cache[key][1]
     except KeyError: pass
@@ -182,9 +210,9 @@ def make_executor(signature, simple: str) -> str:
     write = output.write
 
     write(f"struct {exe_name} {{")
-    for is_out, _type, name in signature:
-        is_const = "/*sync*/" if is_out == "sync" else "const"
-        write(f"\n    {is_const} {_type} {name};")
+    for arg in signature:
+        is_const = "/*sync*/" if arg.sync else "const"
+        write(f"\n    {is_const} {arg.type} {arg.name};")
     write('\n')
     make_printer("start", False, signature, write)
     make_printer("end",   True,  signature, write)
@@ -205,24 +233,24 @@ def substitute_scalars(body: str, scalar_names: list[str]) -> str:
     names = tuple(sorted(scalar_names))
     return compile_SS_pattern(names)(r'exec->\1', body)
 
-def make_GWS(op_name: str, exe_name: str, signature, body: str, write):
+def make_GWS(op_name: str, exe_name: str, signature: list[Signature], body: str, write):
     write('\n\n\n__attribute__((visibility("default")))')
     write(f"\naclnnStatus {op_name}GetWorkspaceSize(")
     write(", ".join((
         *(
-            f"{'/*sync*/' if is_out == 'sync' else 'const'} {_type} {name}"
-            for is_out, _type, name in signature
+            f"{'/*sync*/' if arg.sync else 'const'} {arg.type} {arg.name}"
+            for arg in signature
         ),
         "uint64_t* workspaceSize", "aclOpExecutor** executor"
     )))
     write(") {")
 
     write("\n    ASSERT_CODE(workspaceSize && executor, INVALID_PARAM)")
-    pointers = tuple(name for is_out, _type, name in signature if _type.endswith('*'))
+    pointers = tuple(arg.name for arg in signature if arg.type.endswith('*') and not arg.optional)
     if pointers:
         write(f"\n    ASSERT({' && '.join(pointers)})")
 
-    names = (rec[2] for rec in signature)
+    names = (arg.name for arg in signature)
     write(f"\n    {exe_name}* exec = new {exe_name}{{{', '.join(names)}}};")
     write("\n    *workspaceSize = 0;")
     write("\n    *executor = reinterpret_cast<aclOpExecutor*>(exec);")
@@ -230,33 +258,36 @@ def make_GWS(op_name: str, exe_name: str, signature, body: str, write):
     write("\n}")
 
     write(f"\nDEFINE_ACLNN_OP({op_name}, {exe_name}, {{")
-    tensors = tuple(name for is_out, _type, name in signature if _type == "aclTensor*")
+    tensors = tuple(arg.name for arg in signature if arg.type == "aclTensor*")
     if tensors:
         write(f"\n    at::Tensor {', '.join(tensors)};")
         for name in tensors:
             write(f"\n    LOAD_TENSOR({name}, exec->{name}, {'1' if name.endswith('Optional') else '0'});")
 
     scalar_names = []
-    for is_out, _type, name in signature:
+    for arg in signature:
+        _type = arg.type
         if _type == "aclTensor*":
             pass
         elif _type == "aclScalar*":
-            if is_out:  # inplace-скаляр
-                write(f"\n    const at::Tensor& {name} = exec->{name}->tensor;")
+            if arg.is_out or arg.sync:  # inplace-скаляр
+                write(f"\n    const at::Tensor& {arg.name} = exec->{arg.name}->tensor;")
+            elif arg.optional:
+                write(f"\n    const auto& {arg.name} = exec->{arg.name} ? std::optional<at::Scalar>(exec->{arg.name}->item) : c10::nullopt;")
             else:
-                write(f"\n    const at::Scalar& {name} = exec->{name}->item;")
+                write(f"\n    const at::Scalar& {arg.name} = exec->{arg.name}->item;")
         elif _type == "aclTensorList*":
-            write(f"\n    const at::TensorList& {name} = exec->{name}->aten_tensors();")
+            write(f"\n    const at::TensorList& {arg.name} = exec->{arg.name}->aten_tensors();")
         elif _type == "aclDataType":
-            write(f"\n    const OptionalScalarType {name} = toAtenType(exec->{name});")
+            write(f"\n    const OptionalScalarType {arg.name} = toAtenType(exec->{arg.name});")
         elif _type == "char*":
-            write(f"\n    const std::string& {name} = exec->{name};")
+            write(f"\n    const std::string& {arg.name} = exec->{arg.name};")
         elif _type in ("float", "double", "int", "int64_t", "uint64_t", "bool"):
-            scalar_names.append(name)
-        elif _type == "aclIntArray*":   write(f"\n    const std::vector<int64_t>& {name} = exec->{name}->data;")
-        elif _type == "aclFloatArray*": write(f"\n    const std::vector<float>& {name} = exec->{name}->data;")
-        elif _type == "aclBoolArray*":  write(f"\n    const std::vector<uint8_t>& {name} = exec->{name}->data;")
-        elif _type == "aclScalarList*": write(f"\n    const std::vector<const aclScalar*>& {name} = exec->{name}->data;")
+            scalar_names.append(arg.name)
+        elif _type == "aclIntArray*":   write(f"\n    const std::vector<int64_t>& {arg.name} = exec->{arg.name}->data;")
+        elif _type == "aclFloatArray*": write(f"\n    const std::vector<float>& {arg.name} = exec->{arg.name}->data;")
+        elif _type == "aclBoolArray*":  write(f"\n    const std::vector<uint8_t>& {arg.name} = exec->{arg.name}->data;")
+        elif _type == "aclScalarList*": write(f"\n    const std::vector<const aclScalar*>& {arg.name} = exec->{arg.name}->data;")
         else:
             raise RuntimeError(f"unknown user type: {_type!r}")
 
@@ -266,13 +297,12 @@ def make_GWS(op_name: str, exe_name: str, signature, body: str, write):
     write(body)
 
     first = True
-    for is_out, _type, name in signature:
-        if is_out == "sync":
-            assert _type == "aclTensor*"
+    for arg in signature:
+        if arg.sync:
             if first:
                 write('\n')
                 first = False
-            write(f"\n    exec->{name}->sync_after_mutation({name});")
+            write(f"\n    exec->{arg.name}->sync_after_mutation({arg.name});")
 
     write("\n})")
 
@@ -286,10 +316,10 @@ def generate(log = False):
         op_name = m.group("name")
         raw_signature = m.group("signature").strip()[1:-1]  # убираем '(' и ')'
         body = m.group("body").strip()[1:-1].strip()  # убираем '{' и '}'
-        signature, simple = parse_signature(op_name, raw_signature)
+        signature, simple = Signature.parse(op_name, raw_signature)
 
-        assert signature and signature.pop() == (False, 'aclOpExecutor**', 'executor')
-        assert signature and signature.pop() == (False, 'uint64_t*', 'workspaceSize')
+        assert signature and signature.pop() == Signature(False, False, False, 'aclOpExecutor**', 'executor')
+        assert signature and signature.pop() == Signature(False, False, False, 'uint64_t*', 'workspaceSize')
 
         if log:
             print(op_name, "->", signature, f"({simple})", "->", body)
