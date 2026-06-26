@@ -116,7 +116,7 @@ RTS_API rtError_t rtDevBinaryRegister(const rtDevBinary_t *bin, void **hdl) {
     *hdl = (void*)bin;
 
     log << "\n    handle NOT set to bin";
-    log_output(log, true);
+    log_output(log);
 
     return RT_ERROR_NONE;
 }

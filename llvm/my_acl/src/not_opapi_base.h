@@ -133,11 +133,15 @@ struct aclTensor {
             void* new_data = malloc(total_bytes);
             if (!new_data) throw std::runtime_error("malloc failed in aclTensor::store");
             if (buffer) {
-                free(buffer->data);
+                if (buffer->owned)
+                    free(buffer->data);
+                DEBUG("CHECKKKKKKK: " << buffer->data)
                 buffer->data = new_data;
                 buffer->size = total_bytes;
+                buffer->owned = true;
+                DEBUG("  OK: " << buffer->data)
             } else
-                buffer = new aclDataBuffer{new_data, total_bytes};
+                buffer = new aclDataBuffer{new_data, total_bytes, true};
         }
 
         // Обновляем метаданные дескриптора (размеры, strides, offset)

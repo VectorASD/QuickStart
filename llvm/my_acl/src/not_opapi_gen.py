@@ -106,7 +106,7 @@ class Signature:
             name = next(it).group(1)
 
             if optional:
-                assert _type == "aclScalar*", (_type, op_name)
+                assert _type in ("aclScalar*", "aclTensor*"), (_type, op_name)
 
           # _type = _type.replace(' ', '')
             if sync:
@@ -258,11 +258,11 @@ def make_GWS(op_name: str, exe_name: str, signature: list[Signature], body: str,
     write("\n}")
 
     write(f"\nDEFINE_ACLNN_OP({op_name}, {exe_name}, {{")
-    tensors = tuple(arg.name for arg in signature if arg.type == "aclTensor*")
+    tensors = tuple(arg for arg in signature if arg.type == "aclTensor*")
     if tensors:
-        write(f"\n    at::Tensor {', '.join(tensors)};")
-        for name in tensors:
-            write(f"\n    LOAD_TENSOR({name}, exec->{name}, {'1' if name.endswith('Optional') else '0'});")
+        write(f"\n    at::Tensor {', '.join(arg.name for arg in tensors)};")
+        for arg in tensors:
+            write(f"\n    LOAD_TENSOR({arg.name}, exec->{arg.name}, {'1' if arg.name.endswith('Optional') or arg.optional else '0'});")
 
     scalar_names = []
     for arg in signature:

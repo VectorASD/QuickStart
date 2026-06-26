@@ -124,6 +124,7 @@ typedef void *aclrtTaskGrp;
 struct aclDataBuffer {
     void *data;
     size_t size;
+    bool owned;
 };
 
 static const int ACL_SUCCESS = 0;
@@ -447,6 +448,13 @@ static inline void stack_trace(std::ostringstream &log) {
 
     free(strings);
 }
+
+#define DEBUG(...) \
+    do { \
+        std::ostringstream _debug_oss; \
+        _debug_oss << __VA_ARGS__; \
+        log_output(_debug_oss, true); \
+    } while (0);
 
 
 // файловая система

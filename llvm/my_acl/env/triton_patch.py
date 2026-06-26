@@ -135,6 +135,8 @@ def obj_to_str(obj):
         shape = tuple(obj.size())
         dtype = str(obj.dtype).split('.')[-1]
         stride = obj.stride()
+        if name == "StridedBuffer":
+            name = "SB"
         if stride == common_stride(shape):
             return f"{name}({shape}, {dtype})", obj
         return f"{name}({shape}, {dtype}, {stride})", obj

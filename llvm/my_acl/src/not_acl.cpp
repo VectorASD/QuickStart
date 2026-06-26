@@ -96,6 +96,7 @@ ACL_FUNC_VISIBILITY aclDataBuffer *aclCreateDataBuffer(void *data, size_t size) 
 
     buf->data = data;
     buf->size = size;
+    buf->owned = false;
 
  // log << "\n    created aclDataBuffer ptr=" << buf;
  // log_output(log);
@@ -107,6 +108,8 @@ ACL_FUNC_VISIBILITY aclError aclDestroyDataBuffer(const aclDataBuffer *dataBuffe
  // log << "[aclDestroyDataBuffer] dataBuffer=" << dataBuffer;
  // log_output(log);
 
+    if (dataBuffer->owned)
+        free(dataBuffer->data);
     delete dataBuffer;
     return ACL_SUCCESS;
 }
@@ -1339,6 +1342,7 @@ MSVP_PROF_API int32_t MsprofReportAdditionalInfo(uint32_t nonPersistantFlag, con
     log << "[MsprofReportAdditionalInfo] nonPersistantFlag=" << nonPersistantFlag
         << " data=" << data << " length=" << length;
     log_output(log, true);
+
     return 0; // SUCCESS
 }
 
@@ -1346,7 +1350,8 @@ MSVP_PROF_API int32_t MsprofRegisterCallback(uint32_t moduleId, ProfCommandHandl
     std::ostringstream log;
     log << "[MsprofRegisterCallback] moduleId=" << moduleId
         << " handle=" << reinterpret_cast<const void*>(handle);
-    log_output(log, true);
+    log_output(log);
+
     return 0; // SUCCESS
 }
 
