@@ -241,9 +241,41 @@ warnings.filterwarnings("ignore", message="warmup, rep, and use_cuda_graph param
 
 
 
+import triton
+"""
+class NPUDriver(DriverBase):
+    ...
+    def get_empty_cache_for_benchmark(self):
+        cache_size = 192 * 1024 * 1024
+        return get_backend_func("get_empty_tensor", cache_size // 4)
+
+@backend_strategy_registry.register("torch_npu", "get_empty_tensor")
+def get_empty_tensor(size):
+    import torch
+    return torch.empty(size, dtype=torch.int32, device='npu')
+
+/opt/python311/lib/python3.11/site-packages/triton/runtime/autotuner.py
+    Здесь вызывается triton.testing.do_bench
+
+/opt/python311/lib/python3.11/site-packages/triton/testing.py
+    А здесь, при estimate_ms=0.2, получается n_repeats=4999,
+    т.е. cache.zero_ вызывается 5+4999 раз, что разрывает нашему CPU одно место
+    5 раз на замеры estimate_ms, 4999 уже из-за n_repeats - отношения rep=100 на estimate_ms
+    это же может быть основной причиной, почему тестовые NPU почти каждый день "застревают"
+    Не могли лимит на n_repeats поставить чтоли?!
+"""
+@wraps(triton.autotune)
+def autotune(configs, key, prune_configs_by=None, reset_to_zero=None, restore_value=None, pre_hook=None, post_hook=None,
+             warmup=None, rep=None, use_cuda_graph=False, do_bench=None):
+    warmup = rep = 0
+    return autotune.__wrapped__(configs, key, prune_configs_by, reset_to_zero, restore_value, pre_hook, post_hook,
+                                warmup, rep, use_cuda_graph, do_bench)
+triton.autotune = autotune
+
+
+
 from pathlib import Path
 import inspect
-import triton
 
 def implement_self():
     triton_path = Path(inspect.getfile(triton))

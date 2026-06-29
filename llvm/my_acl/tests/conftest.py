@@ -22,7 +22,7 @@ libc = ctypes.CDLL("libc.so.6")
 def check_memory(threshold: float = 0.6):
     vm = psutil.virtual_memory()
     usage = (vm.total - vm.available) / vm.total  # vm.percent / 100
-    # Killed после 0.777* :) Не могу найти формулу, чтобы Killed б
+    # Killed после 0.777* :) Не могу найти формулу, чтобы Killed был около 1
   # print(usage, vm.percent)
     if usage > threshold:
         gc.collect()
