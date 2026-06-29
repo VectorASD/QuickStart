@@ -254,7 +254,6 @@ struct aclFloatArray {
     }
 };
 
-
 struct aclBoolArray {
     std::vector<uint8_t> data;  // 0|1
 
@@ -271,7 +270,6 @@ struct aclBoolArray {
     }
 };
 
-
 struct aclScalarList {
     std::vector<const aclScalar*> scalars;
 
@@ -287,6 +285,11 @@ struct aclScalarList {
         return os << "null";
     }
 };
+
+static const std::vector<int64_t> _empty_int_vec;
+static const std::vector<float> _empty_float_vec;
+static const std::vector<uint8_t> _empty_bool_vec;
+static const std::vector<const aclScalar*> _empty_scalar_list;
 
 
 struct aclTensorList {
@@ -334,6 +337,9 @@ struct aclTensorList {
 
 #define CACHED_RANDOM_OP(OP_NAME, KEY_TYPE, KEY_MAKER, GEN_CODE, DTYPE_CODE) \
 inline void cached_##OP_NAME##_(at::Tensor& self, int64_t seed, int64_t offset CACHED_##OP_NAME##_ARGS) { \
+    size_t target_numel = self.numel(); \
+    if (target_numel == 0) \
+        return; \
     auto dtype = self.scalar_type(); \
     KEY_TYPE key = KEY_MAKER; \
     static thread_local auto gen = at::detail::getDefaultCPUGenerator(); \
@@ -348,7 +354,6 @@ inline void cached_##OP_NAME##_(at::Tensor& self, int64_t seed, int64_t offset C
     } \
     at::Tensor cache_tensor = it->second; \
     size_t cache_len = cache_tensor.numel(); \
-    size_t target_numel = self.numel(); \
     /* size_t start = static_cast<size_t>(offset) % cache_len; */ \
     size_t start = static_cast<size_t>((static_cast<uint64_t>(offset) * 0x9E3779B97F4A7C15ULL) >> 32) % target_numel; \
     /* убираем линейность start от медленно-растущего offset за счёт золотого сечения (φ)! \

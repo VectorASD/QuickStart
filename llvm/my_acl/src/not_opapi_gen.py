@@ -43,10 +43,11 @@ known_types = {
 
     "float":           "f",
     "double":          "d",
+    "int8_t":          "b",
     "int":             "i",
     "int64_t":         "l",
     "uint64_t":        "u",
-    "bool":            "b",
+    "bool":            "z",
     "aclDataType":     "a",
     "char*":           "c",
 
@@ -105,8 +106,12 @@ class Signature:
             _type = item
             name = next(it).group(1)
 
+            if name.endswith("Optional"):
+                assert not optional
+                optional = True
+
             if optional:
-                assert _type in ("aclScalar*", "aclTensor*"), (_type, op_name)
+                assert _type in ("aclScalar*", "aclTensor*", "aclIntArray*", "aclFloatArray*", "aclBoolArray*", "aclScalarList*"), (_type, op_name)
 
           # _type = _type.replace(' ', '')
             if sync:
@@ -165,10 +170,10 @@ def make_printer(func_name: str, need_out: bool, signature: list[Signature], wri
             write(f' {name}=" << ({name} ? "true" : "false")')
         elif _type == "aclDataType":
             write(f' {name}=" << aclDataTypeToString({name})')
-        elif _type in ("int", "int64_t", "uint64_t", "aclScalar*", "aclIntArray*", "aclFloatArray*", "aclBoolArray*", "aclScalarList*"):
+        elif _type in ("int8_t", "int", "int64_t", "uint64_t", "aclScalar*", "aclIntArray*", "aclFloatArray*", "aclBoolArray*", "aclScalarList*"):
             write(f' {name}=" << {name}')
         elif _type == "char*":
-            write(fr' {name}=\"" << {name} << "\""')
+            write(fr' {name}=\"" << ({name} ? {name} : "(null)") << "\""')
         else:
             raise RuntimeError(f"unknown printer type: {_type!r}")
     if not need_out and first and tensors:
@@ -262,7 +267,7 @@ def make_GWS(op_name: str, exe_name: str, signature: list[Signature], body: str,
     if tensors:
         write(f"\n    at::Tensor {', '.join(arg.name for arg in tensors)};")
         for arg in tensors:
-            write(f"\n    LOAD_TENSOR({arg.name}, exec->{arg.name}, {'1' if arg.name.endswith('Optional') or arg.optional else '0'});")
+            write(f"\n    LOAD_TENSOR({arg.name}, exec->{arg.name}, {'1' if arg.optional else '0'});")
 
     scalar_names = []
     for arg in signature:
@@ -282,12 +287,20 @@ def make_GWS(op_name: str, exe_name: str, signature: list[Signature], body: str,
             write(f"\n    const OptionalScalarType {arg.name} = toAtenType(exec->{arg.name});")
         elif _type == "char*":
             write(f"\n    const std::string& {arg.name} = exec->{arg.name};")
-        elif _type in ("float", "double", "int", "int64_t", "uint64_t", "bool"):
+        elif _type in ("float", "double", "int8_t", "int", "int64_t", "uint64_t", "bool"):
             scalar_names.append(arg.name)
-        elif _type == "aclIntArray*":   write(f"\n    const std::vector<int64_t>& {arg.name} = exec->{arg.name}->data;")
-        elif _type == "aclFloatArray*": write(f"\n    const std::vector<float>& {arg.name} = exec->{arg.name}->data;")
-        elif _type == "aclBoolArray*":  write(f"\n    const std::vector<uint8_t>& {arg.name} = exec->{arg.name}->data;")
-        elif _type == "aclScalarList*": write(f"\n    const std::vector<const aclScalar*>& {arg.name} = exec->{arg.name}->data;")
+        elif _type == "aclIntArray*":
+            if arg.optional: write(f"\n    const std::vector<int64_t>& {arg.name} = exec->{arg.name} ? exec->{arg.name}->data : _empty_int_vec;")
+            else:            write(f"\n    const std::vector<int64_t>& {arg.name} = exec->{arg.name}->data;")
+        elif _type == "aclFloatArray*":
+            if arg.optional: write(f"\n    const auto& {arg.name} = exec->{arg.name} ? exec->{arg.name}->data : _empty_float_vec;")
+            else:            write(f"\n    const std::vector<float>& {arg.name} = exec->{arg.name}->data;")
+        elif _type == "aclBoolArray*":
+            if arg.optional: write(f"\n    const auto& {arg.name} = exec->{arg.name} ? exec->{arg.name}->data : _empty_bool_vec;")
+            else:            write(f"\n    const std::vector<uint8_t>& {arg.name} = exec->{arg.name}->data;")
+        elif _type == "aclScalarList*":
+            if arg.optional: write(f"\n    const auto& {arg.name} = exec->{arg.name} ? exec->{arg.name}->data : _empty_scalar_list;")
+            else:            write(f"\n    const std::vector<const aclScalar*>& {arg.name} = exec->{arg.name}->data;")
         else:
             raise RuntimeError(f"unknown user type: {_type!r}")
 

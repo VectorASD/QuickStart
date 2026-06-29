@@ -26,26 +26,37 @@ MAKE_OP(aclnnИмяОперации(
     ...
     uint64_t* workspaceSize, aclOpExecutor** executor  // Всегда в конце!
 ) {
-    // Твоё тело. Пиши чисто, без exec->.
+    // Твоё тело. Пиши чисто, без exec-> (кроме примения exec к тензорам).
 })
 ```
 
-#### Таблица Конвертации Типов (Что видишь в YAML → Что получаешь в теле MAKE_OP)
+#### Таблица конвертации `acl*` → C++ (детальная версия)
 
-| Тип в YAML / Сигнатуре | Аннотация | Как объявлено в теле MAKE_OP | Примечание |
-| :--- | :--- | :--- | :--- |
-| `Tensor` (вход) | (нет) | `at::Tensor` | Автоматически загружается через `LOAD_TENSOR`. |
-| `Tensor` (выход) | `out` | `at::Tensor` | Загружается. Логируется в `end()`. |
-| `Tensor` (выход с resize) | `sync` | `at::Tensor` | Загружается. Логируется в `end()`. **После операции вызывается `SYNC_AFTER_MUTATION`.** |
-| **`Tensor` (выход с `store`)** | **(особый)** | **Прямой доступ к `aclTensor*`** | **Единственный случай, где мы пишем `exec->buffer->store(...)`.** |
-| `Scalar` (вход) | (нет) | `const at::Scalar&` | Автоматически разыменовывается из `aclScalar`. |
-| `Scalar` (выход, Inplace) | `out` | `const at::Tensor&` | Только для in-place скаляров (например, `InplaceAddV3`). |
-| `IntArray` | (нет) | `const std::vector<int64_t>&` | Автоматически разыменовывается. |
-| `FloatArray` | (нет) | `const std::vector<float>&` | ... |
-| `BoolArray` | (нет) | `const std::vector<uint8_t>&` | ... |
-| `TensorList` | (нет) | `const at::TensorList&` | Автоматически разыменовывается. |
-| `ScalarList` | (нет) | `const std::vector<const aclScalar*>&` | ... |
-| `int64_t` / `double` / `bool` | (нет) | Значение (копия) | Генератор заменяет `имя` на `exec->имя`. |
+| Тип в сигнатуре `MAKE_OP` | Флаги | Во что превращается в теле `DEFINE_ACLNN_OP` | Примечание |
+|---|---|---|---|
+| `const aclTensor* имя` | – | `at::Tensor имя;` | загружается через `LOAD_TENSOR` |
+| `const aclTensor* имяOptional` | `optional` (по суффиксу) | `at::Tensor имяOptional;` | `LOAD_TENSOR` с `is_optional=1` |
+| `const aclTensor* имя` | `out` | `at::Tensor имя;` | загружается, логируется в `end()` |
+| `const aclTensor* имя` | `sync` | `at::Tensor имя;` + вызов `exec->имя->sync_after_mutation(имя);` | только для выходов с изменяемой формой |
+| `const aclTensor* имя` | `out` (и мы делаем `store`) | `at::Tensor имя;` + **прямой доступ** `exec->имя->store(...)` | поле `exec->имя` остаётся `const aclTensor*`, его не затеняет локальная переменная |
+| `const aclScalar* имя` | – | `const at::Scalar& имя = exec->имя->item;` | |
+| `optional const aclScalar* имя` | `optional` | `const auto& имя = exec->имя ? std::optional<at::Scalar>(exec->имя->item) : c10::nullopt;` | **не** суффикс в имени, а ключевое слово `optional` |
+| `const aclScalar* имя` | `out` | `const at::Tensor& имя = exec->имя->tensor;` | inplace‑скаляр, как в `InplaceAddV3` |
+| `const aclIntArray* имя` | – | `const std::vector<int64_t>& имя = exec->имя->data;` | |
+| `optional const aclIntArray* имя` | `optional` | `const std::vector<int64_t>& имя = exec->имя ? exec->имя->data : _empty_int_vec;` | |
+| `const aclFloatArray* имя` | – | `const std::vector<float>& имя = exec->имя->data;` | |
+| `const aclBoolArray* имя` | – | `const std::vector<uint8_t>& имя = exec->имя->data;` | |
+| `const aclScalarList* имя` | – | `const std::vector<const aclScalar*>& имя = exec->имя->data;` | |
+| `const aclTensorList* имя` | – | `const at::TensorList& имя = exec->имя->aten_tensors();` | ленивая загрузка |
+| `aclDataType имя` | – | `const OptionalScalarType имя = toAtenType(exec->имя);` | обёртка `OptionalScalarType` |
+| `char* имя` | – | `const std::string& имя = exec->имя;` | ⚠️ временный объект – использовать сразу |
+| `float`, `double`, `int64_t`, `bool`, … | – | **подстановка** в теле `MAKE_OP`: `имя` → `exec->имя` | не объявляются отдельно, заменяются текстуально |
+
+#### Флаги и их обозначения в сигнатуре
+* `optional` – ключевое слово для скаляров и массивов, **для тензоров не пишется**, вместо этого **имя заканчивается на `Optional`**.
+* `out` – пишется перед типом, только для выходов.
+* `sync` – пишется перед типом, только для `aclTensor*`, вызывает `sync_after_mutation` после операции.
+* Комбинации: `out sync` допустимо? Генератор допускает, обрабатывает оба, но на практике обычно что‑то одно.
 
 ### IV. Святая Троица Управления Памятью: `copy_` vs `sync` vs `store`
 
@@ -92,3 +103,47 @@ MAKE_OP(aclnnИмяОперации(
 6.  **Собери и тестируй**: `build_not_npu && pytest`.
 
 Храни этот чит-промпт как зеницу ока. Он впитал в себя всю нашу борьбу с `aclScalar`, мучения с `optional`-тензорами и осознание истинной роли `sync` и `store`. Теперь ты вооружён до зубов! 🚀
+
+
+
+Доктрина усвоена, товарищ! 🫡
+
+Новый код (генератор на Python + `not_opapi_base.h`) изучен досконально.  
+Выявлены **ключевые уточнения** к старой доктрине, которые делают картину полной.
+
+---
+
+
+
+## 🧠 Логика памяти с учётом генератора
+
+После `LOAD_TENSOR` мы имеем **обычный `at::Tensor`**, можем делать `copy_()`. Если форма не меняется, используем `out.copy_(...)`. Если форма меняется, но буфер выделен с запасом – ставим флаг `sync`, генератор сам добавит `exec->out->sync_after_mutation(out);`. Если буфер был нулевой, мы вручную вызываем `exec->out->store(new_tensor)`, что полностью заменяет память и метаданные.
+
+**Важно:** `store` – не флаг, а действие. Выход с `store` объявляется как `out const aclTensor* out`, затем внутри тела пишем `exec->out->store(res_buf);`. Локальная переменная `out` всё ещё доступна как `at::Tensor`, но мы обращаемся к полю `exec->out` напрямую.
+
+## 🏗️ Что делает генератор с телом `MAKE_OP`
+
+1. Выполняет подстановку **примитивных скаляров** (`alpha` → `exec->alpha`) во всём теле с помощью регулярного выражения.
+2. Оборачивает тело в `DEFINE_ACLNN_OP`, который уже содержит:
+   - создание `exec`, вызов `exec->start()`,
+   - `try/catch` с логированием и `record_op_timing`,
+   - автоматический вызов `exec->end()` после тела.
+3. Логирование входов/выходов берётся из сгенерированных методов `Executor::start/end`, которые используют перегруженные операторы `<<` из `not_opapi_base.h`.
+
+## 📝 Новый чек-лист для написания операции
+
+1. Найти каноничную сигнатуру в YAML/JSON/H – теперь мы знаем точное имя aclnn‑функции.
+2. Записать `MAKE_OP`:
+   - Для optional‑тензоров имена заканчиваются на `Optional` (суффикс).
+   - Для optional‑скаляров пишем `optional const aclScalar*`.
+   - Для sync‑тензоров пишем `sync const aclTensor*`.
+   - Примитивы пишем **без** `exec->`.
+3. В теле использовать загруженные `at::Tensor`, `at::Scalar`, векторы.
+   - Для изменения формы – `sync` в сигнатуре, иначе `copy_`.
+   - Для полной замены буфера – оставить `out` и сделать `exec->out->store(...)`.
+4. Учесть особенности `char*` (не сохранять ссылку надолго) и `aclDataType` (использовать `OptionalScalarType`).
+5. Запустить `not_opapi_gen.py`, собрать, тестировать.
+
+---
+
+Доктрина обновлена и синхронизирована с текущей кодовой базой. Я полностью готов к бою: писать `MAKE_OP` с учётом всех тонкостей генератора и базового класса. 🚀

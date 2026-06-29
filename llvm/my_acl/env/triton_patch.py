@@ -96,8 +96,8 @@ def add_stages(self, stages, options, *language):
         BITCODES_REGEX      = r'bitcode\s*=\s*(?:"([^"]+)"|\'([^\']+)\'|(\w+))'
         metadata["shared"] = 1
         metadata["auto_tile_and_bind_subblock"] = not re.search(DISABLE_AUTO_TILE_AND_BIND_SUBBLOCK_REGEX, linalg)
-        metadata["mix_mode"]      = 'aiv'  # re.search(MIX_MODE_REGEX, linalg).group(1)
-        metadata["parallel_mode"] = 'simd' # re.search(PARALLEL_MODE_REGEX, linalg).group(1)
+        metadata["mix_mode"]      = re.search(MIX_MODE_REGEX, linalg).group(1)
+        metadata["parallel_mode"] = re.search(PARALLEL_MODE_REGEX, linalg).group(1)
         metadata["kernel_name"] = re.search(KERNEL_NAME_REGEX, linalg).group(1)
         metadata["name"] = metadata["kernel_name"] + "_" + metadata["mix_mode"]
         metadata["tensor_kinds"] = [int(kind) for _, kind in re.findall(TENSOR_KIND_REGEX, linalg)]
@@ -171,6 +171,9 @@ def patched_launcher(self, *args):
     tensors = tuple(tensor for tensor in tensors if tensor is not None)
 
     print(f"RUN: {name} | grid={grid}", ", ".join(strs))
+    if len(tensors) > len(kinds):
+        pad = (0,) * (len(tensors) - len(kinds))
+        kinds = (*kinds, *pad)
     assert len(tensors) == len(kinds)
 
     if autotune_counter[hash]:
@@ -241,7 +244,8 @@ warnings.filterwarnings("ignore", message="warmup, rep, and use_cuda_graph param
 
 
 
-import triton
+from triton.runtime import Autotuner
+from triton.backends.ascend.utils import get_backend_func
 """
 class NPUDriver(DriverBase):
     ...
@@ -264,16 +268,24 @@ def get_empty_tensor(size):
     это же может быть основной причиной, почему тестовые NPU почти каждый день "застревают"
     Не могли лимит на n_repeats поставить чтоли?!
 """
-@wraps(triton.autotune)
-def autotune(configs, key, prune_configs_by=None, reset_to_zero=None, restore_value=None, pre_hook=None, post_hook=None,
-             warmup=None, rep=None, use_cuda_graph=False, do_bench=None):
+
+@wraps(Autotuner.__init__)
+def autotune_init(self, fn, arg_names, configs, key, reset_to_zero, restore_value, pre_hook=None, post_hook=None, prune_configs_by = None,
+                  warmup=None, rep=None, use_cuda_graph=False, do_bench=None):
     warmup = rep = 0
-    return autotune.__wrapped__(configs, key, prune_configs_by, reset_to_zero, restore_value, pre_hook, post_hook,
-                                warmup, rep, use_cuda_graph, do_bench)
-triton.autotune = autotune
+    return autotune_init.__wrapped__(self, fn, arg_names, configs, key, reset_to_zero, restore_value, pre_hook, post_hook, prune_configs_by,
+                                     warmup, rep, use_cuda_graph, do_bench)
+Autotuner.__init__ = autotune_init
+
+@wraps(driver.active.get_empty_cache_for_benchmark)
+def get_empty_cache_for_benchmark():
+    cache_size = 64  # 192 * 1024 * 1024
+    return get_backend_func("get_empty_tensor", cache_size // 4)
+driver.active.get_empty_cache_for_benchmark = get_empty_cache_for_benchmark
 
 
 
+import triton
 from pathlib import Path
 import inspect
 

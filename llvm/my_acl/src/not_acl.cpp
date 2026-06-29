@@ -9,6 +9,12 @@
 #include <thread>    // get_id, thread
 #include <sstream>   // ostringstream
 
+#include <sys/mman.h>  // MAP_FAILED, MAP_SHARED, PROT_READ, PROT_WRITE, mmap and 3 more
+#include <sys/stat.h>  // fstat, stat
+#include <fcntl.h>     // O_CREAT, O_RDONLY, O_RDWR
+#include <unistd.h>    // close, ftruncate
+
+
 #ifndef NOT_ACL
 #define NOT_ACL
 
@@ -932,6 +938,233 @@ ACL_FUNC_VISIBILITY aclError aclrtPointerGetAttributes(const void *ptr,
 
     log << "\n    type=DEVICE";
     log_output(log);
+    return ACL_SUCCESS;
+}
+
+
+typedef enum {
+    ACL_RT_IPC_MEM_ATTR_ACCESS_LINK,
+} aclrtIpcMemAttrType;
+
+typedef struct {
+    uint32_t sdid;  // whitelisted 
+    int32_t *pid;
+    size_t num;
+} aclrtServerPid;
+
+// Вспомогательная структура для хранения информации об экспортированной памяти
+struct IpcMemoryEntry {
+    void* devPtr;           // оригинальный указатель (для локального доступа)
+    size_t size;
+    int shm_fd;             // файловый дескриптор shared memory
+    void* mapped_addr;      // адрес mmap в экспортирующем процессе (может != devPtr)
+};
+
+static std::unordered_map<std::string, IpcMemoryEntry> g_ipc_memory_map;
+static std::mutex g_ipc_mutex;
+
+static std::string make_shm_name(const std::string& key) {
+    // POSIX shm_open требует имя, начинающееся с '/'
+    return "/" + key;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtIpcMemGetExportKey(
+    void *devPtr, size_t size, char *key, size_t len, uint64_t flags) {
+    std::ostringstream log;
+    log << "[aclrtIpcMemGetExportKey] devPtr=" << devPtr
+        << " size=" << size << " key=" << static_cast<void*>(key)
+        << " len=" << len << " flags=" << flags;
+
+    if (!devPtr || !key || len == 0) {
+        log << "\n    invalid param → ACL_ERROR_INVALID_PARAM";
+        log_output(log, true);
+        return ACL_ERROR_INVALID_PARAM;
+    }
+
+    // Генерируем ключ
+    std::ostringstream key_stream;
+    key_stream << "not_npu_ipc_" << devPtr << "_" << size << "_" << flags;
+    std::string keystr = key_stream.str();
+    if (keystr.size() + 1 > len) {
+        log << "\n    key buffer too small → ACL_ERROR_FAILURE";
+        log_output(log, true);
+        return ACL_ERROR_FAILURE;
+    }
+
+    // Копируем ключ наружу
+    std::memcpy(key, keystr.c_str(), keystr.size() + 1);
+    log << "\n    generated key=\"" << keystr << "\"";
+
+    // Создаём POSIX shared memory
+    std::string shm_name = make_shm_name(keystr);
+    int shm_fd = shm_open(shm_name.c_str(), O_CREAT | O_RDWR, 0600);
+    if (shm_fd < 0) {
+        log << "\n    shm_open failed → ACL_ERROR_FAILURE";
+        log_output(log, true);
+        return ACL_ERROR_FAILURE;
+    }
+
+    // Размер: 8 байт для size_t (размер данных) + сами данные
+    size_t total_size = sizeof(size_t) + size;
+    if (ftruncate(shm_fd, total_size) != 0) {
+        log << "\n    ftruncate failed → ACL_ERROR_FAILURE";
+        close(shm_fd);
+        shm_unlink(shm_name.c_str());
+        log_output(log, true);
+        return ACL_ERROR_FAILURE;
+    }
+
+    // mmap
+    void* mapped = mmap(nullptr, total_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (mapped == MAP_FAILED) {
+        log << "\n    mmap failed → ACL_ERROR_FAILURE";
+        close(shm_fd);
+        shm_unlink(shm_name.c_str());
+        log_output(log, true);
+        return ACL_ERROR_FAILURE;
+    }
+
+    // Записываем размер и данные
+    memcpy(mapped, &size, sizeof(size_t));
+    memcpy((char*)mapped + sizeof(size_t), devPtr, size);
+
+    // Сохраняем в локальной мапе для этого процесса (на случай импорта в том же процессе)
+    {
+        std::lock_guard<std::mutex> lock(g_ipc_mutex);
+        g_ipc_memory_map[keystr] = {devPtr, size, shm_fd, mapped};
+    }
+
+    log << "\n    shared memory created, fd=" << shm_fd << " mapped=" << mapped
+        << " → ACL_SUCCESS";
+    log_output(log, true);
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtIpcMemClose(const char *key) {
+    std::ostringstream log;
+    log << "[aclrtIpcMemClose] key=" << (key ? key : "null");
+
+    if (!key) {
+        log << "\n    key is null → ACL_ERROR_INVALID_PARAM";
+        log_output(log, true);
+        return ACL_ERROR_INVALID_PARAM;
+    }
+
+    std::string keystr(key);
+    std::string shm_name = make_shm_name(keystr);
+
+    std::lock_guard<std::mutex> lock(g_ipc_mutex);
+    auto it = g_ipc_memory_map.find(keystr);
+    if (it != g_ipc_memory_map.end()) {
+        munmap(it->second.mapped_addr, sizeof(size_t) + it->second.size);
+        close(it->second.shm_fd);
+        // !!! НЕ удаляем shm_unlink, чтобы другие процессы могли импортировать позже
+        g_ipc_memory_map.erase(it);
+        log << "\n    local mapping closed, shm preserved → ACL_SUCCESS";
+    } else {
+        // Даже если нет в мапе, не трогаем shm
+        log << "\n    not found in local map, no action → ACL_SUCCESS";
+    }
+
+    log_output(log, true);
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtIpcMemImportByKey(void **devPtr, const char *key, uint64_t flags) {
+    std::ostringstream log;
+    log << "[aclrtIpcMemImportByKey] devPtr=" << devPtr
+        << " key=" << (key ? key : "null") << " flags=" << flags;
+
+    if (!devPtr || !key) {
+        log << "\n    invalid param → ACL_ERROR_INVALID_PARAM";
+        log_output(log, true);
+        return ACL_ERROR_INVALID_PARAM;
+    }
+
+    std::string keystr(key);
+    std::string shm_name = make_shm_name(keystr);
+
+    // Сначала проверяем локальную мапу (вдруг в том же процессе)
+    {
+        std::lock_guard<std::mutex> lock(g_ipc_mutex);
+        auto it = g_ipc_memory_map.find(keystr);
+        if (it != g_ipc_memory_map.end()) {
+            *devPtr = it->second.devPtr;
+            log << "\n    found in local map, devPtr=" << *devPtr << " → ACL_SUCCESS";
+            log_output(log, true);
+            return ACL_SUCCESS;
+        }
+    }
+
+    // Не в локальной мапе — открываем shared memory
+    int shm_fd = shm_open(shm_name.c_str(), O_RDONLY, 0);
+    if (shm_fd < 0) {
+        log << "\n    shm_open failed, key not exported → ACL_ERROR_FAILURE";
+        log_output(log, true);
+        return ACL_ERROR_FAILURE;
+    }
+
+    // Узнаем размер
+    struct stat st;
+    if (fstat(shm_fd, &st) != 0 || st.st_size < (off_t)sizeof(size_t)) {
+        log << "\n    fstat failed or too small → ACL_ERROR_FAILURE";
+        close(shm_fd);
+        log_output(log, true);
+        return ACL_ERROR_FAILURE;
+    }
+
+    // mmap
+    void* mapped = mmap(nullptr, st.st_size, PROT_READ, MAP_SHARED, shm_fd, 0);
+    if (mapped == MAP_FAILED) {
+        log << "\n    mmap failed → ACL_ERROR_FAILURE";
+        close(shm_fd);
+        log_output(log, true);
+        return ACL_ERROR_FAILURE;
+    }
+
+    // Читаем размер из начала
+    size_t data_size;
+    memcpy(&data_size, mapped, sizeof(size_t));
+    void* data_ptr = (char*)mapped + sizeof(size_t);
+
+    // Сохраняем в локальной мапе для последующих импортов
+    {
+        std::lock_guard<std::mutex> lock(g_ipc_mutex);
+        g_ipc_memory_map[keystr] = {data_ptr, data_size, shm_fd, mapped};
+    }
+
+    *devPtr = data_ptr;
+    log << "\n    imported via shared memory, devPtr=" << data_ptr << " size=" << data_size
+        << " → ACL_SUCCESS";
+    log_output(log, true);
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtIpcMemSetImportPid(const char *key, int32_t *pid, size_t num) {
+    std::ostringstream log;
+    log << "[aclrtIpcMemSetImportPid] key=" << (key ? key : "null")
+        << " pid=" << static_cast<void*>(pid) << " num=" << num;
+    // Заглушка
+    log << "\n    ignored → ACL_SUCCESS";
+    log_output(log, true);
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtIpcMemSetAttr(const char *key, aclrtIpcMemAttrType type, uint64_t attr) {
+    std::ostringstream log;
+    log << "[aclrtIpcMemSetAttr] key=" << (key ? key : "null")
+        << " type=" << type << " attr=" << attr;
+    log << "\n    ignored → ACL_SUCCESS";
+    log_output(log, true);
+    return ACL_SUCCESS;
+}
+
+ACL_FUNC_VISIBILITY aclError aclrtIpcMemImportPidInterServer(const char *key, aclrtServerPid *serverPids, size_t num) {
+    std::ostringstream log;
+    log << "[aclrtIpcMemImportPidInterServer] key=" << (key ? key : "null")
+        << " serverPids=" << static_cast<void*>(serverPids) << " num=" << num;
+    log << "\n    ignored → ACL_SUCCESS";
+    log_output(log, true);
     return ACL_SUCCESS;
 }
 
